@@ -1,0 +1,23 @@
+[package]
+name = "galgear"
+version.workspace = true
+edition.workspace = true
+default-run = "galgear"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+galgear-core.workspace = true
+galgear-i18n.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rfd = { version = "0.16", default-features = false }
+reqwest = { version = "0.12", default-features = false }
+open = "5"
+base64 = "0.22"
+sha2 = "0.10"
+tempfile = "3"
+tokio = {version="1",features= ["time", "sync"] }
+

@@ -1,0 +1,13 @@
+/target/
+/dist/
+/tools/
+/artifacts/
+# Local engine experiments, extracted game content, and generated schemas.
+/analysis/
+/src-tauri/gen/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.log

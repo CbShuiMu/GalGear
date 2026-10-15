@@ -1,0 +1,2532 @@
+{
+  "nav.main": {
+    "zh-CN": "主导航",
+    "ja-JP": "メインナビゲーション",
+    "en-US": "Main navigation"
+  },
+  "nav.more": {
+    "zh-CN": "更多",
+    "ja-JP": "その他",
+    "en-US": "More"
+  },
+  "nav.games": {
+    "zh-CN": "游戏",
+    "ja-JP": "ゲーム",
+    "en-US": "Games"
+  },
+  "nav.patches": {
+    "zh-CN": "补丁",
+    "ja-JP": "パッチ",
+    "en-US": "Patches"
+  },
+  "nav.settings": {
+    "zh-CN": "设置",
+    "ja-JP": "設定",
+    "en-US": "Settings"
+  },
+  "nav.about": {
+    "zh-CN": "关于",
+    "ja-JP": "アプリ情報",
+    "en-US": "About"
+  },
+  "common.close": {
+    "zh-CN": "关闭提示",
+    "ja-JP": "通知を閉じる",
+    "en-US": "Dismiss notification"
+  },
+  "common.add": {
+    "zh-CN": "添加",
+    "ja-JP": "追加",
+    "en-US": "Add"
+  },
+  "common.refresh": {
+    "zh-CN": "刷新",
+    "ja-JP": "更新",
+    "en-US": "Refresh"
+  },
+  "common.scanning": {
+    "zh-CN": "扫描中…",
+    "ja-JP": "スキャン中…",
+    "en-US": "Scanning…"
+  },
+  "common.search": {
+    "zh-CN": "搜索",
+    "ja-JP": "検索",
+    "en-US": "Search"
+  },
+  "games.title": {
+    "zh-CN": "我的游戏",
+    "ja-JP": "ゲームライブラリ",
+    "en-US": "My games"
+  },
+  "games.add_library": {
+    "zh-CN": "添加游戏库",
+    "ja-JP": "ライブラリを追加",
+    "en-US": "Add library"
+  },
+  "games.search_placeholder": {
+    "zh-CN": "搜索游戏名称…",
+    "ja-JP": "ゲーム名を検索…",
+    "en-US": "Search games…"
+  },
+  "games.all": {
+    "zh-CN": "全部",
+    "ja-JP": "すべて",
+    "en-US": "All"
+  },
+  "games.sort_label": {
+    "zh-CN": "排序方式",
+    "ja-JP": "並び順",
+    "en-US": "Sort order"
+  },
+  "games.sort_title": {
+    "zh-CN": "名称排序",
+    "ja-JP": "名前順",
+    "en-US": "Name"
+  },
+  "games.sort_recent": {
+    "zh-CN": "最近更新",
+    "ja-JP": "更新日時順",
+    "en-US": "Recently updated"
+  },
+  "games.warnings": {
+    "zh-CN": "需要检查的文件夹：{count}",
+    "ja-JP": "確認が必要なフォルダー: {count}",
+    "en-US": "Folders requiring attention: {count}"
+  },
+  "games.loading": {
+    "zh-CN": "正在读取游戏库",
+    "ja-JP": "ライブラリを読み込み中",
+    "en-US": "Loading library"
+  },
+  "games.none": {
+    "zh-CN": "尚未添加游戏",
+    "ja-JP": "ゲームがありません",
+    "en-US": "No games added"
+  },
+  "games.none_description": {
+    "zh-CN": "选择游戏库文件夹以扫描游戏。",
+    "ja-JP": "ライブラリフォルダーを選択してゲームをスキャンします。",
+    "en-US": "Select a library folder to scan for games."
+  },
+  "games.no_match": {
+    "zh-CN": "没有匹配的游戏",
+    "ja-JP": "一致するゲームがありません",
+    "en-US": "No matching games"
+  },
+  "games.no_match_description": {
+    "zh-CN": "更改搜索名称或筛选条件。",
+    "ja-JP": "検索名またはフィルターを変更してください。",
+    "en-US": "Change the search query or filter."
+  },
+  "games.choose_library": {
+    "zh-CN": "选择游戏库",
+    "ja-JP": "ライブラリを選択",
+    "en-US": "Choose library"
+  },
+  "games.detail_aria": {
+    "zh-CN": "查看 {title} 的详情",
+    "ja-JP": "{title} の詳細を表示",
+    "en-US": "View details for {title}"
+  },
+  "games.view_details": {
+    "zh-CN": "查看详情",
+    "ja-JP": "詳細を表示",
+    "en-US": "View details"
+  },
+  "games.local_engine": {
+    "zh-CN": "本地游戏",
+    "ja-JP": "ローカルゲーム",
+    "en-US": "Local game"
+  },
+  "games.summary": {
+    "zh-CN": "游戏库：{libraries} · 游戏：{count}",
+    "ja-JP": "ライブラリ: {libraries} · ゲーム: {count}",
+    "en-US": "Libraries: {libraries} · Games: {count}"
+  },
+  "games.scanning_status": {
+    "zh-CN": "正在扫描游戏库…",
+    "ja-JP": "ライブラリをスキャン中…",
+    "en-US": "Scanning library…"
+  },
+  "cover.alt": {
+    "zh-CN": "{title} 的封面",
+    "ja-JP": "{title} のカバー画像",
+    "en-US": "Cover for {title}"
+  },
+  "cover.add": {
+    "zh-CN": "添加封面",
+    "ja-JP": "カバーを追加",
+    "en-US": "Add cover"
+  },
+  "settings.title": {
+    "zh-CN": "设置",
+    "ja-JP": "設定",
+    "en-US": "Settings"
+  },
+  "settings.language": {
+    "zh-CN": "界面语言",
+    "ja-JP": "表示言語",
+    "en-US": "Interface language"
+  },
+  "settings.language_help": {
+    "zh-CN": "切换后立即生效，并自动保存。",
+    "ja-JP": "変更はすぐに反映され、自動保存されます。",
+    "en-US": "Changes apply immediately and are saved automatically."
+  },
+  "settings.language_zh": {
+    "zh-CN": "简体中文",
+    "ja-JP": "简体中文",
+    "en-US": "简体中文"
+  },
+  "settings.language_ja": {
+    "zh-CN": "日本語",
+    "ja-JP": "日本語",
+    "en-US": "日本語"
+  },
+  "settings.language_en": {
+    "zh-CN": "English",
+    "ja-JP": "English",
+    "en-US": "English"
+  },
+  "settings.folders": {
+    "zh-CN": "游戏库文件夹",
+    "ja-JP": "ライブラリフォルダー",
+    "en-US": "Library folders"
+  },
+  "settings.folders_help": {
+    "zh-CN": "支持多个游戏库，包含子文件夹。",
+    "ja-JP": "複数のライブラリとサブフォルダーをスキャンできます。",
+    "en-US": "Scan multiple libraries, including subfolders."
+  },
+  "settings.add_folder": {
+    "zh-CN": "添加文件夹",
+    "ja-JP": "フォルダーを追加",
+    "en-US": "Add folder"
+  },
+  "settings.no_folders": {
+    "zh-CN": "尚未添加游戏库文件夹。",
+    "ja-JP": "ライブラリフォルダーが登録されていません。",
+    "en-US": "No library folders added."
+  },
+  "settings.folder_summary": {
+    "zh-CN": "游戏：{count} · 包含子文件夹",
+    "ja-JP": "ゲーム: {count} · サブフォルダーを含む",
+    "en-US": "Games: {count} · Includes subfolders"
+  },
+  "settings.remove_folder": {
+    "zh-CN": "移除此游戏库",
+    "ja-JP": "このライブラリを削除",
+    "en-US": "Remove this library"
+  },
+  "settings.remove_folder_tip": {
+    "zh-CN": "移除游戏库，不删除游戏文件",
+    "ja-JP": "ゲームファイルを削除せず、ライブラリのみを削除",
+    "en-US": "Remove library without deleting game files"
+  },
+  "settings.path_placeholder": {
+    "zh-CN": "输入文件夹路径，如 F:\\GALGame",
+    "ja-JP": "フォルダーパスを入力（例: F:\\GALGame）",
+    "en-US": "Enter a folder path, e.g. F:\\GALGame"
+  },
+  "settings.path_label": {
+    "zh-CN": "游戏库文件夹路径",
+    "ja-JP": "ライブラリフォルダーのパス",
+    "en-US": "Library folder path"
+  },
+  "settings.auto_save": {
+    "zh-CN": "设置自动保存。移除游戏库不会删除游戏文件。",
+    "ja-JP": "設定は自動保存されます。ライブラリを削除してもゲームファイルは削除されません。",
+    "en-US": "Settings are saved automatically. Removing a library does not delete game files."
+  },
+  "settings.card_size": {
+    "zh-CN": "封面大小",
+    "ja-JP": "カバーサイズ",
+    "en-US": "Cover size"
+  },
+  "settings.card_size_help": {
+    "zh-CN": "调整游戏列表中的封面大小。",
+    "ja-JP": "ゲーム一覧のカバーサイズを変更します。",
+    "en-US": "Adjust cover size in the game list."
+  },
+  "settings.size_small": {
+    "zh-CN": "紧凑",
+    "ja-JP": "コンパクト",
+    "en-US": "Compact"
+  },
+  "settings.size_medium": {
+    "zh-CN": "标准",
+    "ja-JP": "標準",
+    "en-US": "Standard"
+  },
+  "settings.size_large": {
+    "zh-CN": "宽松",
+    "ja-JP": "大",
+    "en-US": "Large"
+  },
+  "settings.theme": {
+    "zh-CN": "粉红色主题",
+    "ja-JP": "ピンクテーマ",
+    "en-US": "Pink theme"
+  },
+  "settings.config_path": {
+    "zh-CN": "配置文件：",
+    "ja-JP": "設定ファイル:",
+    "en-US": "Configuration file:"
+  },
+  "about.title": {
+    "zh-CN": "关于",
+    "ja-JP": "このアプリについて",
+    "en-US": "About"
+  },
+  "about.version": {
+    "zh-CN": "版本 {version}",
+    "ja-JP": "バージョン {version}",
+    "en-US": "Version {version}"
+  },
+  "about.description": {
+    "zh-CN": "Galgame 游戏库管理软件",
+    "ja-JP": "Galgame ライブラリ管理アプリ",
+    "en-US": "Galgame library manager"
+  },
+  "patches.title": {
+    "zh-CN": "补丁",
+    "ja-JP": "パッチ",
+    "en-US": "Patches"
+  },
+  "patches.manage": {
+    "zh-CN": "补丁管理",
+    "ja-JP": "パッチ管理",
+    "en-US": "Patch management"
+  },
+  "patches.description": {
+    "zh-CN": "汉化、修复和其他游戏补丁。",
+    "ja-JP": "翻訳、修正、その他のゲームパッチ。",
+    "en-US": "Translation, fixes and other game patches."
+  },
+  "patches.pending": {
+    "zh-CN": "尚未实现",
+    "ja-JP": "未実装",
+    "en-US": "Not implemented"
+  },
+  "patches.none": {
+    "zh-CN": "没有本地补丁",
+    "ja-JP": "ローカルパッチはありません",
+    "en-US": "No local patches"
+  },
+  "patches.none_description": {
+    "zh-CN": "当前版本尚不支持补丁安装与恢复。",
+    "ja-JP": "このバージョンではパッチのインストールと復元に対応していません。",
+    "en-US": "This version does not support patch installation or restoration."
+  },
+  "patches.back": {
+    "zh-CN": "返回游戏库",
+    "ja-JP": "ライブラリに戻る",
+    "en-US": "Back to library"
+  },
+  "detail.title": {
+    "zh-CN": "游戏详情",
+    "ja-JP": "ゲーム詳細",
+    "en-US": "Game details"
+  },
+  "detail.close": {
+    "zh-CN": "关闭游戏详情",
+    "ja-JP": "ゲーム詳細を閉じる",
+    "en-US": "Close game details"
+  },
+  "detail.play": {
+    "zh-CN": "开始游戏",
+    "ja-JP": "ゲームを起動",
+    "en-US": "Launch game"
+  },
+  "detail.folder": {
+    "zh-CN": "打开文件夹",
+    "ja-JP": "フォルダーを開く",
+    "en-US": "Open folder"
+  },
+  "detail.cover": {
+    "zh-CN": "更换封面",
+    "ja-JP": "カバーを変更",
+    "en-US": "Change cover"
+  },
+  "detail.location": {
+    "zh-CN": "游戏位置",
+    "ja-JP": "ゲームの場所",
+    "en-US": "Game location"
+  },
+  "detail.library": {
+    "zh-CN": "所属游戏库",
+    "ja-JP": "ライブラリ",
+    "en-US": "Library"
+  },
+  "detail.executable": {
+    "zh-CN": "启动程序",
+    "ja-JP": "実行ファイル",
+    "en-US": "Executable"
+  },
+  "detail.no_executable": {
+    "zh-CN": "未找到启动程序",
+    "ja-JP": "実行ファイルが見つかりません",
+    "en-US": "Executable not found"
+  },
+  "notice.library_saved": {
+    "zh-CN": "游戏库设置已保存",
+    "ja-JP": "ライブラリ設定を保存しました",
+    "en-US": "Library settings saved"
+  },
+  "notice.scan_complete": {
+    "zh-CN": "扫描完成，游戏数量：{count}",
+    "ja-JP": "スキャン完了。ゲーム数: {count}",
+    "en-US": "Scan complete. Games found: {count}"
+  },
+  "notice.cover_saved": {
+    "zh-CN": "封面已保存",
+    "ja-JP": "カバーを保存しました",
+    "en-US": "Cover saved"
+  },
+  "notice.launched": {
+    "zh-CN": "已启动游戏",
+    "ja-JP": "ゲームを起動しました",
+    "en-US": "Game launched"
+  },
+  "notice.language_saved": {
+    "zh-CN": "界面语言已保存",
+    "ja-JP": "表示言語を保存しました",
+    "en-US": "Interface language saved"
+  },
+  "dialog.library": {
+    "zh-CN": "选择游戏库文件夹",
+    "ja-JP": "ライブラリフォルダーを選択",
+    "en-US": "Choose library folder"
+  },
+  "dialog.cover": {
+    "zh-CN": "选择游戏封面",
+    "ja-JP": "カバー画像を選択",
+    "en-US": "Choose game cover"
+  },
+  "dialog.images": {
+    "zh-CN": "图片",
+    "ja-JP": "画像",
+    "en-US": "Images"
+  },
+  "error.folder_required": {
+    "zh-CN": "请输入或选择游戏库文件夹。",
+    "ja-JP": "ライブラリフォルダーを入力または選択してください。",
+    "en-US": "Enter or choose a library folder."
+  },
+  "error.config_parse": {
+    "zh-CN": "配置文件无法解析：{detail}",
+    "ja-JP": "設定ファイルを解析できません: {detail}",
+    "en-US": "Unable to parse configuration: {detail}"
+  },
+  "error.config_version": {
+    "zh-CN": "配置文件版本不兼容。",
+    "ja-JP": "設定ファイルのバージョンに対応していません。",
+    "en-US": "Incompatible configuration version."
+  },
+  "error.config_path": {
+    "zh-CN": "配置路径无效。",
+    "ja-JP": "設定ファイルのパスが無効です。",
+    "en-US": "Invalid configuration path."
+  },
+  "error.config_read": {
+    "zh-CN": "读取配置失败：{detail}",
+    "ja-JP": "設定を読み込めません: {detail}",
+    "en-US": "Unable to read configuration: {detail}"
+  },
+  "error.config_write": {
+    "zh-CN": "保存配置失败：{detail}",
+    "ja-JP": "設定を保存できません: {detail}",
+    "en-US": "Unable to save configuration: {detail}"
+  },
+  "error.folder_access": {
+    "zh-CN": "无法访问文件夹：{detail}",
+    "ja-JP": "フォルダーにアクセスできません: {detail}",
+    "en-US": "Unable to access folder: {detail}"
+  },
+  "error.folder_select": {
+    "zh-CN": "请选择文件夹，而不是文件。",
+    "ja-JP": "ファイルではなくフォルダーを選択してください。",
+    "en-US": "Select a folder, not a file."
+  },
+  "error.image_size": {
+    "zh-CN": "封面图片不能超过 32 MB。",
+    "ja-JP": "カバー画像は 32 MB 以下にしてください。",
+    "en-US": "Cover images must not exceed 32 MB."
+  },
+  "error.image": {
+    "zh-CN": "无法读取封面：{detail}",
+    "ja-JP": "カバーを読み込めません: {detail}",
+    "en-US": "Unable to read cover: {detail}"
+  },
+  "error.cover_path": {
+    "zh-CN": "封面缓存路径无效。",
+    "ja-JP": "カバーのキャッシュパスが無効です。",
+    "en-US": "Invalid cover cache path."
+  },
+  "error.config_state": {
+    "zh-CN": "配置状态不可用。",
+    "ja-JP": "設定データを利用できません。",
+    "en-US": "Configuration state unavailable."
+  },
+  "error.catalog_state": {
+    "zh-CN": "游戏库状态不可用。",
+    "ja-JP": "ライブラリデータを利用できません。",
+    "en-US": "Library state unavailable."
+  },
+  "error.scan": {
+    "zh-CN": "扫描失败：{detail}",
+    "ja-JP": "スキャンに失敗しました: {detail}",
+    "en-US": "Scan failed: {detail}"
+  },
+  "error.operation": {
+    "zh-CN": "操作失败：{detail}",
+    "ja-JP": "操作に失敗しました: {detail}",
+    "en-US": "Operation failed: {detail}"
+  },
+  "error.sort": {
+    "zh-CN": "不支持此排序方式。",
+    "ja-JP": "この並び順は利用できません。",
+    "en-US": "Unsupported sort order."
+  },
+  "error.language": {
+    "zh-CN": "不支持此界面语言。",
+    "ja-JP": "この表示言語は利用できません。",
+    "en-US": "Unsupported interface language."
+  },
+  "error.game_missing": {
+    "zh-CN": "游戏已不在当前游戏库，请刷新后重试。",
+    "ja-JP": "ゲームがライブラリにありません。更新してから再試行してください。",
+    "en-US": "Game is no longer in this library. Refresh and try again."
+  },
+  "error.game_folder": {
+    "zh-CN": "游戏文件夹无法访问。",
+    "ja-JP": "ゲームフォルダーにアクセスできません。",
+    "en-US": "Game folder unavailable."
+  },
+  "error.exe_missing": {
+    "zh-CN": "启动程序已不存在，请刷新游戏库。",
+    "ja-JP": "実行ファイルが見つかりません。ライブラリを更新してください。",
+    "en-US": "Executable is missing. Refresh the library."
+  },
+  "error.launch": {
+    "zh-CN": "启动游戏失败：{detail}",
+    "ja-JP": "ゲームを起動できません: {detail}",
+    "en-US": "Unable to launch game: {detail}"
+  },
+  "error.open_folder": {
+    "zh-CN": "打开文件夹失败：{detail}",
+    "ja-JP": "フォルダーを開けません: {detail}",
+    "en-US": "Unable to open folder: {detail}"
+  },
+  "error.read_data": {
+    "zh-CN": "读取数据失败：{detail}",
+    "ja-JP": "データを読み込めません: {detail}",
+    "en-US": "Unable to read data: {detail}"
+  },
+  "error.desktop": {
+    "zh-CN": "请通过 GalGear 桌面程序打开此界面。",
+    "ja-JP": "GalGear デスクトップアプリから開いてください。",
+    "en-US": "Open this interface through the GalGear desktop application."
+  },
+  "warnings.library": {
+    "zh-CN": "游戏库无法访问：{path}",
+    "ja-JP": "ライブラリにアクセスできません: {path}",
+    "en-US": "Library unavailable: {path}"
+  },
+  "warnings.limit": {
+    "zh-CN": "本次扫描已达到 30000 个文件夹上限。",
+    "ja-JP": "スキャン対象が 30000 フォルダーの上限に達しました。",
+    "en-US": "Scan reached the limit of 30,000 folders."
+  },
+  "warnings.access": {
+    "zh-CN": "无法访问 {path}：{detail}",
+    "ja-JP": "{path} にアクセスできません: {detail}",
+    "en-US": "Unable to access {path}: {detail}"
+  },
+  "warnings.scan": {
+    "zh-CN": "无法扫描 {path}：{detail}",
+    "ja-JP": "{path} をスキャンできません: {detail}",
+    "en-US": "Unable to scan {path}: {detail}"
+  },
+  "unlock.engines": {
+    "zh-CN": "CG 解锁引擎支持",
+    "ja-JP": "CG 解放エンジン対応",
+    "en-US": "CG unlock engine support"
+  },
+  "unlock.scope": {
+    "zh-CN": "目前仅支持 Angel Tear 指定脚本与资源版本。已在独立副本验证启动、CG 记录写入及浏览入口；尚未逐一验证所有 CG 差分，保留实验支持标记。其他 Entis GLS 游戏和 AdvHD 等引擎暂不支持。",
+    "ja-JP": "Angel Tear の指定スクリプト・リソース版のみ対応。コピーで起動、CG 記録の保存、閲覧画面を確認済みです。全差分の個別検証は未完了のため実験的対応です。他の Entis GLS ゲームや AdvHD などは未対応です。",
+    "en-US": "Limited to the specified Angel Tear version. Startup, CG record saving and the gallery were checked on a separate copy. Individual CG variants remain unverified, so support is experimental. Other Entis GLS games and engines such as AdvHD are not supported."
+  },
+  "unlock.experimental": {
+    "zh-CN": "实验支持",
+    "ja-JP": "実験的対応",
+    "en-US": "Experimental"
+  },
+  "unlock.verified": {
+    "zh-CN": "已验证",
+    "ja-JP": "検証済み",
+    "en-US": "Verified"
+  },
+  "unlock.none": {
+    "zh-CN": "当前没有已接入的 CG 解锁引擎。",
+    "ja-JP": "CG 解放機能に対応するエンジンはありません。",
+    "en-US": "No CG unlock engines are integrated."
+  },
+  "unlock.title": {
+    "zh-CN": "CG 解锁",
+    "ja-JP": "CG 解放",
+    "en-US": "CG unlock"
+  },
+  "unlock.button": {
+    "zh-CN": "全 CG 解锁",
+    "ja-JP": "全 CG を解放",
+    "en-US": "Unlock all CGs"
+  },
+  "unlock.restore": {
+    "zh-CN": "恢复原脚本",
+    "ja-JP": "元のスクリプトに復元",
+    "en-US": "Restore original script"
+  },
+  "unlock.unsupported": {
+    "zh-CN": "当前游戏或版本不支持全 CG 解锁。",
+    "ja-JP": "このゲームまたはバージョンは全 CG 解放に対応していません。",
+    "en-US": "This game or version does not support CG unlocking."
+  },
+  "unlock.experimental_help": {
+    "zh-CN": "实验功能：先备份原脚本和系统存档，再安装解锁补丁。下次启动游戏时写入 CG 已看记录。请先关闭游戏。",
+    "ja-JP": "実験的機能: 元のスクリプトとシステムセーブをバックアップしてからパッチを適用します。次回起動時に CG 閲覧記録を書き込みます。先にゲームを終了してください。",
+    "en-US": "Experimental: backs up the original script and system save, then installs the unlock patch. CG records are written on the next game startup. Close the game first."
+  },
+  "unlock.installed_help": {
+    "zh-CN": "解锁补丁已安装。启动游戏以写入 CG 记录。恢复脚本不会清除已写入的解锁记录；原脚本和安装前系统存档备份在游戏目录的 .galgear-backups/angeltear-cg 中。",
+    "ja-JP": "解放パッチを適用済みです。ゲームを起動して CG 記録を書き込みます。スクリプトを復元しても解放記録は残ります。バックアップはゲームフォルダー内の .galgear-backups/angeltear-cg にあります。",
+    "en-US": "Unlock patch installed. Launch the game to write CG records. Restoring the script retains those records. Original script and pre-install system save backups are in .galgear-backups/angeltear-cg inside the game folder."
+  },
+  "unlock.installed_notice": {
+    "zh-CN": "解锁补丁已安装；启动游戏后写入 CG 记录。",
+    "ja-JP": "パッチを適用しました。ゲームの次回起動時に CG 記録を書き込みます。",
+    "en-US": "Unlock patch installed. Launch the game to write CG records."
+  },
+  "unlock.restored_notice": {
+    "zh-CN": "原脚本已恢复。",
+    "ja-JP": "元のスクリプトを復元しました。",
+    "en-US": "Original script restored."
+  },
+  "unlock.invalid_archive": {
+    "zh-CN": "游戏资源格式无效或数据不完整。",
+    "ja-JP": "ゲームリソースの形式が無効か、データが不完全です。",
+    "en-US": "Invalid or incomplete game resources."
+  },
+  "unlock.version": {
+    "zh-CN": "游戏脚本版本不匹配，未修改文件。",
+    "ja-JP": "スクリプトのバージョンが一致しないため、変更しませんでした。",
+    "en-US": "Script version mismatch. No files were changed."
+  },
+  "unlock.resources": {
+    "zh-CN": "CG 资源与支持版本不匹配，未安装补丁。",
+    "ja-JP": "CG リソースが対応版と一致しないため、パッチを適用しませんでした。",
+    "en-US": "CG resources do not match the supported version. Patch not installed."
+  },
+  "unlock.path": {
+    "zh-CN": "检测到游戏目录外的目标路径，已停止操作。",
+    "ja-JP": "ゲームフォルダー外のパスを検出したため、操作を中止しました。",
+    "en-US": "A target path is outside the game folder. Operation stopped."
+  },
+  "unlock.backup": {
+    "zh-CN": "原脚本备份校验失败，已停止操作。",
+    "ja-JP": "元のスクリプトのバックアップ検証に失敗したため、操作を中止しました。",
+    "en-US": "Original script backup failed verification. Operation stopped."
+  },
+  "unlock.io": {
+    "zh-CN": "解锁文件操作失败：{detail}",
+    "ja-JP": "解放ファイルの操作に失敗しました: {detail}",
+    "en-US": "Unlock file operation failed: {detail}"
+  },
+  "unlock.close_game": {
+    "zh-CN": "请先关闭 Angel Tear，再进行解锁或恢复操作。",
+    "ja-JP": "Angel Tear を終了してから、解放または復元を実行してください。",
+    "en-US": "Close Angel Tear before unlocking or restoring its script."
+  },
+  "unlock.process_check": {
+    "zh-CN": "无法检查游戏运行状态，已停止操作。",
+    "ja-JP": "ゲームの実行状態を確認できないため、操作を中止しました。",
+    "en-US": "Unable to check whether the game is running. Operation stopped."
+  },
+  "unlock.platform": {
+    "zh-CN": "该解锁方案目前仅支持 Windows。",
+    "ja-JP": "この解放機能は現在 Windows のみ対応です。",
+    "en-US": "This unlock profile currently supports Windows only."
+  },
+  "auto.unsupported": {
+    "en-US": "Cannot automatically analyze this script: {detail}",
+    "zh-CN": "无法自动解析该脚本：{detail}",
+    "ja-JP": "このスクリプトを自動解析できません: {detail}"
+  },
+  "auto.changed": {
+    "en-US": "Game scripts have changed. Unable to safely install or restore.",
+    "zh-CN": "游戏脚本已发生变化，无法安全安装或恢复。",
+    "ja-JP": "ゲームスクリプトが変更されたため、適用・復元できません。"
+  },
+  "auto.io": {
+    "en-US": "Automatic unlock file operation failed: {detail}",
+    "zh-CN": "自动解锁文件操作失败：{detail}",
+    "ja-JP": "自動解放ファイルの操作に失敗しました: {detail}"
+  },
+  "auto.summary": {
+    "en-US": "{cg} CG groups · {variants} variant flags · {scenes} scenes",
+    "zh-CN": "{cg} 个 CG 组 · {variants} 个差分标志 · {scenes} 个回想",
+    "ja-JP": "CG {cg} 組 · 差分フラグ {variants} 個 · 回想 {scenes} 件"
+  },
+  "auto.close_game": {
+    "en-US": "Close the game before installing or restoring its unlock patch.",
+    "zh-CN": "请先关闭对应游戏，再安装或恢复解锁补丁。",
+    "ja-JP": "解放パッチの適用・復元前にゲームを終了してください。"
+  },
+  "auto.help": {
+    "en-US": "Automatically extracts record conditions from scripts. After installation, opening CG or SCENE galleries writes the records; exit the game to save.",
+    "zh-CN": "从脚本自动提取记录条件。安装后首次打开 CG 或 SCENE 鉴赏会写入记录，关闭游戏后保存。",
+    "ja-JP": "スクリプトから記録条件を自動抽出します。適用後に CG または SCENE 鑑賞を開くと記録を書き込み、終了時に保存します。"
+  },
+  "auto.notice": {
+    "en-US": "CG/SCENE records detected and unlock patch installed.",
+    "zh-CN": "已自动识别并安装 CG／SCENE 解锁补丁。",
+    "ja-JP": "CG／SCENE を自動解析し、解放パッチを適用しました。"
+  },
+  "auto.button": {
+    "en-US": "Detect and unlock",
+    "zh-CN": "自动识别并解锁",
+    "ja-JP": "自動解析して解放"
+  },
+  "auto.installed_help": {
+    "en-US": "Automatic unlock patch installed. Open a gallery and exit normally to save records. Restoring the script retains those records. Backups: .galgear-backups/auto-unlock inside the game folder.",
+    "zh-CN": "自动解锁补丁已安装。打开鉴赏页面并正常退出游戏以保存记录。恢复原脚本会保留已写入记录；备份位于游戏目录的 .galgear-backups/auto-unlock。",
+    "ja-JP": "自動解放パッチは適用済みです。鑑賞画面を開いてから正常終了すると記録を保存します。復元後も記録は残ります。バックアップ: .galgear-backups/auto-unlock。"
+  },
+  "auto.already_installed": {
+    "en-US": "Automatic unlock patch is already installed.",
+    "zh-CN": "自动解锁补丁已安装。",
+    "ja-JP": "自動解放パッチは適用済みです。"
+  },
+  "auto.title": {
+    "en-US": "Automatic CG and SCENE unlock",
+    "zh-CN": "CG 与 SCENE 自动解锁",
+    "ja-JP": "CG・SCENE の自動解放"
+  },
+  "auto.scope": {
+    "en-US": "Automatically parses AdvHD Lua 5.3 gallery menus and WS2 conditions to extract CG, variant and SCENE flags without game names or fixed IDs. Unproven scripts and gallery overrides are unsupported.",
+    "zh-CN": "自动解析 AdvHD 的 Lua 5.3 鉴赏菜单和 WS2 记录条件；根据脚本生成 CG、差分和 SCENE 标志，不依赖游戏名或固定编号。无法确认的脚本及覆盖资源暂不支持。",
+    "ja-JP": "AdvHD の Lua 5.3 鑑賞メニューと WS2 記録条件を自動解析し、CG・差分・SCENE フラグを抽出します。ゲーム名や固定番号に依存しません。解析不能なスクリプトや上書きリソースは未対応です。"
+  },
+  "auto.unavailable": {
+    "en-US": "CG/SCENE records cannot be automatically identified for this engine or script structure.",
+    "zh-CN": "当前引擎或脚本结构无法自动识别 CG／SCENE 记录。",
+    "ja-JP": "このエンジン・スクリプト構造では CG／SCENE 記録を自動解析できません。"
+  },
+  "auto.recoverable_help": {
+    "ja-JP": "前回の適用が完了していません。元のスクリプトに復元してから再度実行してください。バックアップは保持されています。",
+    "en-US": "The previous installation was interrupted. Restore the original script before trying again. Recovery information and backups are retained.",
+    "zh-CN": "上次安装未完成。请恢复原脚本后重新执行自动解锁。备份与恢复信息已保留。"
+  },
+  "common.cancel": {
+    "zh-CN": "取消",
+    "ja-JP": "キャンセル",
+    "en-US": "Cancel"
+  },
+  "common.save": {
+    "zh-CN": "保存",
+    "ja-JP": "保存",
+    "en-US": "Save"
+  },
+  "notice.saved": {
+    "zh-CN": "已保存",
+    "ja-JP": "保存しました",
+    "en-US": "Saved"
+  },
+  "error.cache": {
+    "zh-CN": "游戏库缓存读写失败：{detail}",
+    "ja-JP": "キャッシュの読み書きに失敗：{detail}",
+    "en-US": "Catalog cache failed: {detail}"
+  },
+  "error.scan_running": {
+    "zh-CN": "游戏库正在扫描",
+    "ja-JP": "スキャン中です",
+    "en-US": "A scan is already running"
+  },
+  "error.already_running": {
+    "zh-CN": "游戏已在运行",
+    "ja-JP": "ゲームは起動中です",
+    "en-US": "This game is already running"
+  },
+  "error.network": {
+    "zh-CN": "网络请求失败：{detail}",
+    "ja-JP": "ネットワークエラー：{detail}",
+    "en-US": "Network request failed: {detail}"
+  },
+  "error.site_url": {
+    "zh-CN": "不支持的资源网址",
+    "ja-JP": "未対応のURLです",
+    "en-US": "Unsupported resource URL"
+  },
+  "error.response_size": {
+    "zh-CN": "网站响应超过大小限制",
+    "ja-JP": "応答サイズが上限を超えました",
+    "en-US": "Website response exceeds size limit"
+  },
+  "error.metadata": {
+    "zh-CN": "未能读取游戏资料，请打开原站核对",
+    "ja-JP": "情報を読み取れません。元サイトで確認してください",
+    "en-US": "Could not read game information; check the original site"
+  },
+  "error.title_required": {
+    "zh-CN": "请输入游戏名称",
+    "ja-JP": "ゲーム名を入力してください",
+    "en-US": "Enter a game title"
+  },
+  "games.manual": {
+    "zh-CN": "游戏",
+    "ja-JP": "ゲーム",
+    "en-US": "Game"
+  },
+  "games.all_tags": {
+    "zh-CN": "全部标签",
+    "ja-JP": "すべてのタグ",
+    "en-US": "All tags"
+  },
+  "games.unavailable": {
+    "zh-CN": "路径失效",
+    "ja-JP": "パスが無効",
+    "en-US": "Unavailable"
+  },
+  "games.scan_progress": {
+    "zh-CN": "已检查 {folders} 个目录 · {count} 款游戏",
+    "ja-JP": "{folders} フォルダー確認・{count} ゲーム",
+    "en-US": "Checked {folders} folders · {count} games"
+  },
+  "detail.relocate": {
+    "zh-CN": "重新定位",
+    "ja-JP": "パスを再設定",
+    "en-US": "Relocate"
+  },
+  "save.title": {
+    "zh-CN": "存档位置",
+    "ja-JP": "セーブデータの場所",
+    "en-US": "Save locations"
+  },
+  "save.game": {
+    "zh-CN": "游戏目录",
+    "ja-JP": "ゲームフォルダー",
+    "en-US": "Game folder"
+  },
+  "save.roaming": {
+    "zh-CN": "AppData / Roaming",
+    "ja-JP": "AppData / Roaming",
+    "en-US": "AppData / Roaming"
+  },
+  "save.documents": {
+    "zh-CN": "文档",
+    "ja-JP": "ドキュメント",
+    "en-US": "Documents"
+  },
+  "save.config": {
+    "zh-CN": "引擎配置",
+    "ja-JP": "エンジン設定",
+    "en-US": "Engine configuration"
+  },
+  "save.manual": {
+    "zh-CN": "手动指定",
+    "ja-JP": "手動設定",
+    "en-US": "Manually selected"
+  },
+  "save.detected": {
+    "zh-CN": "已发现",
+    "ja-JP": "検出済み",
+    "en-US": "Detected"
+  },
+  "save.candidate": {
+    "zh-CN": "名称匹配候选，请核对",
+    "ja-JP": "名前が一致する候補・要確認",
+    "en-US": "Name-matched candidate; verify"
+  },
+  "save.uncreated": {
+    "zh-CN": "尚未创建",
+    "ja-JP": "未作成",
+    "en-US": "Not created yet"
+  },
+  "save.disc": {
+    "zh-CN": "镜像尚未安装，安装并首次运行后可识别存档。",
+    "ja-JP": "インストールと初回起動後に検出できます。",
+    "en-US": "Save locations can be detected after installation and first launch."
+  },
+  "save.none": {
+    "zh-CN": "未发现对应存档。请先运行游戏一次，或手动指定位置。",
+    "ja-JP": "対応するセーブが見つかりません。初回起動または手動設定をしてください。",
+    "en-US": "No matching saves found. Launch the game once or select a folder manually."
+  },
+  "save.open": {
+    "zh-CN": "打开存档目录",
+    "ja-JP": "セーブフォルダーを開く",
+    "en-US": "Open save folder"
+  },
+  "save.choose": {
+    "zh-CN": "手动指定存档目录",
+    "ja-JP": "セーブ場所を指定",
+    "en-US": "Choose save folder"
+  },
+  "save.searching": {
+    "zh-CN": "正在识别存档位置…",
+    "ja-JP": "セーブ場所を検索中…",
+    "en-US": "Detecting save locations…"
+  },
+  "save.limited": {
+    "zh-CN": "搜索达到上限，可手动指定未找到的存档。",
+    "ja-JP": "検索上限に達しました。手動設定が可能です。",
+    "en-US": "Search limit reached; you can select the folder manually."
+  },
+  "save.searched": {
+    "zh-CN": "已检查的位置",
+    "ja-JP": "検索した場所",
+    "en-US": "Locations checked"
+  },
+  "metadata.title": {
+    "zh-CN": "游戏资料 · 2DFan",
+    "ja-JP": "ゲーム情報 · 2DFan",
+    "en-US": "Game information · 2DFan"
+  },
+  "metadata.query": {
+    "zh-CN": "搜索名称",
+    "ja-JP": "検索キーワード",
+    "en-US": "Search title"
+  },
+  "metadata.search": {
+    "zh-CN": "搜索资料",
+    "ja-JP": "情報を検索",
+    "en-US": "Search information"
+  },
+  "metadata.select": {
+    "zh-CN": "关联此条目",
+    "ja-JP": "この項目を関連付け",
+    "en-US": "Link this entry"
+  },
+  "metadata.source": {
+    "zh-CN": "查看原站",
+    "ja-JP": "元サイトを開く",
+    "en-US": "Open source page"
+  },
+  "metadata.none": {
+    "zh-CN": "没有找到结果，可修改搜索词后重试。",
+    "ja-JP": "結果なし。キーワードを変更してください。",
+    "en-US": "No results; change the query and retry."
+  },
+  "edit.title": {
+    "zh-CN": "编辑名称、标签与启动配置",
+    "ja-JP": "名前・タグ・起動設定を編集",
+    "en-US": "Edit title, tags and launch settings"
+  },
+  "edit.name": {
+    "zh-CN": "游戏名称",
+    "ja-JP": "ゲーム名",
+    "en-US": "Game title"
+  },
+  "edit.tags": {
+    "zh-CN": "标签（用逗号分隔）",
+    "ja-JP": "タグ（カンマ区切り）",
+    "en-US": "Tags (comma separated)"
+  },
+  "edit.executable": {
+    "zh-CN": "启动程序完整路径",
+    "ja-JP": "実行ファイルのフルパス",
+    "en-US": "Executable path"
+  },
+  "edit.workdir": {
+    "zh-CN": "工作目录（留空使用游戏目录）",
+    "ja-JP": "作業フォルダー（空欄でゲームフォルダー）",
+    "en-US": "Working directory (blank uses game folder)"
+  },
+  "edit.launcher": {
+    "zh-CN": "外部启动工具（可选）",
+    "ja-JP": "外部起動ツール（任意）",
+    "en-US": "External launcher (optional)"
+  },
+  "edit.args": {
+    "zh-CN": "启动参数（每行一个参数）",
+    "ja-JP": "起動引数（1行1引数）",
+    "en-US": "Arguments (one argument per line)"
+  },
+  "edit.help": {
+    "zh-CN": "编辑优先保留。外部启动工具收到的首个参数为游戏程序路径。移除条目不会删除游戏文件。",
+    "ja-JP": "編集内容を優先します。外部ツールの最初の引数は実行ファイルのパスです。項目削除はゲームファイルを削除しません。",
+    "en-US": "Edits take priority. The external launcher receives the game executable as its first argument. Removing an entry preserves game files."
+  },
+  "edit.exclude": {
+    "zh-CN": "移除并排除自动识别",
+    "ja-JP": "削除して自動検出から除外",
+    "en-US": "Remove and exclude from scanning"
+  },
+  "settings.launch_behavior": {
+    "zh-CN": "启动游戏后的窗口行为",
+    "ja-JP": "ゲーム起動後の動作",
+    "en-US": "After launching a game"
+  },
+  "settings.keep": {
+    "zh-CN": "保持打开",
+    "ja-JP": "開いたまま",
+    "en-US": "Keep open"
+  },
+  "settings.minimize": {
+    "zh-CN": "最小化",
+    "ja-JP": "最小化",
+    "en-US": "Minimize"
+  },
+  "settings.exit": {
+    "zh-CN": "退出 GalGear",
+    "ja-JP": "GalGearを終了",
+    "en-US": "Exit GalGear"
+  },
+  "unlock.no_recollection": {
+    "zh-CN": "回想：尚未验证支持",
+    "ja-JP": "回想：未検証",
+    "en-US": "Recollection unlock: not verified"
+  },
+  "unlock.advhd_unverified": {
+    "zh-CN": "AdvHD 自动分析尚未完成真实解锁效果验证，暂不开放安装。",
+    "ja-JP": "AdvHDの実ゲームでの効果は未検証のため、インストールは無効です。",
+    "en-US": "AdvHD analysis has not been validated in a running game; installation is unavailable."
+  },
+  "patches.query": {
+    "zh-CN": "游戏或补丁名称",
+    "ja-JP": "ゲーム名・パッチ名",
+    "en-US": "Game or patch title"
+  },
+  "patches.search": {
+    "zh-CN": "搜索补丁",
+    "ja-JP": "パッチを検索",
+    "en-US": "Search patches"
+  },
+  "patches.open": {
+    "zh-CN": "打开资源页",
+    "ja-JP": "リソースページを開く",
+    "en-US": "Open resource page"
+  },
+  "patches.caution": {
+    "zh-CN": "请核对适用版本。需要登录、积分或付费的资源在原站完成；GalGear 不自动提交购买。",
+    "ja-JP": "対応バージョンを確認してください。ログインや有料操作は元サイトで行います。",
+    "en-US": "Verify version compatibility. Complete login and paid operations on the original site."
+  },
+  "patches.no_results": {
+    "zh-CN": "尚无搜索结果",
+    "ja-JP": "検索結果はありません",
+    "en-US": "No search results yet"
+  },
+  "patches.local": {
+    "zh-CN": "本地补丁",
+    "ja-JP": "ローカルパッチ",
+    "en-US": "Local patches"
+  },
+  "patches.choose": {
+    "zh-CN": "选择补丁文件",
+    "ja-JP": "パッチファイルを選択",
+    "en-US": "Choose patch file"
+  },
+  "patches.target": {
+    "zh-CN": "关联游戏",
+    "ja-JP": "関連ゲーム",
+    "en-US": "Associated game"
+  },
+  "patches.install": {
+    "zh-CN": "确认安装并备份",
+    "ja-JP": "バックアップしてインストール",
+    "en-US": "Confirm install with backup"
+  },
+  "patches.preview": {
+    "zh-CN": "安装预览",
+    "ja-JP": "インストールプレビュー",
+    "en-US": "Installation preview"
+  },
+  "patches.restore": {
+    "zh-CN": "恢复此补丁",
+    "ja-JP": "このパッチを元に戻す",
+    "en-US": "Restore this patch"
+  },
+  "patches.conflict": {
+    "zh-CN": "覆盖已有文件",
+    "ja-JP": "既存ファイルを上書き",
+    "en-US": "Overwrites existing file"
+  },
+  "patches.new_file": {
+    "zh-CN": "新增文件",
+    "ja-JP": "新規ファイル",
+    "en-US": "New file"
+  },
+  "patches.installed": {
+    "zh-CN": "已安装补丁",
+    "ja-JP": "インストール済みパッチ",
+    "en-US": "Installed patches"
+  },
+  "patches.run": {
+    "zh-CN": "运行安装程序",
+    "ja-JP": "インストーラーを起動",
+    "en-US": "Run installer"
+  },
+  "patches.exe_note": {
+    "zh-CN": "EXE 使用其自身安装和卸载方式；请手动记录状态。",
+    "ja-JP": "EXEは独自のインストール・アンインストール方式を使用します。状態を手動記録してください。",
+    "en-US": "EXE installers manage their own installation and removal; record status manually."
+  },
+  "error.patch": {
+    "zh-CN": "补丁操作失败：{detail}",
+    "ja-JP": "パッチ操作に失敗：{detail}",
+    "en-US": "Patch operation failed: {detail}"
+  },
+  "cover.fallback": {
+    "zh-CN": "游戏目录无法保存封面，已使用应用缓存：{detail}",
+    "ja-JP": "ゲームフォルダーに保存できないためキャッシュを使用：{detail}",
+    "en-US": "Could not save cover in the game folder; using app cache: {detail}"
+  },
+  "settings.close_behavior": {
+    "zh-CN": "关闭主窗口时",
+    "ja-JP": "ウィンドウを閉じた時",
+    "en-US": "When closing the window"
+  },
+  "settings.tray": {
+    "zh-CN": "驻留托盘",
+    "ja-JP": "トレイに常駐",
+    "en-US": "Keep in tray"
+  },
+  "tray.show": {
+    "zh-CN": "显示 GalGear",
+    "ja-JP": "GalGearを表示",
+    "en-US": "Show GalGear"
+  },
+  "settings.updates": {
+    "zh-CN": "手动检查更新",
+    "ja-JP": "更新を手動確認",
+    "en-US": "Check for updates"
+  },
+  "settings.release_page": {
+    "zh-CN": "GitHub Releases 页面",
+    "ja-JP": "GitHub Releases ページ",
+    "en-US": "GitHub Releases page"
+  },
+  "settings.check_update": {
+    "zh-CN": "检查更新",
+    "ja-JP": "更新を確認",
+    "en-US": "Check updates"
+  },
+  "settings.download": {
+    "zh-CN": "打开下载页面",
+    "ja-JP": "ダウンロードページを開く",
+    "en-US": "Open download page"
+  },
+  "settings.latest": {
+    "zh-CN": "发布页最新版本：{version}",
+    "ja-JP": "最新リリース：{version}",
+    "en-US": "Latest release: {version}"
+  },
+  "error.release_page": {
+    "zh-CN": "尚未配置发布仓库，请先填写 GitHub Releases 页面。",
+    "ja-JP": "GitHub Releases ページを設定してください。",
+    "en-US": "Configure the GitHub Releases page first."
+  },
+  "patches.mark_installed": {
+    "zh-CN": "手动标记已安装",
+    "ja-JP": "インストール済みに設定",
+    "en-US": "Mark installed manually"
+  },
+  "patches.manual_installed": {
+    "zh-CN": "已手动标记安装",
+    "ja-JP": "手動でインストール済み",
+    "en-US": "Manually marked installed"
+  },
+  "games.more": {
+    "zh-CN": "显示更多游戏",
+    "ja-JP": "さらに表示",
+    "en-US": "Show more games"
+  },
+  "patches.choose_target": {
+    "zh-CN": "选择目标目录（默认游戏目录）",
+    "ja-JP": "対象フォルダーを選択（既定はゲームフォルダー）",
+    "en-US": "Choose target folder (defaults to game folder)"
+  },
+  "metadata.retry": {
+    "zh-CN": "重新获取资料与缺失封面",
+    "ja-JP": "情報と不足するカバーを再取得",
+    "en-US": "Refresh information and missing cover"
+  },
+  "settings.enter_path": {
+    "zh-CN": "输入目录路径",
+    "ja-JP": "パスを入力",
+    "en-US": "Enter a folder path"
+  },
+  "settings.appearance": {
+    "zh-CN": "外观与语言",
+    "ja-JP": "表示と言語",
+    "en-US": "Appearance & language"
+  },
+  "settings.window": {
+    "zh-CN": "窗口行为",
+    "ja-JP": "ウィンドウの動作",
+    "en-US": "Window behavior"
+  },
+  "auth.title": {
+    "zh-CN": "2DFan 账号",
+    "ja-JP": "2DFan アカウント",
+    "en-US": "2DFan account"
+  },
+  "auth.account": {
+    "zh-CN": "连接你的 2DFan 账号",
+    "ja-JP": "2DFan アカウントを接続",
+    "en-US": "Connect your 2DFan account"
+  },
+  "auth.points": {
+    "zh-CN": "账号积分",
+    "ja-JP": "保有ポイント",
+    "en-US": "Account points"
+  },
+  "auth.unknown": {
+    "zh-CN": "未知",
+    "ja-JP": "不明",
+    "en-US": "Unknown"
+  },
+  "auth.checking": {
+    "zh-CN": "正在验证…",
+    "ja-JP": "確認中…",
+    "en-US": "Checking…"
+  },
+  "auth.connected": {
+    "zh-CN": "已连接",
+    "ja-JP": "接続済み",
+    "en-US": "Connected"
+  },
+  "auth.disconnected": {
+    "zh-CN": "未登录",
+    "ja-JP": "未ログイン",
+    "en-US": "Signed out"
+  },
+  "auth.failed": {
+    "zh-CN": "连接失败",
+    "ja-JP": "接続失敗",
+    "en-US": "Connection failed"
+  },
+  "auth.unchecked": {
+    "zh-CN": "未验证",
+    "ja-JP": "未確認",
+    "en-US": "Not checked"
+  },
+  "auth.token_placeholder": {
+    "zh-CN": "粘贴 Token，保存后验证",
+    "ja-JP": "Token を貼り付けて保存",
+    "en-US": "Paste a token, then save to verify"
+  },
+  "auth.session": {
+    "zh-CN": "登录会话与 Token 类型",
+    "ja-JP": "ログインセッションと Token の種類",
+    "en-US": "Login session & token type"
+  },
+  "auth.session_help": {
+    "zh-CN": "authenticity_token 需要同一账号的登录 Cookie。可从原站请求头复制 Cookie 值，粘贴到下方；请勿在聊天中发送。",
+    "ja-JP": "authenticity_token には同じログインセッションの Cookie が必要です。サイトのリクエストヘッダーから Cookie 値をコピーして入力してください。",
+    "en-US": "authenticity_token needs the matching login cookie. Paste the Cookie header value from the site below; keep it out of chat."
+  },
+  "auth.token_type": {
+    "zh-CN": "Token 类型",
+    "ja-JP": "Token の種類",
+    "en-US": "Token type"
+  },
+  "auth.save_check": {
+    "zh-CN": "保存并验证",
+    "ja-JP": "保存して確認",
+    "en-US": "Save & verify"
+  },
+  "auth.clear": {
+    "zh-CN": "清除凭据",
+    "ja-JP": "認証情報を削除",
+    "en-US": "Clear credentials"
+  },
+  "auth.vault": {
+    "zh-CN": "凭据保存在此电脑的 Windows 凭据管理器中。",
+    "ja-JP": "認証情報はこの PC の Windows 資格情報マネージャーに保存されます。",
+    "en-US": "Stored in Windows Credential Manager on this computer."
+  },
+  "auth.configure": {
+    "zh-CN": "配置账号",
+    "ja-JP": "アカウント設定",
+    "en-US": "Configure account"
+  },
+  "auth.network": {
+    "zh-CN": "无法连接 2DFan，请检查网络后重试。",
+    "ja-JP": "2DFan に接続できません。ネットワークを確認してください。",
+    "en-US": "Cannot reach 2DFan. Check your network and retry."
+  },
+  "auth.need_cookie": {
+    "zh-CN": "Token 单独无法登录。请在设置中补充同一登录会话的 Cookie，再验证账号。",
+    "ja-JP": "Token だけではログインできません。設定に対応するログイン Cookie を入力してください。",
+    "en-US": "The token alone cannot sign in. Add the matching session cookie in Settings and verify again."
+  },
+  "auth.session_invalid": {
+    "zh-CN": "登录会话未生效或已过期，请更新 Cookie 后重新验证。",
+    "ja-JP": "セッションが無効または期限切れです。Cookie を更新してください。",
+    "en-US": "The login session is invalid or expired. Update your cookie and verify again."
+  },
+  "auth.balance_unknown": {
+    "zh-CN": "暂时无法读取积分，购买已停用。",
+    "ja-JP": "ポイントを取得できないため購入できません。",
+    "en-US": "Points could not be read. Purchasing is disabled."
+  },
+  "auth.invalid": {
+    "zh-CN": "凭据格式无效，请检查 Token 类型、Cookie 和换行。",
+    "ja-JP": "認証情報の形式が無効です。種類、Cookie、改行を確認してください。",
+    "en-US": "Invalid credentials. Check token type, Cookie and line breaks."
+  },
+  "auth.store_error": {
+    "zh-CN": "无法访问 Windows 凭据管理器，凭据未写入设置文件。",
+    "ja-JP": "Windows 資格情報マネージャーにアクセスできません。",
+    "en-US": "Cannot access Windows Credential Manager. Credentials were not written to settings."
+  },
+  "auth.too_long": {
+    "zh-CN": "凭据超出 Windows 存储长度限制。请仅保留登录所需的 Cookie。",
+    "ja-JP": "認証情報が保存サイズの上限を超えています。必要な Cookie のみにしてください。",
+    "en-US": "Credentials exceed the Windows storage limit. Keep only the required session cookies."
+  },
+  "auth.platform": {
+    "zh-CN": "此平台暂不支持安全凭据存储。",
+    "ja-JP": "この環境では資格情報の保存に対応していません。",
+    "en-US": "Secure credential storage is not supported on this platform."
+  },
+  "download.folder": {
+    "zh-CN": "下载目录",
+    "ja-JP": "ダウンロード先",
+    "en-US": "Download folder"
+  },
+  "download.change_folder": {
+    "zh-CN": "更改",
+    "ja-JP": "変更",
+    "en-US": "Change"
+  },
+  "download.open_folder": {
+    "zh-CN": "打开下载目录",
+    "ja-JP": "ダウンロード先を開く",
+    "en-US": "Open download folder"
+  },
+  "download.inspect": {
+    "zh-CN": "查看下载",
+    "ja-JP": "ダウンロードを確認",
+    "en-US": "View download"
+  },
+  "download.preview": {
+    "zh-CN": "下载确认",
+    "ja-JP": "ダウンロード確認",
+    "en-US": "Download confirmation"
+  },
+  "download.cost": {
+    "zh-CN": "本次费用",
+    "ja-JP": "今回の費用",
+    "en-US": "Cost for this download"
+  },
+  "download.available": {
+    "zh-CN": "已可直接下载",
+    "ja-JP": "直接ダウンロード可能",
+    "en-US": "Available to download"
+  },
+  "download.points": {
+    "zh-CN": "{count} 积分",
+    "ja-JP": "{count} ポイント",
+    "en-US": "{count} points"
+  },
+  "download.purchase": {
+    "zh-CN": "确认支付 {count} 积分并下载",
+    "ja-JP": "{count} ポイントで購入してダウンロード",
+    "en-US": "Pay {count} points & download"
+  },
+  "download.start": {
+    "zh-CN": "下载文件",
+    "ja-JP": "ファイルをダウンロード",
+    "en-US": "Download file"
+  },
+  "download.complete": {
+    "zh-CN": "下载完成",
+    "ja-JP": "ダウンロード完了",
+    "en-US": "Download complete"
+  },
+  "download.failed": {
+    "zh-CN": "下载未完成",
+    "ja-JP": "ダウンロード未完了",
+    "en-US": "Download did not finish"
+  },
+  "download.purchasing": {
+    "zh-CN": "正在确认购买…",
+    "ja-JP": "購入を確認中…",
+    "en-US": "Confirming purchase…"
+  },
+  "download.downloading": {
+    "zh-CN": "正在下载…",
+    "ja-JP": "ダウンロード中…",
+    "en-US": "Downloading…"
+  },
+  "download.preparing": {
+    "zh-CN": "正在准备…",
+    "ja-JP": "準備中…",
+    "en-US": "Preparing…"
+  },
+  "download.associate": {
+    "zh-CN": "使用刚下载的文件",
+    "ja-JP": "ダウンロードしたファイルを使用",
+    "en-US": "Use downloaded file"
+  },
+  "download.install_help": {
+    "zh-CN": "文件已保存。选择右侧目标游戏，再预览安装；下载不会自动运行或覆盖游戏。",
+    "ja-JP": "保存しました。対象ゲームを選んでインストール内容を確認してください。",
+    "en-US": "File saved. Select a target game and preview installation before applying it."
+  },
+  "download.busy": {
+    "zh-CN": "已有下载正在进行。",
+    "ja-JP": "ダウンロードが進行中です。",
+    "en-US": "A download is already in progress."
+  },
+  "download.expired": {
+    "zh-CN": "下载确认已失效，请重新查看资源。",
+    "ja-JP": "確認が無効になりました。リソースを再確認してください。",
+    "en-US": "The download preview expired. View the resource again."
+  },
+  "download.confirm_required": {
+    "zh-CN": "请先确认具体费用后购买。",
+    "ja-JP": "購入前に費用を確認してください。",
+    "en-US": "Confirm the exact cost before purchasing."
+  },
+  "download.price_changed": {
+    "zh-CN": "费用发生变化，请重新查看并确认后再下载。",
+    "ja-JP": "価格が変更されました。再確認してください。",
+    "en-US": "The cost changed. Review and confirm the resource again."
+  },
+  "download.unknown_price": {
+    "zh-CN": "无法确认具体费用，购买已停用。",
+    "ja-JP": "費用が不明なため購入できません。",
+    "en-US": "The exact cost is unknown. Purchasing is disabled."
+  },
+  "download.insufficient": {
+    "zh-CN": "账号积分不足。",
+    "ja-JP": "ポイントが不足しています。",
+    "en-US": "Insufficient account points."
+  },
+  "download.site_required": {
+    "zh-CN": "此资源暂无法在应用内直取，请到原站完成下载。",
+    "ja-JP": "アプリで直接取得できません。元のサイトからダウンロードしてください。",
+    "en-US": "This resource cannot be fetched in the app yet. Download it on the original site."
+  },
+  "download.purchase_uncertain": {
+    "zh-CN": "购买结果尚未确认。请到原站核对已购状态；应用不会重复提交扣费请求。",
+    "ja-JP": "購入結果が不明です。サイトで購入済みか確認してください。再課金は行いません。",
+    "en-US": "The purchase outcome is uncertain. Check purchase status on the site; the app will not repeat the charge."
+  },
+  "download.network": {
+    "zh-CN": "下载连接失败，请重新查看资源后重试。",
+    "ja-JP": "接続に失敗しました。リソースを再確認してください。",
+    "en-US": "The download connection failed. View the resource again to retry."
+  },
+  "download.not_file": {
+    "zh-CN": "网站返回了网页，未将其保存为补丁文件。",
+    "ja-JP": "ファイルではなくページが返されました。",
+    "en-US": "The site returned a webpage instead of a patch file."
+  },
+  "download.too_large": {
+    "zh-CN": "文件超过当前 8 GiB 下载上限，请使用原站下载。",
+    "ja-JP": "8 GiB の上限を超えています。サイトから取得してください。",
+    "en-US": "The file exceeds the current 8 GiB download limit. Use the original site."
+  },
+  "download.write": {
+    "zh-CN": "无法写入下载目录，请选择可写的目录。",
+    "ja-JP": "保存できません。書き込み可能なフォルダーを選んでください。",
+    "en-US": "Cannot write to the download folder. Choose a writable folder."
+  },
+  "download.incomplete": {
+    "zh-CN": "文件下载不完整，临时文件已清理。",
+    "ja-JP": "ダウンロードが不完全です。一時ファイルを削除しました。",
+    "en-US": "The download is incomplete. The temporary file was removed."
+  },
+  "download.cancelled": {
+    "zh-CN": "下载已取消，临时文件已清理。",
+    "ja-JP": "キャンセルしました。一時ファイルを削除しました。",
+    "en-US": "Download canceled. The temporary file was removed."
+  },
+  "patches.all_sources": {
+    "zh-CN": "全部来源",
+    "ja-JP": "すべて",
+    "en-US": "All sources"
+  },
+  "patches.kun": {
+    "zh-CN": "鲲 Gal",
+    "ja-JP": "Kun Gal",
+    "en-US": "Kun Gal"
+  },
+  "patches.searching": {
+    "zh-CN": "正在查找资源…",
+    "ja-JP": "検索中…",
+    "en-US": "Searching resources…"
+  },
+  "patches.find_resources": {
+    "zh-CN": "为你的游戏查找补丁",
+    "ja-JP": "ゲームのパッチを探す",
+    "en-US": "Find patches for your games"
+  },
+  "patches.resource_help": {
+    "zh-CN": "输入游戏名称，查看 2DFan 与鲲 Gal 的补丁、汉化及存档资源。",
+    "ja-JP": "ゲーム名から 2DFan と Kun Gal のパッチやセーブを検索できます。",
+    "en-US": "Search a game name for patches, translations and saves from 2DFan and Kun Gal."
+  },
+  "patches.try_query": {
+    "zh-CN": "尝试原名、日文名或更短的关键词，也可切换资源来源。",
+    "ja-JP": "原題や短いキーワード、別の取得元を試してください。",
+    "en-US": "Try the original title, a shorter keyword or another source."
+  },
+  "patches.history_empty": {
+    "zh-CN": "安装补丁后，可在此查看记录并恢复备份。",
+    "ja-JP": "インストール後、履歴とバックアップをここで確認できます。",
+    "en-US": "Installed patches and backup restoration will appear here."
+  },
+  "settings.preference_help": {
+    "zh-CN": "显示与窗口设置自动保存",
+    "ja-JP": "表示とウィンドウ設定は自動保存",
+    "en-US": "Display and window preferences save automatically"
+  },
+  "download.cancel": {
+    "zh-CN": "取消下载",
+    "ja-JP": "ダウンロードをキャンセル",
+    "en-US": "Cancel download"
+  },
+  "choice.game_placeholder": {
+    "zh-CN": "选择游戏",
+    "ja-JP": "ゲームを選択",
+    "en-US": "Choose a game"
+  },
+  "choice.search": {
+    "zh-CN": "输入名称查找",
+    "ja-JP": "名前で検索",
+    "en-US": "Search by name"
+  },
+  "choice.empty": {
+    "zh-CN": "没有匹配的选项",
+    "ja-JP": "一致する項目がありません",
+    "en-US": "No matching options"
+  },
+  "choice.more": {
+    "zh-CN": "输入名称可查找全部游戏",
+    "ja-JP": "名前を入力して全件を検索",
+    "en-US": "Type a name to search all games"
+  },
+  "network.resource": {
+    "ja-JP": "2DFan のリソース情報と料金を確認中…",
+    "zh-CN": "正在获取 2DFan 资源详情与费用…",
+    "en-US": "Fetching 2DFan resource details and cost…"
+  },
+  "network.patches": {
+    "ja-JP": "2DFan と Kun Gal のパッチ情報を検索中…",
+    "zh-CN": "正在搜索 2DFan 与鲲 Gal 补丁信息…",
+    "en-US": "Searching 2DFan and Kun Gal patch information…"
+  },
+  "network.metadata_fetch": {
+    "ja-JP": "2DFan のゲーム情報とカバーを取得中…",
+    "zh-CN": "正在获取 2DFan 游戏资料与封面…",
+    "en-US": "Fetching 2DFan game information and covers…"
+  },
+  "network.update": {
+    "ja-JP": "GitHub のリリースを確認中…",
+    "zh-CN": "正在检查 GitHub 发布版本…",
+    "en-US": "Checking GitHub releases…"
+  },
+  "network.title": {
+    "ja-JP": "サイトから情報を取得中",
+    "zh-CN": "正在从网站获取信息",
+    "en-US": "Fetching information from websites"
+  },
+  "network.metadata_search": {
+    "ja-JP": "2DFan のゲーム情報を検索中…",
+    "zh-CN": "正在搜索 2DFan 游戏资料…",
+    "en-US": "Searching 2DFan game information…"
+  },
+  "network.enrich": {
+    "ja-JP": "「{title}」の情報とカバーを取得中（{current}/{total}）…",
+    "zh-CN": "正在获取《{title}》的资料与封面（{current}/{total}）…",
+    "en-US": "Fetching information and cover for {title} ({current}/{total})…"
+  },
+  "network.account": {
+    "ja-JP": "2DFan のアカウントとポイントを確認中…",
+    "zh-CN": "正在读取 2DFan 账号与积分…",
+    "en-US": "Checking the 2DFan account and points…"
+  },
+  "download.free_start": {
+    "zh-CN": "免费下载",
+    "en-US": "Download free",
+    "ja-JP": "無料ダウンロード"
+  },
+  "patches.library_search": {
+    "zh-CN": "从游戏库搜索",
+    "en-US": "Search from library",
+    "ja-JP": "ライブラリから検索"
+  },
+  "patches.uploaded_by": {
+    "zh-CN": "上传者：{name}",
+    "en-US": "Uploaded by {name}",
+    "ja-JP": "投稿者：{name}"
+  },
+  "patches.tag_manual": {
+    "zh-CN": "人工汉化",
+    "en-US": "Human translation",
+    "ja-JP": "人力翻訳"
+  },
+  "download.free_cost": {
+    "zh-CN": "免费 · 0 积分",
+    "en-US": "Free · 0 points",
+    "ja-JP": "無料 · 0 ポイント"
+  },
+  "download.free_uncertain": {
+    "zh-CN": "免费领取结果暂未确认，请重新检查下载入口。",
+    "en-US": "Free acquisition could not be confirmed. Check the download again.",
+    "ja-JP": "無料取得の結果を確認できません。ダウンロード情報を再確認してください。"
+  },
+  "patches.tag_ai": {
+    "zh-CN": "AI翻译",
+    "en-US": "AI translation",
+    "ja-JP": "AI翻訳"
+  },
+  "patches.library_placeholder": {
+    "zh-CN": "选择或搜索游戏名…",
+    "en-US": "Choose or search a game…",
+    "ja-JP": "ゲームを選択・検索…"
+  },
+  "patches.source_error": {
+    "en-US": "Could not fetch results from {source}. Search again later.",
+    "ja-JP": "{source} の結果を取得できません。後で検索し直してください。",
+    "zh-CN": "暂时无法获取 {source} 的结果，请稍后搜索重试。"
+  },
+  "auth.cache_error": {
+    "zh-CN": "状态更新未完成，保留上次结果。",
+    "en-US": "Status could not be updated; previous results are retained.",
+    "ja-JP": "更新できなかったため、前回の状態を表示します。"
+  },
+  "auth.cache_write": {
+    "zh-CN": "无法保存状态缓存，请检查应用数据目录的写入权限。",
+    "en-US": "Cannot save the status cache. Check permissions for the app data folder.",
+    "ja-JP": "状態を保存できません。アプリデータの書き込み権限を確認してください。"
+  },
+  "auth.cache_help": {
+    "zh-CN": "状态使用缓存，每个整点在后台刷新。",
+    "en-US": "Status is cached and refreshed in the background every hour.",
+    "ja-JP": "状態はキャッシュされ、毎時バックグラウンドで更新されます。"
+  },
+  "common.confirm": {
+    "zh-CN": "确认",
+    "ja-JP": "確認",
+    "en-US": "Confirm"
+  },
+  "display.title": {
+    "zh-CN": "显示与工具设置",
+    "ja-JP": "表示とツール設定",
+    "en-US": "Display and tools"
+  },
+  "display.cover": {
+    "zh-CN": "封面比例",
+    "ja-JP": "カバーの倍率",
+    "en-US": "Cover scale"
+  },
+  "display.font": {
+    "zh-CN": "字体大小",
+    "ja-JP": "文字サイズ",
+    "en-US": "Font size"
+  },
+  "display.help": {
+    "zh-CN": "封面使用宽松尺寸，并随窗口自适应。悬停卡片可查看游戏名、标签和操作。",
+    "ja-JP": "カバーはゆったりしたサイズでウィンドウに合わせて表示されます。カードにカーソルを合わせるとタイトル、タグ、操作が表示されます。",
+    "en-US": "Covers use a roomy size and adapt to the window. Hover over a card to see its title, tags and actions."
+  },
+  "display.range": {
+    "zh-CN": "请输入 50% 至 200% 的封面比例。",
+    "ja-JP": "50%～200% の倍率を入力してください。",
+    "en-US": "Enter a cover scale from 50% to 200%."
+  },
+  "metadata.story": {
+    "zh-CN": "故事介绍",
+    "ja-JP": "ストーリー",
+    "en-US": "Story"
+  },
+  "metadata.no_story": {
+    "zh-CN": "暂无故事介绍",
+    "ja-JP": "ストーリー紹介はありません",
+    "en-US": "No story available"
+  },
+  "metadata.brand": {
+    "zh-CN": "品牌",
+    "ja-JP": "ブランド",
+    "en-US": "Brand"
+  },
+  "metadata.developer": {
+    "zh-CN": "开发商",
+    "ja-JP": "開発元",
+    "en-US": "Developer"
+  },
+  "metadata.publisher": {
+    "zh-CN": "发行商",
+    "ja-JP": "発売元",
+    "en-US": "Publisher"
+  },
+  "metadata.date": {
+    "zh-CN": "发售日期",
+    "ja-JP": "発売日",
+    "en-US": "Release date"
+  },
+  "metadata.artists": {
+    "zh-CN": "原画",
+    "ja-JP": "原画",
+    "en-US": "Artists"
+  },
+  "metadata.voices": {
+    "zh-CN": "声优",
+    "ja-JP": "声優",
+    "en-US": "Voice cast"
+  },
+  "metadata.writers": {
+    "zh-CN": "剧本／脚本",
+    "ja-JP": "シナリオ",
+    "en-US": "Writers"
+  },
+  "metadata.music": {
+    "zh-CN": "音乐",
+    "ja-JP": "音楽",
+    "en-US": "Music"
+  },
+  "metadata.singers": {
+    "zh-CN": "歌手",
+    "ja-JP": "歌手",
+    "en-US": "Singers"
+  },
+  "metadata.edit": {
+    "zh-CN": "编辑资料",
+    "ja-JP": "作品情報を編集",
+    "en-US": "Edit metadata"
+  },
+  "metadata.reset": {
+    "zh-CN": "恢复自动获取",
+    "ja-JP": "自動取得に戻す",
+    "en-US": "Restore automatic field"
+  },
+  "tags.edit": {
+    "zh-CN": "编辑标签",
+    "ja-JP": "タグを編集",
+    "en-US": "Edit tags"
+  },
+  "tags.manage": {
+    "zh-CN": "标签管理",
+    "ja-JP": "タグ管理",
+    "en-US": "Manage tags"
+  },
+  "tags.name": {
+    "zh-CN": "标签名称",
+    "ja-JP": "タグ名",
+    "en-US": "Tag name"
+  },
+  "tags.new_name": {
+    "zh-CN": "新名称",
+    "ja-JP": "新しい名前",
+    "en-US": "New name"
+  },
+  "tags.rename": {
+    "zh-CN": "重命名并合并",
+    "ja-JP": "名前変更・統合",
+    "en-US": "Rename and merge"
+  },
+  "tags.delete": {
+    "zh-CN": "删除",
+    "ja-JP": "削除",
+    "en-US": "Delete"
+  },
+  "tags.reset": {
+    "zh-CN": "重置标签编辑规则",
+    "ja-JP": "タグ編集ルールをリセット",
+    "en-US": "Reset tag edit rules"
+  },
+  "tags.delete_confirm": {
+    "zh-CN": "删除标签“{name}”将影响 {count} 个游戏，请确认。",
+    "ja-JP": "タグ「{name}」を削除すると {count} 件のゲームに影響します。確認してください。",
+    "en-US": "Delete tag “{name}” from {count} games? Please confirm."
+  },
+  "backup.error": {
+    "zh-CN": "存档操作失败：{detail}",
+    "ja-JP": "セーブ操作に失敗しました：{detail}",
+    "en-US": "Save operation failed: {detail}"
+  },
+  "backup.blocked": {
+    "zh-CN": "游戏运行中或状态未知，无法写入存档。请重新检测。",
+    "ja-JP": "ゲーム実行中または状態不明のためセーブを書き込めません。再確認してください。",
+    "en-US": "Saves cannot be written while the game is running or its state is unknown. Check again."
+  },
+  "backup.busy": {
+    "zh-CN": "文件操作正在进行，请稍后重试。",
+    "ja-JP": "ファイル操作中です。後で再試行してください。",
+    "en-US": "A file operation is in progress. Try again shortly."
+  },
+  "backup.no_saves": {
+    "zh-CN": "暂无可读存档，请确认游戏专用存档目录。",
+    "ja-JP": "読み取り可能なセーブがありません。ゲーム専用のフォルダーを確認してください。",
+    "en-US": "No readable saves. Confirm the dedicated save folder."
+  },
+  "backup.preview_required": {
+    "zh-CN": "存档位置或预览已改变，请重新预览并确认恢复。",
+    "ja-JP": "保存先またはプレビューが変わりました。再確認してください。",
+    "en-US": "The save location or preview changed. Preview and confirm again."
+  },
+  "backup.folder": {
+    "zh-CN": "备份目录（留空使用应用数据目录）",
+    "ja-JP": "バックアップ先（空欄でアプリデータ）",
+    "en-US": "Backup folder (empty uses app data)"
+  },
+  "backup.retention": {
+    "zh-CN": "每游戏保留份数",
+    "ja-JP": "ゲームごとの保存数",
+    "en-US": "Snapshots to keep per game"
+  },
+  "backup.retention_error": {
+    "zh-CN": "保留份数须为 1 至 1000 的整数。",
+    "ja-JP": "保存数は 1～1000 の整数で指定してください。",
+    "en-US": "Retention must be an integer from 1 to 1000."
+  },
+  "backup.confirmed": {
+    "zh-CN": "已确认",
+    "ja-JP": "確認済み",
+    "en-US": "Confirmed"
+  },
+  "backup.create": {
+    "zh-CN": "备份存档",
+    "ja-JP": "セーブをバックアップ",
+    "en-US": "Back up saves"
+  },
+  "backup.history": {
+    "zh-CN": "备份历史",
+    "ja-JP": "バックアップ履歴",
+    "en-US": "Backup history"
+  },
+  "backup.note": {
+    "zh-CN": "备注",
+    "ja-JP": "メモ",
+    "en-US": "Note"
+  },
+  "backup.auto_help": {
+    "zh-CN": "仅在 GalGear 运行时，检测到游戏退出后备份。",
+    "ja-JP": "GalGear 実行中のみ、ゲーム終了後にバックアップします。",
+    "en-US": "Back up after game exit while GalGear is running."
+  },
+  "backup.auto_on": {
+    "zh-CN": "退出后自动备份：开",
+    "ja-JP": "終了後の自動バックアップ：オン",
+    "en-US": "Backup on exit: on"
+  },
+  "backup.auto_off": {
+    "zh-CN": "退出后自动备份：关",
+    "ja-JP": "終了後の自動バックアップ：オフ",
+    "en-US": "Backup on exit: off"
+  },
+  "backup.empty": {
+    "zh-CN": "还没有备份快照。",
+    "ja-JP": "バックアップはまだありません。",
+    "en-US": "No snapshots yet."
+  },
+  "backup.locked": {
+    "zh-CN": "已锁定",
+    "ja-JP": "ロック済み",
+    "en-US": "Locked"
+  },
+  "backup.lock": {
+    "zh-CN": "锁定",
+    "ja-JP": "ロック",
+    "en-US": "Lock"
+  },
+  "backup.unlock": {
+    "zh-CN": "解锁",
+    "ja-JP": "ロック解除",
+    "en-US": "Unlock"
+  },
+  "backup.restore": {
+    "zh-CN": "预览恢复",
+    "ja-JP": "復元をプレビュー",
+    "en-US": "Preview restore"
+  },
+  "backup.files": {
+    "zh-CN": "浏览快照文件",
+    "ja-JP": "ファイルを表示",
+    "en-US": "Browse snapshot files"
+  },
+  "backup.restore_preview": {
+    "zh-CN": "确认恢复目标及文件变化",
+    "ja-JP": "復元先とファイル変更を確認",
+    "en-US": "Confirm restore targets and changes"
+  },
+  "backup.restore_help": {
+    "zh-CN": "确认后先备份当前存档，再恢复完整状态，包括移除后续文件。",
+    "ja-JP": "確認後に現在のセーブをバックアップし、後から追加されたファイルも削除して完全に復元します。",
+    "en-US": "Confirmation backs up current saves, then restores the complete state, including removing later files."
+  },
+  "backup.delete_confirm": {
+    "zh-CN": "删除这份备份快照？此操作不删除游戏存档。",
+    "ja-JP": "このバックアップを削除しますか？ゲームのセーブは削除されません。",
+    "en-US": "Delete this snapshot? Game saves are retained."
+  },
+  "backup.remove": {
+    "zh-CN": "移除",
+    "ja-JP": "削除",
+    "en-US": "Remove"
+  },
+  "backup.add": {
+    "zh-CN": "新增",
+    "ja-JP": "追加",
+    "en-US": "Add"
+  },
+  "backup.overwrite": {
+    "zh-CN": "覆盖",
+    "ja-JP": "上書き",
+    "en-US": "Overwrite"
+  },
+  "runtime.confirm": {
+    "zh-CN": "无法确定游戏是否运行。确认继续启动？",
+    "ja-JP": "ゲームの実行状態を確認できません。起動しますか？",
+    "en-US": "The game's running state is unknown. Launch anyway?"
+  },
+  "runtime.running": {
+    "zh-CN": "运行中",
+    "ja-JP": "実行中",
+    "en-US": "Running"
+  },
+  "runtime.stopped": {
+    "zh-CN": "未运行",
+    "ja-JP": "停止中",
+    "en-US": "Stopped"
+  },
+  "runtime.unknown": {
+    "zh-CN": "运行状态未知",
+    "ja-JP": "実行状態不明",
+    "en-US": "Running state unknown"
+  },
+  "tools.title": {
+    "zh-CN": "存档备份与外部工具",
+    "ja-JP": "バックアップと外部ツール",
+    "en-US": "Save backups and external tools"
+  },
+  "tools.locale": {
+    "zh-CN": "Locale Emulator：LEProc.exe 路径",
+    "ja-JP": "Locale Emulator：LEProc.exe の場所",
+    "en-US": "Locale Emulator: LEProc.exe path"
+  },
+  "tools.magpie": {
+    "zh-CN": "Magpie.exe 路径",
+    "ja-JP": "Magpie.exe の場所",
+    "en-US": "Magpie.exe path"
+  },
+  "tools.hotkey": {
+    "zh-CN": "Magpie 当前缩放快捷键",
+    "ja-JP": "Magpie の現在の拡大ショートカット",
+    "en-US": "Current Magpie scaling hotkey"
+  },
+  "tools.help": {
+    "zh-CN": "转区默认选择日文配置；区域、参数在 Locale Emulator 中配置。Magpie 的算法、倍率和快捷键在其自身配置后填写。",
+    "ja-JP": "既定は日本語プロファイルです。地域・引数は Locale Emulator で設定してください。Magpie のアルゴリズム・倍率・キーは Magpie で設定します。",
+    "en-US": "Locale launch defaults to a Japanese profile. Configure regions and profile arguments in Locale Emulator. Configure scaling and hotkeys in Magpie."
+  },
+  "tools.locale_launch": {
+    "zh-CN": "转区启动",
+    "ja-JP": "ロケール起動",
+    "en-US": "Locale launch"
+  },
+  "tools.launch_options": {
+    "zh-CN": "启动选项",
+    "ja-JP": "起動オプション",
+    "en-US": "Launch options"
+  },
+  "tools.normal": {
+    "zh-CN": "普通启动",
+    "ja-JP": "通常起動",
+    "en-US": "Normal launch"
+  },
+  "tools.default_normal": {
+    "zh-CN": "默认：普通启动",
+    "ja-JP": "既定：通常起動",
+    "en-US": "Default: normal launch"
+  },
+  "tools.default_locale": {
+    "zh-CN": "默认：转区启动",
+    "ja-JP": "既定：ロケール起動",
+    "en-US": "Default: locale launch"
+  },
+  "tools.upscale": {
+    "zh-CN": "超分",
+    "ja-JP": "拡大",
+    "en-US": "Upscale"
+  },
+  "tools.profile": {
+    "zh-CN": "区域配置 GUID（留空选择日文配置）",
+    "ja-JP": "プロファイル GUID（空欄で日本語）",
+    "en-US": "Locale profile GUID (empty selects Japanese)"
+  },
+  "tools.save_profile": {
+    "zh-CN": "保存区域配置",
+    "ja-JP": "プロファイルを保存",
+    "en-US": "Save locale profile"
+  },
+  "tools.locale_missing": {
+    "zh-CN": "请在设置中指定已安装的 LEProc.exe。",
+    "ja-JP": "設定でインストール済み LEProc.exe を指定してください。",
+    "en-US": "Set the installed LEProc.exe path in Settings."
+  },
+  "tools.locale_profile": {
+    "zh-CN": "未找到所选区域配置，请在 Locale Emulator 中配置日文区域或选择已有配置。",
+    "ja-JP": "指定プロファイルがありません。Locale Emulator で日本語を設定するか既存プロファイルを選択してください。",
+    "en-US": "No matching locale profile. Configure Japanese or select an existing profile in Locale Emulator."
+  },
+  "tools.magpie_missing": {
+    "zh-CN": "请在设置中指定已安装的 Magpie.exe。",
+    "ja-JP": "設定でインストール済み Magpie.exe を指定してください。",
+    "en-US": "Set the installed Magpie.exe path in Settings."
+  },
+  "tools.magpie_start": {
+    "zh-CN": "请先在 Magpie 中配置缩放方案并启动工具。",
+    "ja-JP": "Magpie で拡大設定を選び、ツールを起動してください。",
+    "en-US": "Configure a scaling profile and start Magpie first."
+  },
+  "tools.game_stopped": {
+    "zh-CN": "请先启动游戏，再选择超分。",
+    "ja-JP": "ゲームを起動してから拡大してください。",
+    "en-US": "Start the game before upscaling."
+  },
+  "tools.triggered": {
+    "zh-CN": "已向游戏窗口发送 Magpie 快捷键，缩放结果尚未确认。",
+    "ja-JP": "ゲームに Magpie のキーを送信しました。拡大結果は未確認です。",
+    "en-US": "Sent the Magpie hotkey to the game window. Scaling is unconfirmed."
+  },
+  "tools.error": {
+    "zh-CN": "工具调用失败：{detail}",
+    "ja-JP": "ツール呼び出しに失敗しました：{detail}",
+    "en-US": "Tool invocation failed: {detail}"
+  },
+  "official.title": {
+    "zh-CN": "请支持正版",
+    "ja-JP": "正規版をご支援ください",
+    "en-US": "Support official releases"
+  },
+  "official.dlsite": {
+    "zh-CN": "访问 DLsite 官网",
+    "ja-JP": "DLsite 公式サイトへ",
+    "en-US": "Visit DLsite"
+  },
+  "patch.target_reconfirm": {
+    "zh-CN": "当前游戏或存档位置与补丁记录不一致，请重新确认目标；已保留备份。",
+    "ja-JP": "現在のゲーム・セーブ場所がパッチ記録と異なります。保存先を再確認してください。バックアップは保持しています。",
+    "en-US": "The current game or save location differs from the patch record. Reconfirm the target; backups are retained."
+  },
+  "theme.to_light": {
+    "zh-CN": "切换为亮色主题",
+    "ja-JP": "ライトテーマに切り替え",
+    "en-US": "Switch to light theme"
+  },
+  "theme.to_dark": {
+    "zh-CN": "切换为暗色主题",
+    "ja-JP": "ダークテーマに切り替え",
+    "en-US": "Switch to dark theme"
+  },
+  "theme.light": {
+    "zh-CN": "亮色",
+    "ja-JP": "ライト",
+    "en-US": "Light"
+  },
+  "theme.dark": {
+    "zh-CN": "暗色",
+    "ja-JP": "ダーク",
+    "en-US": "Dark"
+  },
+  "detail.back": {
+    "zh-CN": "返回游戏库",
+    "ja-JP": "ゲームライブラリへ戻る",
+    "en-US": "Back to library"
+  },
+  "detail.not_set": {
+    "zh-CN": "未设置",
+    "ja-JP": "未設定",
+    "en-US": "Not set"
+  },
+  "detail.edit_hint": {
+    "zh-CN": "点击标题编辑名称",
+    "ja-JP": "タイトルをクリックして編集",
+    "en-US": "Click the title to rename"
+  },
+  "detail.tags": {
+    "zh-CN": "标签",
+    "ja-JP": "タグ",
+    "en-US": "Tags"
+  },
+  "detail.no_tags": {
+    "zh-CN": "暂无标签",
+    "ja-JP": "タグはありません",
+    "en-US": "No tags yet"
+  },
+  "detail.game_information": {
+    "zh-CN": "游戏资料",
+    "ja-JP": "ゲーム情報",
+    "en-US": "Game information"
+  },
+  "detail.cached_source": {
+    "zh-CN": "2DFan · 本地资料",
+    "ja-JP": "2DFan · キャッシュ",
+    "en-US": "2DFan · Cached metadata"
+  },
+  "detail.local_source": {
+    "zh-CN": "本地资料",
+    "ja-JP": "ローカル情報",
+    "en-US": "Local metadata"
+  },
+  "detail.credits": {
+    "zh-CN": "制作人员与发行资料",
+    "ja-JP": "スタッフと発売情報",
+    "en-US": "Credits and release information"
+  },
+  "detail.refresh_metadata": {
+    "zh-CN": "刷新资料",
+    "ja-JP": "情報を更新",
+    "en-US": "Refresh metadata"
+  },
+  "detail.change_association": {
+    "zh-CN": "更改资料关联",
+    "ja-JP": "情報の関連付けを変更",
+    "en-US": "Change metadata association"
+  },
+  "detail.configure": {
+    "zh-CN": "编辑配置",
+    "ja-JP": "起動設定",
+    "en-US": "Launch configuration"
+  },
+  "detail.edit_configuration": {
+    "zh-CN": "编辑",
+    "ja-JP": "編集",
+    "en-US": "Edit"
+  },
+  "detail.located": {
+    "zh-CN": "已定位",
+    "ja-JP": "場所確認済み",
+    "en-US": "Located"
+  },
+  "detail.more_locations": {
+    "zh-CN": "更多路径",
+    "ja-JP": "その他のパス",
+    "en-US": "More paths"
+  },
+  "detail.save_options": {
+    "zh-CN": "更多存档选项",
+    "ja-JP": "その他のセーブ設定",
+    "en-US": "More save options"
+  },
+  "detail.launch": {
+    "zh-CN": "启动游戏",
+    "ja-JP": "ゲームを起動",
+    "en-US": "Launch game"
+  },
+  "detail.open_directory": {
+    "zh-CN": "打开目录",
+    "ja-JP": "フォルダーを開く",
+    "en-US": "Open folder"
+  },
+  "official.help": {
+    "zh-CN": "支持创作者，前往官方商店了解作品。",
+    "ja-JP": "制作者を応援し、公式ストアで作品をご覧ください。",
+    "en-US": "Support the creators and visit the official store."
+  },
+  "official.homepage": {
+    "zh-CN": "跳转 DLsite 官网首页",
+    "ja-JP": "DLsite 公式トップページへ",
+    "en-US": "Opens the DLsite home page"
+  },
+  "folders.title": {
+    "zh-CN": "收藏夹",
+    "ja-JP": "コレクション",
+    "en-US": "Collections"
+  },
+  "folders.new": {
+    "zh-CN": "新建收藏夹",
+    "ja-JP": "新規コレクション",
+    "en-US": "New collection"
+  },
+  "folders.new_child": {
+    "zh-CN": "新建子收藏夹",
+    "ja-JP": "子コレクションを作成",
+    "en-US": "New subcollection"
+  },
+  "folders.new_hint": {
+    "zh-CN": "创建收藏夹，整理你的游戏。",
+    "ja-JP": "コレクションを作成してゲームを整理します。",
+    "en-US": "Create a collection to organize your games."
+  },
+  "folders.edit": {
+    "zh-CN": "编辑收藏夹",
+    "ja-JP": "コレクションを編集",
+    "en-US": "Edit collection"
+  },
+  "folders.delete": {
+    "zh-CN": "删除收藏夹",
+    "ja-JP": "コレクションを削除",
+    "en-US": "Delete collection"
+  },
+  "folders.name": {
+    "zh-CN": "收藏夹名称",
+    "ja-JP": "コレクション名",
+    "en-US": "Collection name"
+  },
+  "folders.parent": {
+    "zh-CN": "上级收藏夹",
+    "ja-JP": "親コレクション",
+    "en-US": "Parent collection"
+  },
+  "folders.root": {
+    "zh-CN": "顶层",
+    "ja-JP": "最上位",
+    "en-US": "Top level"
+  },
+  "folders.name_required": {
+    "zh-CN": "请输入收藏夹名称。",
+    "ja-JP": "コレクション名を入力してください。",
+    "en-US": "Enter a collection name."
+  },
+  "folders.duplicate_name": {
+    "zh-CN": "同级已有这个名称的收藏夹。",
+    "ja-JP": "同じ階層に同名のコレクションがあります。",
+    "en-US": "A collection with this name already exists at this level."
+  },
+  "folders.cycle": {
+    "zh-CN": "不能移动到自身或子收藏夹中。",
+    "ja-JP": "自分自身や子コレクションには移動できません。",
+    "en-US": "A collection cannot be moved into itself or its descendants."
+  },
+  "folders.missing": {
+    "zh-CN": "收藏夹已不存在，请重新选择。",
+    "ja-JP": "コレクションが存在しません。選び直してください。",
+    "en-US": "This collection no longer exists. Choose another."
+  },
+  "folders.add_games": {
+    "zh-CN": "加入收藏夹",
+    "ja-JP": "コレクションに追加",
+    "en-US": "Add to collection"
+  },
+  "folders.detach": {
+    "zh-CN": "移出当前收藏夹",
+    "ja-JP": "現在のコレクションから外す",
+    "en-US": "Remove from collection"
+  },
+  "folders.already_added": {
+    "zh-CN": "已在收藏夹中。",
+    "ja-JP": "すでにコレクションに登録されています。",
+    "en-US": "Already in this collection."
+  },
+  "folders.empty": {
+    "zh-CN": "收藏夹还是空的",
+    "ja-JP": "空のコレクション",
+    "en-US": "This collection is empty"
+  },
+  "folders.empty_hint": {
+    "zh-CN": "点击工具栏中的添加按钮，将游戏加入当前文件夹。",
+    "ja-JP": "ツールバーからゲームをこのフォルダーに追加できます。",
+    "en-US": "Use the toolbar to add games to this folder."
+  },
+  "folders.delete_confirm": {
+    "zh-CN": "删除“{name}”及其 {folders} 个子收藏夹？涉及 {games} 款游戏，仅解除收藏归属，游戏和文件均保留。",
+    "ja-JP": "「{name}」と子コレクション {folders} 件を削除しますか？ゲーム {games} 件の所属のみ解除します。ゲームとファイルは残ります。",
+    "en-US": "Delete “{name}” and {folders} subcollections? This removes memberships for {games} games. Games and files are kept."
+  },
+  "bulk.enter": {
+    "zh-CN": "批量",
+    "ja-JP": "一括",
+    "en-US": "Bulk"
+  },
+  "bulk.selected": {
+    "zh-CN": "已选 {count}",
+    "ja-JP": "{count} 件を選択",
+    "en-US": "{count} selected"
+  },
+  "bulk.all": {
+    "zh-CN": "全选",
+    "ja-JP": "すべて選択",
+    "en-US": "Select all"
+  },
+  "bulk.clear": {
+    "zh-CN": "清空",
+    "ja-JP": "選択を解除",
+    "en-US": "Clear"
+  },
+  "bulk.done": {
+    "zh-CN": "完成",
+    "ja-JP": "完了",
+    "en-US": "Done"
+  },
+  "bulk.exclude": {
+    "zh-CN": "从游戏列表移除",
+    "ja-JP": "ゲーム一覧から除外",
+    "en-US": "Remove from library"
+  },
+  "bulk.exclude_confirm": {
+    "zh-CN": "从游戏列表移除所选 {count} 款游戏？不会删除游戏文件、存档或补丁备份，可在设置中恢复条目。",
+    "ja-JP": "選択した {count} 件をゲーム一覧から除外しますか？ゲームファイル、セーブ、パッチのバックアップは削除されません。設定から復元できます。",
+    "en-US": "Remove {count} selected games from the library? Game files, saves and patch backups are kept. Restore entries in Settings."
+  },
+  "bulk.failures": {
+    "zh-CN": "查看失败项",
+    "ja-JP": "失敗した項目",
+    "en-US": "View failures"
+  },
+  "bulk.retry": {
+    "zh-CN": "重试失败项",
+    "ja-JP": "失敗した項目を再試行",
+    "en-US": "Retry failed items"
+  },
+  "bulk.result": {
+    "zh-CN": "完成 {success} 项，失败 {failed} 项。",
+    "ja-JP": "成功 {success} 件、失敗 {failed} 件。",
+    "en-US": "{success} completed, {failed} failed."
+  },
+  "library.libraries": {
+    "zh-CN": "个库",
+    "ja-JP": "ライブラリ",
+    "en-US": "libraries"
+  },
+  "library.games": {
+    "zh-CN": "款游戏",
+    "ja-JP": "ゲーム",
+    "en-US": "games"
+  },
+  "library.path_warning": {
+    "zh-CN": "路径失效，可能已转移；打开详情重新定位。",
+    "ja-JP": "パスが無効です。移動された可能性があります。詳細で場所を再指定してください。",
+    "en-US": "Path unavailable; the game may have moved. Open details to relocate it."
+  },
+  "library.warnings_title": {
+    "zh-CN": "扫描警告",
+    "ja-JP": "スキャンの警告",
+    "en-US": "Scan warnings"
+  },
+  "library.restore": {
+    "zh-CN": "恢复已移除条目",
+    "ja-JP": "除外した項目を復元",
+    "en-US": "Restore removed entries"
+  },
+  "library.excluded_empty": {
+    "zh-CN": "没有可恢复的已移除条目。",
+    "ja-JP": "復元可能な除外項目はありません。",
+    "en-US": "No removed entries to restore."
+  },
+  "library.restore_all": {
+    "zh-CN": "恢复全部条目",
+    "ja-JP": "すべて復元",
+    "en-US": "Restore all entries"
+  },
+  "library.restore_one": {
+    "zh-CN": "恢复",
+    "ja-JP": "復元",
+    "en-US": "Restore"
+  },
+  "tags.advanced": {
+    "zh-CN": "高级操作",
+    "ja-JP": "詳細操作",
+    "en-US": "Advanced"
+  },
+  "tags.restore": {
+    "zh-CN": "恢复网站标签",
+    "ja-JP": "サイトのタグを復元",
+    "en-US": "Restore website tags"
+  },
+  "tags.restore_confirm": {
+    "zh-CN": "恢复当前游戏的网站标签？清除本游戏的标签导入限制，重新加入缓存的网站标签，其他手动标签保留。",
+    "ja-JP": "このゲームのサイトタグを復元しますか？インポート制限を解除してキャッシュ済みタグを追加します。他の手動タグは残ります。",
+    "en-US": "Restore website tags for this game? Clear its import rules and add cached website tags. Other manual tags are kept."
+  },
+  "auth.busy": {
+    "zh-CN": "请等待账号刷新完成。",
+    "ja-JP": "アカウントの更新が完了するまでお待ちください。",
+    "en-US": "Wait for the account refresh to finish."
+  },
+  "folders.home": {
+    "zh-CN": "主页",
+    "ja-JP": "ホーム",
+    "en-US": "Home"
+  },
+  "folders.path": {
+    "zh-CN": "收藏夹路径",
+    "ja-JP": "お気に入りのパス",
+    "en-US": "Collection path"
+  },
+  "error.executable_required": {
+    "zh-CN": "请选择游戏的 EXE 启动程序。",
+    "ja-JP": "ゲームの EXE を選択してください。",
+    "en-US": "Choose the game’s EXE executable."
+  },
+  "status.wanted": {
+    "zh-CN": "想玩",
+    "ja-JP": "プレイ予定",
+    "en-US": "Want to play"
+  },
+  "status.playing": {
+    "zh-CN": "在玩",
+    "ja-JP": "プレイ中",
+    "en-US": "Playing"
+  },
+  "status.finished": {
+    "zh-CN": "玩过",
+    "ja-JP": "プレイ済み",
+    "en-US": "Played"
+  },
+  "status.shelved": {
+    "zh-CN": "搁置",
+    "ja-JP": "保留",
+    "en-US": "On hold"
+  },
+  "status.abandoned": {
+    "zh-CN": "弃坑",
+    "ja-JP": "中断",
+    "en-US": "Dropped"
+  },
+  "status.unmarked": {
+    "zh-CN": "未标记",
+    "ja-JP": "未設定",
+    "en-US": "Unmarked"
+  },
+  "context.detail": {
+    "zh-CN": "进入详情页",
+    "ja-JP": "詳細を表示",
+    "en-US": "View details"
+  },
+  "context.delete": {
+    "zh-CN": "删除游戏",
+    "ja-JP": "ゲームを削除",
+    "en-US": "Remove game"
+  },
+  "card.favorite": {
+    "zh-CN": "收藏",
+    "ja-JP": "お気に入り",
+    "en-US": "Add to collection"
+  },
+  "card.finished": {
+    "zh-CN": "通关",
+    "ja-JP": "クリア",
+    "en-US": "Completed"
+  },
+  "context.status": {
+    "zh-CN": "修改游戏状态",
+    "ja-JP": "プレイ状況を変更",
+    "en-US": "Change play status"
+  },
+  "settings.section_account": {
+    "zh-CN": "数据源",
+    "ja-JP": "データソース",
+    "en-US": "Data sources"
+  },
+  "settings.section_library": {
+    "zh-CN": "游戏库",
+    "ja-JP": "ライブラリ",
+    "en-US": "Game library"
+  },
+  "settings.section_display": {
+    "zh-CN": "显示与交互",
+    "ja-JP": "表示と操作",
+    "en-US": "Display & interaction"
+  },
+  "settings.section_system": {
+    "zh-CN": "系统",
+    "ja-JP": "システム",
+    "en-US": "System"
+  },
+  "settings.section_paths": {
+    "zh-CN": "路径与备份",
+    "ja-JP": "パスとバックアップ",
+    "en-US": "Paths & backups"
+  },
+  "settings.navigation": {
+    "zh-CN": "导航 Tabs",
+    "ja-JP": "ナビゲーション",
+    "en-US": "Navigation tabs"
+  },
+  "settings.patch_tab": {
+    "zh-CN": "显示补丁 Tab",
+    "ja-JP": "パッチタブを表示",
+    "en-US": "Show the patches tab"
+  },
+  "settings.navigation_help": {
+    "zh-CN": "可选择是否显示补丁入口；其他导航入口固定显示。",
+    "ja-JP": "パッチタブの表示を切り替えます。他のタブは常に表示されます。",
+    "en-US": "Choose whether to show Patches. Other navigation tabs stay visible."
+  },
+  "games.tag_filter": {
+    "zh-CN": "标签筛选",
+    "ja-JP": "タグで絞り込む",
+    "en-US": "Filter tags"
+  },
+  "folders.add_current": {
+    "zh-CN": "添加游戏至当前文件夹",
+    "ja-JP": "このフォルダーにゲームを追加",
+    "en-US": "Add games to this folder"
+  },
+  "folders.no_candidates": {
+    "zh-CN": "没有可添加的游戏",
+    "ja-JP": "追加できるゲームはありません",
+    "en-US": "No games available to add"
+  },
+  "folders.batch_delete_help": {
+    "zh-CN": "删除所选文件夹及其子文件夹？游戏文件及游戏库记录将保留。",
+    "ja-JP": "選択したフォルダーと子フォルダーを削除しますか？ゲームファイルとライブラリは保持されます。",
+    "en-US": "Delete the selected folders and their subfolders? Game files and library entries will be retained."
+  },
+  "detail.back_top": {
+    "zh-CN": "返回顶部",
+    "ja-JP": "先頭へ戻る",
+    "en-US": "Back to top"
+  },
+  "settings.section_update": {
+    "zh-CN": "更新",
+    "ja-JP": "アップデート",
+    "en-US": "Updates"
+  },
+  "sources.saved": {
+    "zh-CN": "凭据已保存",
+    "ja-JP": "認証情報を保存済み",
+    "en-US": "Credentials saved"
+  },
+  "sources.public": {
+    "zh-CN": "公开资料",
+    "ja-JP": "公開データ",
+    "en-US": "Public data"
+  },
+  "sources.ymgal_help": {
+    "zh-CN": "留空即可使用月幕的公共客户端；也可填写自己的客户端凭据。",
+    "ja-JP": "空欄で月幕の公開クライアントを使用できます。独自の認証情報も設定できます。",
+    "en-US": "Leave blank to use the YMGal public client, or enter your own client credentials."
+  },
+  "sources.default": {
+    "zh-CN": "默认资料来源",
+    "ja-JP": "既定のデータソース",
+    "en-US": "Default metadata source"
+  },
+  "sources.default_help": {
+    "zh-CN": "自动获取资料时使用此来源；更改资料关联时也可单独选择。",
+    "ja-JP": "自動取得に使用します。関連付けを変更する際に別のソースも選択できます。",
+    "en-US": "Used for automatic metadata lookup. You can choose another source when linking a game."
+  },
+  "sources.keep_saved": {
+    "zh-CN": "已保存，留空保留当前凭据",
+    "ja-JP": "保存済み。空欄で現在の認証情報を保持",
+    "en-US": "Saved; leave blank to keep current credentials"
+  },
+  "sources.optional": {
+    "zh-CN": "可选，留空使用公开接口",
+    "ja-JP": "任意。空欄で公開APIを使用",
+    "en-US": "Optional; leave blank for public access"
+  },
+  "sources.auth_error": {
+    "zh-CN": "数据源认证失败，请检查凭据。",
+    "ja-JP": "認証に失敗しました。認証情報を確認してください。",
+    "en-US": "Data source authentication failed. Check your credentials."
+  },
+  "sources.api_error": {
+    "zh-CN": "数据源请求失败：{detail}",
+    "ja-JP": "データソースのリクエストに失敗：{detail}",
+    "en-US": "Data source request failed: {detail}"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GalGear",
+  "version": "0.1.0",
+  "identifier": "com.galgear.desktop",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "GalGear",
+        "width": 1240,
+        "height": 820,
+        "minWidth": 1180,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true,
+        "backgroundColor": "#FBF7FA",
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: http://galgear-cover.localhost galgear-cover: http://galgear-icon.localhost galgear-icon:; connect-src ipc: http://ipc.localhost 'self'; object-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "shortDescription": "粉红色的本地 Galgame 游戏库",
+    "category": "Utility"
+  }
+}

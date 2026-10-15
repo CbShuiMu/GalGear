@@ -1,0 +1,22 @@
+[package]
+name = "galgear-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+galgear-i18n.workspace = true
+sha2 = "0.10"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "bmp", "ico"] }
+tempfile = "3"
+reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls", "system-proxy", "cookies"], default-features = false }
+scraper = "0.24"
+zip = { version = "4", default-features = false, features = ["deflate"] }
+encoding_rs = "0.8"
+time = "0.3"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Threading", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Com", "Win32_Security_Credentials"] }
+
