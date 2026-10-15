@@ -1971,6 +1971,7 @@ fn main() {
             launch_game,
             features::get_preferences,
             features::set_theme,
+            features::set_color_theme,
             features::set_display,
             features::edit_title,
             features::save_game_details,

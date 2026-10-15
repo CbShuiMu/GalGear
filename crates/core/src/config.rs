@@ -16,7 +16,7 @@ impl ConfigStore {
     pub fn load(&self) -> Result<Settings, Message> {
         match fs::read(&self.path) {
             Ok(bytes) => {
-                let settings: Settings = serde_json::from_slice(&bytes).map_err(|e| {
+                let mut settings: Settings = serde_json::from_slice(&bytes).map_err(|e| {
                     Message::detail(
                         "error.config_parse",
                         format!("{}: {e}", self.path.display()),
@@ -24,6 +24,11 @@ impl ConfigStore {
                 })?;
                 if settings.version != 1 {
                     return Err(Message::new("error.config_version"));
+                }
+                // The retired white theme becomes the light white-pink palette.
+                if settings.theme == "white" {
+                    settings.theme = "light".into();
+                    settings.color_theme = "white-pink".into();
                 }
                 Ok(settings)
             }
@@ -93,8 +98,35 @@ mod tests {
         store.save(&settings).unwrap();
         assert_eq!(ConfigStore::new(path.clone()).load().unwrap(), settings);
         settings.card_size = 180;
+        settings.color_theme = "white-pink".into();
         store.save(&settings).unwrap();
         assert_eq!(ConfigStore::new(path).load().unwrap(), settings);
+    }
+
+    #[test]
+    fn retired_white_theme_loads_as_light_white_pink_without_changing_the_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        let original = r#"{"version":1,"theme":"white"}"#;
+        fs::write(&path, original).unwrap();
+        let settings = ConfigStore::new(path.clone()).load().unwrap();
+        assert_eq!(
+            (settings.theme.as_str(), settings.color_theme.as_str()),
+            ("light", "white-pink")
+        );
+        assert_eq!(fs::read_to_string(path).unwrap(), original);
+    }
+
+    #[test]
+    fn existing_dark_theme_keeps_the_original_pink_palette() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        fs::write(&path, r#"{"version":1,"theme":"dark"}"#).unwrap();
+        let settings = ConfigStore::new(path).load().unwrap();
+        assert_eq!(
+            (settings.theme.as_str(), settings.color_theme.as_str()),
+            ("dark", "pink")
+        );
     }
 
     #[test]

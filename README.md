@@ -8,18 +8,18 @@
 
 Windows x64 · Rust / Tauri 2 · WebAssembly · 中文 / 日本語 / English
 
-[开始使用](#开始使用) · [功能](#功能) · [开发与构建](#开发与构建) · [项目文档](#项目文档) · [MIT](LICENSE)
+[下载 v0.1.0](https://github.com/CbShuiMu/GalGear/releases/tag/v0.1.0) · [开始使用](#开始使用) · [功能](#功能) · [开发与构建](#开发与构建) · [项目文档](#项目文档) · [MIT](LICENSE)
 
 </div>
 
 ![GalGear 游戏库：海报网格、搜索、标签筛选及批量操作](assets/readme/library.png)
 
-<p align="center"><sub>实际 Rust/WASM 界面的隔离测试截图；游戏名称、封面和资料为演示数据。</sub></p>
+<p align="center"><sub>2026-10-15 · v0.1.0 最新发行 Rust/WASM 界面，白粉亮色主题。截图使用隔离演示数据与默认占位封面。</sub></p>
 
-GalGear 是面向本地已安装 EXE 游戏的 Windows 桌面管理器。添加游戏目录后，可以浏览海报、整理收藏夹、补全作品资料、启动游戏，并在详情页管理存档与备份。粉色界面支持亮色与暗色主题。
+GalGear 是面向本地已安装 EXE 游戏的 Windows 桌面管理器。添加游戏目录后，可以浏览海报、整理收藏夹、补全作品资料、启动游戏，并在详情页管理存档与备份。界面支持粉色与白粉两种主题色，各有亮色和夜间模式。
 
 > [!IMPORTANT]
-> 当前版本为 `0.1.0`，仍在开发和验收中。Windows 10、安装器、部分补丁格式及真实外部工具组合尚未完成全部验证，详见[当前限制](#当前限制)。仓库目前提供源码，尚未发布 GitHub Release。
+> 当前版本为 [`v0.1.0`](https://github.com/CbShuiMu/GalGear/releases/tag/v0.1.0)，仍在开发和验收中。Release 提供 Windows x64 安装包及便携包；Windows 10、安装器实际安装、部分补丁格式及真实外部工具组合尚未完成全部验证，详见[当前限制](#当前限制)。私有仓库的下载需要有访问权限的 GitHub 账号。
 
 ## 功能
 
@@ -31,7 +31,7 @@ GalGear 是面向本地已安装 EXE 游戏的 Windows 桌面管理器。添加�
 | 启动配置 | 指定 EXE、参数、工作目录和外部工具，检测游戏运行状态；可接入 Locale Emulator 与 Magpie。 |
 | 存档管理 | 检测游戏目录、AppData 和实际“文档”位置；支持手动确认、多位置快照、备注、锁定、历史浏览及恢复预览。 |
 | 补丁管理 | 搜索 2DFan 与鲲 Gal 资源；支持可用直链下载、本地补丁预览、覆盖确认、备份与恢复。 |
-| 界面偏好 | 中日英三语、亮暗主题、字号和封面缩放、关闭行为与托盘设置。 |
+| 界面偏好 | 中日英三语、粉色／白粉主题色与独立亮暗模式、字号、卡片悬停操作、关闭行为与托盘设置。 |
 
 <details>
 <summary>查看游戏详情界面</summary>
@@ -42,11 +42,30 @@ GalGear 是面向本地已安装 EXE 游戏的 Windows 桌面管理器。添加�
 
 </details>
 
+<details>
+<summary>查看主题与显示设置（亮色 / 夜间）</summary>
+
+![GalGear 显示与交互设置：语言、主题色、亮暗模式及字号分段选项](assets/readme/settings-light.png)
+
+![GalGear 白粉夜间模式：半透明设置面板与粉色选中状态](assets/readme/settings-dark.png)
+
+粉色与白粉各有亮色、夜间模式，主题色和亮暗分别保存。设置选项使用支持键盘切换的胶囊分段条，提供 14 / 16 / 18px 三档字号。封面随窗口宽度自适应，悬停卡片可查看名称、标签并进行操作。以上均为同一发行前端的隔离截图。
+
+</details>
+
 ## 开始使用
 
-运行环境为 Windows x64，需要 Microsoft Edge WebView2 Runtime。Windows 10 / 11 是目标平台，Windows 10 尚待实机验收。当前请先按[开发与构建](#开发与构建)生成程序。
+运行环境为 Windows x64，需要 Microsoft Edge WebView2 Runtime。Windows 10 / 11 是目标平台，Windows 10 尚待实机验收。前往 [v0.1.0 Release](https://github.com/CbShuiMu/GalGear/releases/tag/v0.1.0) 下载：
 
-1. 启动 `artifacts/GalGear.exe`，通过“添加”选择游戏库目录，或手动选择游戏 EXE。
+| 文件 | 用途 |
+| --- | --- |
+| `GalGear_0.1.0_x64-setup.exe` | NSIS 安装包，安装后从开始菜单启动。 |
+| `GalGear-0.1.0-win64-portable.zip` | 解压后运行 `GalGear.exe`；附带 `portable.flag`，数据保存到解压目录的 `data/`。 |
+| `SHA256SUMS.txt` | 对安装包、便携包及独立 EXE 进行 SHA-256 校验。 |
+
+也可下载独立 `GalGear.exe`，默认使用 AppData 保存数据。需要自行构建时见[开发与构建](#开发与构建)。
+
+1. 启动 `GalGear.exe`，通过“添加”选择游戏库目录，或手动选择游戏 EXE。
 2. 等待扫描条目出现。可以立即搜索、筛选或整理收藏夹；扫描期间支持取消。
 3. 打开游戏详情，检查启动程序；在设置的“数据源”中选择默认资料来源，再搜索并关联作品。
 4. 确认存档位置后创建第一份备份，再按需使用补丁或恢复功能。
@@ -143,13 +162,15 @@ docs/          需求、设计、实现记录与验收清单
 - 下载采用单任务模式；持久化队列、断点续传、下载历史、不同版本关联和作品分组暂缓。
 - 存档识别有引擎与搜索范围限制。复杂搬迁冲突、补丁历史目标重新绑定和异常退出后的下载临时文件清理仍需完善。
 - RAR 实包、安装器、Windows 10、真实游戏退出备份，以及 Locale Emulator / Magpie 的实际效果尚需进一步验收。
-- 更新检查读取 GitHub Releases 的公开 API。当前仓库为私有库且未发布 Release，应用内尚未提供 GitHub 私有仓库认证，暂不能通过该入口检查此仓库更新。
+- 更新检查读取 GitHub Releases 的公开 API。当前仓库为私有库，应用内尚未提供 GitHub 私有仓库认证；请登录有访问权限的 GitHub 账号，手动前往 [Releases](https://github.com/CbShuiMu/GalGear/releases) 下载。
 
 ## 项目文档
 
+- [v0.1.0 发布说明](docs/releases/v0.1.0.md)：下载文件、本次验证与已知限制。
 - [需求基线](docs/requirements.md)：产品范围与已确认需求。
 - [游戏页与收藏夹设计](docs/library-page-design.md)：列表、层级及批量操作。
 - [界面与数据源实现](docs/interface-and-data-sources-2026-10-14.md)：详情配置、备份编号与四个资料来源。
+- [主题与按钮样式](docs/appearance-themes.md)：粉色／白粉主题色、亮暗模式及半透明效果。
 - [实现与验证记录](docs/implementation-status.md)：历史实现证据，需结合各记录日期阅读。
 - [发布验收清单](docs/release-checklist.md)：验收目标及待补场景，历史条目可能落后于后续实现。
 - [领域术语](GLOSSARY.md)：项目中的核心概念。

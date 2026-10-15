@@ -517,12 +517,11 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             ));
         }
         html.push_str("</div>");
-        choices::control(html, app, "sort", t(app, "games.sort_label"), false);
         html.push_str(&button(
             "batch-toggle",
             "",
             t(app, "bulk.enter"),
-            "check",
+            "checklist",
             "secondary",
             app.busy,
         ));
@@ -582,6 +581,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             )
         );
         warnings_button(html, app);
+        choices::control(html, app, "sort", t(app, "games.sort_label"), false);
         html.push_str("</div>");
     }
     html.push_str("</div>");
@@ -666,7 +666,7 @@ fn collection_toolbar(html: &mut String, app: &App) {
                     "folders.new"
                 },
             ),
-            "plus",
+            "create_new_folder",
             "primary",
             app.busy,
         ));
@@ -685,7 +685,7 @@ fn collection_toolbar(html: &mut String, app: &App) {
             "batch-toggle",
             "",
             t(app, "bulk.enter"),
-            "check",
+            "checklist",
             "secondary",
             app.busy,
         ));
@@ -782,29 +782,23 @@ fn page_content(html: &mut String, app: &App) {
         .collection
         .as_ref()
         .and_then(|id| app.settings.collections.iter().find(|f| &f.id == id));
-    let title = folder.map_or_else(
-        || {
-            t(
-                app,
-                if app.page == "collections" {
-                    "folders.title"
-                } else {
-                    "games.title"
-                },
-            )
-            .to_owned()
+    let title = t(
+        app,
+        if app.page == "collections" {
+            "folders.title"
+        } else {
+            "games.title"
         },
-        |_| t(app, "folders.title").to_owned(),
     );
     let _ = write!(
         html,
-        r#"<section class="collection library-page"><header class="page-heading section-heading"><h1 title="{}">{}</h1>"#,
-        esc(&title),
-        esc(&title)
+        r#"<section class="collection library-page" aria-label="{}">"#,
+        esc(title)
     );
-    html.push_str("</header>");
-    if app.page == "collections" {
-        breadcrumbs(html, app, folder.map_or("", |f| f.id.as_str()));
+    if app.page == "collections"
+        && let Some(folder) = folder
+    {
+        breadcrumbs(html, app, &folder.id);
     }
     let games = matching(app);
     if app.page == "collections" {
@@ -1367,7 +1361,7 @@ mod tests {
         assert!(html.contains("data-action=\"picker-games-save\""));
     }
     #[test]
-    fn collection_heading_is_fixed_and_path_is_below_the_heading() {
+    fn collection_page_omits_the_redundant_heading_and_keeps_folder_context() {
         let mut app = App {
             page: "collections".into(),
             collection: Some("child".into()),
@@ -1380,8 +1374,9 @@ mod tests {
         });
         let mut html = String::new();
         page(&mut html, &app);
-        assert!(html.contains(r#"<h1 title="收藏夹">收藏夹</h1>"#));
-        assert!(html.find("<h1").unwrap() < html.find("folder-breadcrumbs").unwrap());
+        assert!(!html.contains("<h1"));
+        assert!(html.contains(r#"<span aria-current="page">Folder B</span>"#));
+        assert!(html.find("folder-breadcrumbs").unwrap() < html.find("collection-bar").unwrap());
     }
     #[test]
     fn breadcrumb_navigation_uses_ancestor_ids_even_when_names_contain_separators() {

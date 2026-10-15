@@ -96,6 +96,20 @@ pub fn set_theme(
 }
 
 #[tauri::command]
+pub fn set_color_theme(
+    color_theme: String,
+    state: State<'_, AppState>,
+) -> Result<Settings, Message> {
+    if !matches!(color_theme.as_str(), "pink" | "white-pink") {
+        return Err(Message::new("error.operation"));
+    }
+    update(&state, |settings| {
+        settings.color_theme = color_theme;
+        Ok(())
+    })
+}
+
+#[tauri::command]
 pub fn set_display(
     cover_scale: u32,
     font_size: u32,

@@ -45,7 +45,20 @@ pub(super) fn render(html: &mut String, app: &App) {
     ] {
         write!(html,r#"<button class="preference-tab {}" data-action="settings-section" data-value="{}" aria-current="{}">{}</button>"#,if app.settings_section==section{"active"}else{""},section,if app.settings_section==section{"page"}else{"false"},t(app,key)).unwrap();
     }
-    html.push_str("</nav><div class=\"preferences-content\">");
+    let section_label = match app.settings_section.as_str() {
+        "library" => "settings.section_library",
+        "display" => "settings.section_display",
+        "system" => "settings.section_system",
+        "paths" => "settings.section_paths",
+        "about" => "settings.section_update",
+        _ => "settings.section_account",
+    };
+    write!(
+        html,
+        r#"</nav><div class="preferences-content" role="region" aria-label="{}">"#,
+        t(app, section_label)
+    )
+    .unwrap();
     match app.settings_section.as_str() {
         "library" => library(html, app),
         "display" => display(html, app),
@@ -56,16 +69,30 @@ pub(super) fn render(html: &mut String, app: &App) {
     }
     html.push_str("</div></div>");
 }
-fn heading(html: &mut String, app: &App, key: &str) {
-    write!(
-        html,
-        r#"<header class="preference-page-heading"><h1>{}</h1></header>"#,
-        t(app, key)
-    )
-    .unwrap();
+fn options_start(html: &mut String, id: &str, label: &str) {
+    write!(html,r#"<div id="settings-{}" class="segmented-control" role="group" aria-label="{}"><span class="segmented-thumb" data-render-key="selected-background" aria-hidden="true"></span>"#,esc(id),esc(label)).unwrap();
+}
+
+fn option(
+    html: &mut String,
+    action: &str,
+    value: &str,
+    label: &str,
+    selected: bool,
+    disabled: bool,
+) {
+    write!(html,r#"<button type="button" class="segment" data-action="{}" data-value="{}" aria-pressed="{}" tabindex="{}" {}>"#,esc(action),esc(value),selected,if selected{"0"}else{"-1"},if disabled{"disabled"}else{""}).unwrap();
+    if action == "source-default" {
+        write!(
+            html,
+            r#"<img class="source-icon" src="assets/{}.ico" alt=""/>"#,
+            esc(value)
+        )
+        .unwrap();
+    }
+    write!(html, "{}</button>", esc(label)).unwrap();
 }
 fn account(html: &mut String, app: &App) {
-    heading(html, app, "settings.section_account");
     write!(html,r#"<section class="account-panel"><div class="panel-heading"><h2>{}</h2><span class="connection-status {}">{}</span></div><div class="account-summary"><div><strong>{}</strong><small>{}</small></div><div class="account-balance"><span>{}</span><strong>{}</strong></div></div>"#,t(app,"auth.title"),if app.account.status=="authenticated"{"connected"}else{""},account_label(app),esc(app.account.username.as_deref().unwrap_or(t(app,"auth.account"))),esc(&app.settings.fan_domain),t(app,"auth.points"),app.account.balance.map(|balance|balance.to_string()).unwrap_or_else(||t(app,"auth.unknown").into())).unwrap();
     if let Some(reason) = &app.account.reason {
         write!(
@@ -76,7 +103,7 @@ fn account(html: &mut String, app: &App) {
         .unwrap();
     }
     write!(html,r#"<label class="edit-field" for="fan-token"><span>Token</span><input type="password" id="fan-token" data-input="fan-token" value="{}" autocomplete="off" spellcheck="false" placeholder="{}"/></label><details class="session-fields"><summary>{}</summary><p class="field-help">{}</p><label class="edit-field" for="fan-cookie"><span>Cookie</span><input type="password" id="fan-cookie" data-input="fan-cookie" value="{}" autocomplete="off" spellcheck="false" placeholder="_session=…"/></label><label class="edit-field" for="fan-mode"><span>{}</span>{}</label></details><div class="account-actions">{}{}</div><p class="field-help vault-note">{}</p>"#,
-        esc(&app.credentials.token),t(app,"auth.token_placeholder"),t(app,"auth.session"),t(app,"auth.session_help"),esc(&app.credentials.cookie),t(app,"auth.token_type"),{let mut control=String::new();choices::control(&mut control,app,"fan-mode",t(app,"auth.token_type"),app.busy||account_busy(app)||download_busy(app));control},button("save-fan","",t(app,if account_busy(app){"auth.checking"}else{"auth.save_check"}),"check","primary",app.busy||account_busy(app)||download_busy(app)),button("clear-fan","",t(app,"auth.clear"),"close","quiet",app.busy||account_busy(app)||download_busy(app)),t(app,"auth.vault")).unwrap();
+        esc(&app.credentials.token),t(app,"auth.token_placeholder"),t(app,"auth.session"),t(app,"auth.session_help"),esc(&app.credentials.cookie),t(app,"auth.token_type"),{let mut control=String::new();choices::control(&mut control,app,"fan-mode",t(app,"auth.token_type"),app.busy||account_busy(app)||download_busy(app));control},button("save-fan","",t(app,if account_busy(app){"auth.checking"}else{"auth.save_check"}),"save","primary",app.busy||account_busy(app)||download_busy(app)),button("clear-fan","",t(app,"auth.clear"),"close","quiet",app.busy||account_busy(app)||download_busy(app)),t(app,"auth.vault")).unwrap();
     write!(
         html,
         "<p class=\"field-help\">{}</p>",
@@ -123,7 +150,7 @@ fn account(html: &mut String, app: &App) {
                 "source-save",
                 source,
                 t(app, "auth.save_check"),
-                "check",
+                "save",
                 "primary",
                 app.busy
             ),
@@ -138,20 +165,23 @@ fn account(html: &mut String, app: &App) {
         )
         .unwrap();
     }
-    write!(html,"<section class=\"settings-card\"><h2>{}</h2><p class=\"field-help\">{}</p><div class=\"metadata-provider-picker\">",t(app,"sources.default"),t(app,"sources.default_help")).unwrap();
+    write!(
+        html,
+        "<section class=\"settings-card\"><h2>{}</h2><p class=\"field-help\">{}</p>",
+        t(app, "sources.default"),
+        t(app, "sources.default_help")
+    )
+    .unwrap();
+    options_start(html, "source-default", t(app, "sources.default"));
     for (source, name) in SOURCES {
-        html.push_str(&button(
+        option(
+            html,
             "source-default",
             source,
             name,
-            "",
-            if app.settings.metadata_provider == source {
-                "primary"
-            } else {
-                "quiet"
-            },
+            app.settings.metadata_provider == source,
             app.busy,
-        ));
+        );
     }
     html.push_str("</div></section>");
 }
@@ -169,8 +199,7 @@ fn source_field(
     write!(html,r#"<label class="edit-field" for="{}"><span>{}</span><input id="{}" data-input="{}" type="{}" value="{}" autocomplete="off" spellcheck="false" placeholder="{}"/></label>"#,key,label,key,key,if password{"password"}else{"text"},esc(&features::form(app,&key)),t(app,if saved{"sources.keep_saved"}else{"sources.optional"})).unwrap();
 }
 fn library(html: &mut String, app: &App) {
-    heading(html, app, "settings.section_library");
-    write!(html,r#"<section class="settings-card"><div class="panel-heading"><div><h2>{}</h2><p>{}</p></div>{}</div>"#,t(app,"settings.folders"),t(app,"settings.folders_help"),button("choose-folder","",t(app,"settings.add_folder"),"plus","primary",app.busy)).unwrap();
+    write!(html,r#"<section class="settings-card"><div class="panel-heading"><div><h2>{}</h2><p>{}</p></div>{}</div>"#,t(app,"settings.folders"),t(app,"settings.folders_help"),button("choose-folder","",t(app,"settings.add_folder"),"create_new_folder","primary",app.busy)).unwrap();
     for path in &app.settings.library_folders {
         write!(html,r#"<div class="folder-row"><span class="folder-symbol">{}</span><div><strong>{}</strong></div>{}</div>"#,icon("folder"),esc(path),button("remove-folder",path,t(app,"settings.remove_folder"),"close","quiet",app.busy)).unwrap();
     }
@@ -188,42 +217,79 @@ fn library(html: &mut String, app: &App) {
     ));
 }
 fn display(html: &mut String, app: &App) {
-    heading(html, app, "settings.section_display");
     html.push_str("<section class=\"settings-card\">");
     write!(
         html,
-        r#"<div class="preference-row"><h3>{}</h3><div class="segmented-control">"#,
+        r#"<div class="preference-row"><h3>{}</h3>"#,
         t(app, "settings.language")
     )
     .unwrap();
+    options_start(html, "language", t(app, "settings.language"));
     for (language, key) in [
         (Language::Chinese, "settings.language_zh"),
         (Language::Japanese, "settings.language_ja"),
         (Language::English, "settings.language_en"),
     ] {
-        segment(
+        option(
             html,
-            app,
             "language",
             language.code(),
-            key,
+            t(app, key),
             app.settings.language == language,
+            app.busy,
         );
     }
-    write!(html,r#"</div></div><div class="preference-row"><h3>{}</h3>{}</div><div class="preference-row"><h3>{}</h3><div class="segmented-control">"#,t(app,"settings.theme"),button("toggle-theme","",t(app,if app.settings.theme=="dark"{"theme.dark"}else{"theme.light"}),"dark_mode","secondary",app.busy),t(app,"display.font")).unwrap();
+    write!(
+        html,
+        r#"</div></div><div class="preference-row theme-preference"><h3>{}</h3>"#,
+        t(app, "settings.theme")
+    )
+    .unwrap();
+    options_start(html, "color-theme", t(app, "settings.theme"));
+    let theme_pending = app.requests.values().any(|p| matches!(p, Pending::Theme));
+    for (theme, label) in [("pink", "theme.pink"), ("white-pink", "theme.white_pink")] {
+        option(
+            html,
+            "set-color-theme",
+            theme,
+            t(app, label),
+            app.settings.color_theme == theme,
+            theme_pending,
+        );
+    }
+    write!(
+        html,
+        r#"</div></div><div class="preference-row"><h3>{}</h3>"#,
+        t(app, "theme.mode")
+    )
+    .unwrap();
+    options_start(html, "mode", t(app, "theme.mode"));
+    for (mode, label) in [("light", "theme.light"), ("dark", "theme.dark")] {
+        option(
+            html,
+            "set-theme",
+            mode,
+            t(app, label),
+            app.settings.theme == mode,
+            theme_pending,
+        );
+    }
+    write!(
+        html,
+        r#"</div></div><div class="preference-row"><h3>{}</h3>"#,
+        t(app, "display.font")
+    )
+    .unwrap();
+    options_start(html, "font", t(app, "display.font"));
     for size in [14, 16, 18] {
-        html.push_str(&button(
+        option(
+            html,
             "font-size",
             &size.to_string(),
             &format!("{size}px"),
-            "",
-            if app.settings.font_size == size {
-                "primary"
-            } else {
-                "quiet"
-            },
+            app.settings.font_size == size,
             app.busy,
-        ));
+        );
     }
     write!(
         html,
@@ -233,7 +299,6 @@ fn display(html: &mut String, app: &App) {
     .unwrap();
 }
 fn system(html: &mut String, app: &App) {
-    heading(html, app, "settings.section_system");
     html.push_str("<section class=\"settings-card\">");
     for (label, action, selected, options) in [
         (
@@ -255,20 +320,27 @@ fn system(html: &mut String, app: &App) {
     ] {
         write!(
             html,
-            r#"<div class="preference-row"><h3>{}</h3><div class="segmented-control">"#,
+            r#"<div class="preference-row"><h3>{}</h3>"#,
             t(app, label)
         )
         .unwrap();
+        options_start(html, action, t(app, label));
         for (value, key) in options {
-            segment(html, app, action, value, key, selected == value);
+            option(
+                html,
+                action,
+                value,
+                t(app, key),
+                selected == value,
+                app.busy,
+            );
         }
         html.push_str("</div></div>");
     }
     write!(html,r#"</section><section class="settings-card"><h2>{}</h2><p>{}</p><div class="preference-row"><h3>{}</h3><button id="patch-tab-toggle" class="preference-switch" role="switch" aria-label="{}" aria-checked="{}" data-action="patch-tab" data-value="{}" {}><span></span></button></div></section>"#,t(app,"settings.navigation"),t(app,"settings.navigation_help"),t(app,"nav.patches"),t(app,"settings.patch_tab"),app.settings.show_patches,!app.settings.show_patches,if app.busy{"disabled"}else{""}).unwrap();
 }
 fn paths(html: &mut String, app: &App) {
-    heading(html, app, "settings.section_paths");
-    write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>{}</h2>{}</div><p class="directory-value">{}</p>{}</section><section class="settings-card"><h2>{}</h2><div class="edit-grid">"#,t(app,"download.folder"),button("download-folder","",t(app,"download.change_folder"),"folder","quiet",app.busy),esc(&download_folder(app)),button("open-downloads","",t(app,"download.open_folder"),"folder","secondary",app.busy),t(app,"tools.title")).unwrap();
+    write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>{}</h2><div class="settings-card-actions">{}{}</div></div><p class="directory-value">{}</p></section><section class="settings-card"><div class="panel-heading"><h2>{}</h2>{}</div><div class="edit-grid">"#,t(app,"download.folder"),button("open-downloads","",t(app,"download.open_folder"),"folder_open","quiet",app.busy),button("download-folder","",t(app,"download.change_folder"),"edit","quiet",app.busy),esc(&download_folder(app)),t(app,"tools.title"),button("configure-tools","",t(app,"common.save"),"save","primary",app.busy)).unwrap();
     for (key, label, fallback) in [
         (
             "tool-locale",
@@ -296,23 +368,14 @@ fn paths(html: &mut String, app: &App) {
     }
     write!(
         html,
-        "</div><p>{}</p>{}</section><p class=\"config-note\">{}<br>{}</p>",
+        "</div><p>{}</p></section><p class=\"config-note\">{}<br>{}</p>",
         t(app, "tools.help"),
-        button(
-            "configure-tools",
-            "",
-            t(app, "common.save"),
-            "check",
-            "primary",
-            app.busy
-        ),
         t(app, "settings.config_path"),
         esc(&app.config_path)
     )
     .unwrap();
 }
 fn about(html: &mut String, app: &App) {
-    heading(html, app, "settings.section_update");
     write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>GalGear</h2><span class="version-pill">v{}</span></div>"#,esc(&app.version)).unwrap();
     write!(html,r#"<label class="edit-field" for="release-page"><span>{}</span><input id="release-page" data-input="release-page" value="{}" placeholder="https://github.com/owner/GalGear/releases"/></label>"#,t(app,"settings.release_page"),esc(&features::setting(app,"release-page",&app.settings.release_page))).unwrap();
     write!(
@@ -322,7 +385,7 @@ fn about(html: &mut String, app: &App) {
             "save-release",
             "",
             t(app, "common.save"),
-            "check",
+            "save",
             "secondary",
             app.busy
         ),
@@ -330,7 +393,7 @@ fn about(html: &mut String, app: &App) {
             "check-update",
             "",
             t(app, "settings.check_update"),
-            "refresh",
+            "update",
             "quiet",
             app.busy
         )

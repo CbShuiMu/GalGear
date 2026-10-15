@@ -51,6 +51,7 @@ pub struct Settings {
     pub magpie: String,
     pub magpie_hotkey: String,
     pub theme: String,
+    pub color_theme: String,
     pub show_patches: bool,
     pub metadata_provider: String,
 }
@@ -86,6 +87,7 @@ impl Default for Settings {
             magpie: String::new(),
             magpie_hotkey: "Ctrl+Alt+A".into(),
             theme: "light".into(),
+            color_theme: "pink".into(),
             show_patches: true,
             metadata_provider: "2dfan".into(),
         }

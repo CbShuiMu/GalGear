@@ -2,6 +2,27 @@
 
 pub(super) fn google(name: &str) -> Option<&'static str> {
     Some(match name {
+        "gamepad" => include_str!(
+            "../../../src-tauri/icons/gamepad_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "star" => {
+            include_str!("../../../src-tauri/icons/star_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg")
+        }
+        "checklist" => include_str!(
+            "../../../src-tauri/icons/checklist_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "create_new_folder" => include_str!(
+            "../../../src-tauri/icons/create_new_folder_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "save" => {
+            include_str!("../../../src-tauri/icons/save_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg")
+        }
+        "folder_open" => include_str!(
+            "../../../src-tauri/icons/folder_open_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "update" => include_str!(
+            "../../../src-tauri/icons/update_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
         "edit" => {
             include_str!("../../../src-tauri/icons/edit_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg")
         }

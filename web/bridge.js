@@ -157,6 +157,28 @@ function closeDetail() {
 }
 
 let activeThemeTransition = null;
+let segmentedAppearanceChange = false;
+const initializedSegmentThumbs = new WeakSet();
+
+function syncSegmentedControls(animate = true) {
+  for (const group of document.querySelectorAll('.preferences-content .segmented-control')) {
+    const selected = group.querySelector('.segment[aria-pressed="true"]');
+    const thumb = group.querySelector('.segmented-thumb');
+    if (!selected || !thumb) continue;
+    const groupBox = group.getBoundingClientRect();
+    const selectedBox = selected.getBoundingClientRect();
+    const immediate = !animate || !initializedSegmentThumbs.has(thumb);
+    if (immediate) thumb.style.transition = 'none';
+    thumb.style.width = `${selectedBox.width}px`;
+    thumb.style.transform = `translateX(${selectedBox.left - groupBox.left - group.clientLeft}px)`;
+    if (immediate) {
+      thumb.getBoundingClientRect();
+      thumb.style.transition = '';
+    }
+    initializedSegmentThumbs.add(thumb);
+  }
+}
+
 function renderFrame(html) {
     restoringScroll = true;
     moreObserver?.disconnect();
@@ -262,6 +284,7 @@ function renderFrame(html) {
       previousContext=false;contextReturnId=null;
     }
     measureLibraryBounds();
+    syncSegmentedControls();
     requestAnimationFrame(() => { restoringScroll = false; });
     const more = document.querySelector('[data-action="load-more"]');
     if (more && !hasDialog) {
@@ -307,12 +330,23 @@ window.GalGearBridge = {
       return;
     }
     const theme = /data-theme="(light|dark)"/.exec(html)?.[1];
+    const colorTheme = /data-color-theme="(pink|white-pink)"/.exec(html)?.[1];
     const previous = document.documentElement.dataset.theme;
+    const previousColorTheme = document.documentElement.dataset.colorTheme;
     const apply = () => {
       if (theme) document.documentElement.dataset.theme = theme;
+      if (colorTheme) document.documentElement.dataset.colorTheme = colorTheme;
       renderFrame(html);
     };
-    if (!previous || !theme || previous === theme || matchMedia('(prefers-reduced-motion: reduce)').matches) { apply(); return; }
+    if (!previous || !theme || (previous === theme && previousColorTheme === colorTheme) || matchMedia('(prefers-reduced-motion: reduce)').matches) { apply(); return; }
+    // Keep the live selection background visible while a settings segment moves.
+    if (segmentedAppearanceChange) {
+      segmentedAppearanceChange = false;
+      activeThemeTransition?.skipTransition();
+      document.querySelector('.theme-fallback')?.remove();
+      apply();
+      return;
+    }
     activeThemeTransition?.skipTransition();
     if (typeof document.startViewTransition === 'function') {
       const transition = document.startViewTransition(apply);
@@ -349,7 +383,8 @@ document.addEventListener('click', event => {
   if (performance.now() < suppressCardClickUntil) { event.preventDefault(); event.stopPropagation(); return; }
   if (document.querySelector('.game-context-menu') && !event.target.closest('.game-context-menu')) ui.dispatch('context-close','');
   const element = event.target.closest('[data-action]');
-  if (element?.dataset.action === 'toggle-theme') {
+  if (['toggle-theme', 'set-theme', 'set-color-theme'].includes(element?.dataset.action)) {
+    segmentedAppearanceChange = !!element.closest('.segmented-control');
     document.documentElement.style.setProperty('--theme-x', `${event.clientX || element.getBoundingClientRect().x + element.clientWidth / 2}px`);
     document.documentElement.style.setProperty('--theme-y', `${event.clientY || element.getBoundingClientRect().y + element.clientHeight / 2}px`);
   }
@@ -373,6 +408,17 @@ document.addEventListener('change', event => {
   if (wasmReady && event.target.dataset.select) ui.dispatch(event.target.dataset.select, event.target.value);
 });
 document.addEventListener('keydown', event => {
+  if (wasmReady && event.target.matches('.segmented-control > .segment') &&
+      ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+    const options = [...event.target.parentElement.querySelectorAll('.segment:not(:disabled)')];
+    const current = options.indexOf(event.target);
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1
+      : (current + (event.key === 'ArrowRight' ? 1 : -1) + options.length) % options.length;
+    event.preventDefault();
+    options[index]?.focus({ preventScroll: true });
+    options[index]?.click();
+    return;
+  }
   if (!wasmReady || event.isComposing || event.keyCode === 229) return;
   if (event.key === 'Escape' && marqueeDrag) { finishMarquee(false); event.preventDefault(); return; }
   if (event.key === 'Escape' && pointerDrag) { finishPointerDrag(); event.preventDefault(); return; }
@@ -408,7 +454,9 @@ document.addEventListener('keydown', event => {
 
 window.addEventListener('resize', placeChoice);
 window.addEventListener('resize', measureLibraryBounds);
+window.addEventListener('resize', () => syncSegmentedControls(false));
 document.fonts.ready.then(measureLibraryBounds);
+document.fonts.ready.then(() => syncSegmentedControls(false));
 
 function markDropTarget(target) {
   document.querySelectorAll('.drop-target').forEach(e => e.classList.remove('drop-target'));

@@ -69,6 +69,8 @@ struct Settings {
     magpie_hotkey: String,
     #[serde(default = "default_theme")]
     theme: String,
+    #[serde(default = "default_color_theme")]
+    color_theme: String,
     #[serde(default = "default_source")]
     metadata_provider: String,
 }
@@ -77,6 +79,9 @@ fn default_source() -> String {
 }
 fn default_theme() -> String {
     "light".into()
+}
+fn default_color_theme() -> String {
+    "pink".into()
 }
 fn default_font() -> u32 {
     16
@@ -436,6 +441,7 @@ impl Default for App {
                 font_size: 16,
                 backup_retention: 10,
                 theme: default_theme(),
+                color_theme: default_color_theme(),
                 sort_by: "title".into(),
                 metadata_provider: default_source(),
                 ..Default::default()
@@ -509,6 +515,7 @@ thread_local! { static APP: RefCell<App> = RefCell::new(App::default()); }
 fn apply_settings(app: &mut App, mut settings: Settings, request_id: u32) {
     if request_id < app.theme_request {
         settings.theme.clone_from(&app.settings.theme);
+        settings.color_theme.clone_from(&app.settings.color_theme);
     }
     app.settings = settings;
     if app.page == "patches" && !app.settings.show_patches {
@@ -673,6 +680,8 @@ pub fn dispatch(action: &str, value: &str) {
                     | "load-more"
                     | "choice-close"
                     | "toggle-theme"
+                    | "set-theme"
+                    | "set-color-theme"
             )
         {
             return;
@@ -683,19 +692,33 @@ pub fn dispatch(action: &str, value: &str) {
             return;
         }
         match action {
-            "toggle-theme" if !app.requests.values().any(|p| matches!(p, Pending::Theme)) => {
-                let theme = if app.settings.theme == "dark" {
-                    "light"
+            "toggle-theme" | "set-theme" | "set-color-theme"
+                if !app.requests.values().any(|p| matches!(p, Pending::Theme)) =>
+            {
+                let (command, payload) = if action == "set-color-theme" {
+                    if !matches!(value, "pink" | "white-pink") || value == app.settings.color_theme
+                    {
+                        return;
+                    }
+                    ("set_color_theme", json!({"colorTheme":value}))
                 } else {
-                    "dark"
+                    let theme = if action == "set-theme" {
+                        if !matches!(value, "light" | "dark") {
+                            return;
+                        }
+                        value
+                    } else if app.settings.theme == "dark" {
+                        "light"
+                    } else {
+                        "dark"
+                    };
+                    if theme == app.settings.theme {
+                        return;
+                    }
+                    ("set_theme", json!({"theme":theme}))
                 };
                 app.theme_request = app.next_request + 1;
-                issue(
-                    &mut app,
-                    Pending::Theme,
-                    "set_theme",
-                    json!({"theme":theme}),
-                );
+                issue(&mut app, Pending::Theme, command, payload);
             }
             "choice-toggle"
                 if matches!(
@@ -1646,6 +1669,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         let settings: Settings =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         app.settings.theme = settings.theme;
+                        app.settings.color_theme = settings.color_theme;
                     }
                     Pending::Display => {
                         if !app
@@ -2103,8 +2127,8 @@ fn paint(app: &App) {
         return;
     }
     let mut html = String::with_capacity(24000);
-    write!(html, r#"<div class="app-shell cards-240" data-cover-scale="1.2" data-font-size="{}" data-theme="{}" lang="{}"><aside class="sidebar"><a class="brand" href="./" data-action="page" data-value="games" aria-label="GalGear" title="GalGear"><span class="brand-mark">{}</span></a><nav class="navigation" aria-label="{}">"#,
-        app.settings.font_size, if app.settings.theme=="dark" {"dark"} else {"light"}, app.settings.language.code(), brand(), t(app,"nav.main")).unwrap();
+    write!(html, r#"<div class="app-shell cards-240" data-cover-scale="1.2" data-font-size="{}" data-theme="{}" data-color-theme="{}" lang="{}"><aside class="sidebar"><a class="brand" href="./" data-action="page" data-value="games" aria-label="GalGear" title="GalGear"><span class="brand-mark">{}</span></a><nav class="navigation" aria-label="{}">"#,
+        app.settings.font_size, if app.settings.theme=="dark" {"dark"}else{"light"}, if app.settings.color_theme=="white-pink"{"white-pink"}else{"pink"}, app.settings.language.code(), brand(), t(app,"nav.main")).unwrap();
     for (value, key) in [
         ("games", "nav.games"),
         ("collections", "folders.title"),
@@ -2121,7 +2145,7 @@ fn paint(app: &App) {
     )
     .unwrap();
     let dark = app.settings.theme == "dark";
-    write!(html,r#"<button type="button" id="theme-toggle" class="nav-item theme-toggle" data-action="toggle-theme" aria-label="{}" title="{}" aria-pressed="{}" {}>{}</button>"#,t(app,if dark {"theme.dark"} else {"theme.light"}),t(app,if dark {"theme.to_light"} else {"theme.to_dark"}),dark,if app.requests.values().any(|p|matches!(p,Pending::Theme)){"disabled"}else{""},icon(if dark {"dark_mode"} else {"light_mode"})).unwrap();
+    write!(html,r#"<button type="button" id="theme-toggle" class="nav-item theme-toggle" data-action="toggle-theme" aria-label="{}" title="{}" aria-pressed="{}" {}>{}</button>"#,t(app,if dark{"theme.dark"}else{"theme.light"}),t(app,if dark{"theme.to_light"}else{"theme.to_dark"}),dark,if app.requests.values().any(|p|matches!(p,Pending::Theme)){"disabled"}else{""},icon(if dark {"dark_mode"} else {"light_mode"})).unwrap();
     nav(&mut html, app, "settings", t(app, "nav.settings"));
     nav(&mut html, app, "about", t(app, "nav.about"));
     write!(html, r#"</nav><div class="sidebar-version">GalGear <span>v{}</span></div></div></aside><main class="main-panel"><div class="page-scroll" id="page-scroll">"#, esc(&app.version)).unwrap();
@@ -2161,10 +2185,10 @@ fn nav(html: &mut String, app: &App, value: &str, label: &str) {
         r#"<button type="button" class="nav-item {}" data-action="page" data-value="{value}" aria-label="{label}" title="{label}" aria-current="{}">{}</button>"#,
         if active { "active" } else { "" },
         if active { "page" } else { "false" },
-        icon(if value == "collections" {
-            "folder_special"
-        } else {
-            value
+        icon(match value {
+            "games" => "gamepad",
+            "collections" => "star",
+            _ => value,
         })
     );
 }
@@ -2197,19 +2221,6 @@ fn settings_page(html: &mut String, app: &App) {
     preferences::render(html, app);
 }
 
-fn segment(html: &mut String, app: &App, action: &str, value: &str, key: &str, selected: bool) {
-    let _ = write!(
-        html,
-        r#"<button type="button" class="segment {}" data-action="{}" data-value="{}" aria-pressed="{}" {}>{}</button>"#,
-        if selected { "selected" } else { "" },
-        esc(action),
-        esc(value),
-        selected,
-        if app.busy { "disabled" } else { "" },
-        t(app, key)
-    );
-}
-
 fn account_label(app: &App) -> &'static str {
     t(
         app,
@@ -2237,7 +2248,7 @@ fn download_folder(app: &App) -> String {
 }
 
 fn about_page(html: &mut String, app: &App) {
-    write!(html, r#"<header class="page-heading"><h1>{}</h1></header><section class="about-hero"><span class="about-logo">{}</span><h2>GalGear</h2><p>{}</p><p>Rust + Tauri</p></section>"#, t(app,"about.title"),brand(),t(app,"about.description")).unwrap();
+    write!(html, r#"<section class="about-hero" aria-label="{}"><span class="about-logo">{}</span><h2>GalGear</h2><p>{}</p><p>Rust + Tauri</p></section>"#, t(app,"about.title"),brand(),t(app,"about.description")).unwrap();
 }
 
 fn resource_row(html: &mut String, app: &App, result: &Resource) {
@@ -2345,7 +2356,7 @@ fn resource_row(html: &mut String, app: &App, result: &Resource) {
 }
 
 fn patches_page(html: &mut String, app: &App) {
-    write!(html,r#"<header class="page-heading"><h1>{}</h1>{}</header><div class="patch-workspace"><div class="patch-browser"><section class="resource-search"><div class="patch-controls">"#,t(app,"patches.title"),button("page","settings",t(app,"auth.title"),"settings","quiet",false)).unwrap();
+    write!(html,r#"<div class="patch-workspace" role="region" aria-label="{}"><div class="patch-browser"><section class="resource-search"><div class="patch-controls">"#,t(app,"patches.title")).unwrap();
     form_field(html, app, "patch-query", "patches.query", false);
     html.push_str(&button(
         "search-patches",
@@ -2356,6 +2367,14 @@ fn patches_page(html: &mut String, app: &App) {
         app.requests
             .values()
             .any(|p| matches!(p, Pending::Resources)),
+    ));
+    html.push_str(&button(
+        "page",
+        "settings",
+        t(app, "auth.title"),
+        "settings",
+        "quiet",
+        false,
     ));
     html.push_str("</div><div class=\"library-search-row\">");
     write!(html, "<span>{}</span>", t(app, "patches.library_search")).unwrap();
@@ -2726,6 +2745,27 @@ fn detail(html: &mut String, app: &App, game: &Game) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn delayed_preferences_cannot_replace_newer_mode_or_color_theme() {
+        let mut app = App::default();
+        app.settings.theme = "dark".into();
+        app.settings.color_theme = "white-pink".into();
+        app.theme_request = 7;
+        let mut older = app.settings.clone();
+        older.theme = "light".into();
+        older.color_theme = "pink".into();
+        older.font_size = 18;
+        apply_settings(&mut app, older, 6);
+        assert_eq!(
+            (
+                app.settings.theme.as_str(),
+                app.settings.color_theme.as_str(),
+                app.settings.font_size
+            ),
+            ("dark", "white-pink", 18)
+        );
+    }
+
     #[test]
     fn filenames_are_html_escaped() {
         assert_eq!(esc("游戏\"<img>&'"), "游戏&quot;&lt;img&gt;&amp;&#39;");

@@ -1,0 +1,378 @@
+/* Color palettes and light/dark modes are independent appearance preferences. */
+:root,
+[data-theme="light"] {
+  --canvas: #f9f0f6;
+  --canvas-glow: #ecc9df70;
+  --canvas-light: #ffffffb3;
+  --surface: #fff9fd85;
+  --surface-raised: #fffafdde;
+  --surface-soft: #f7e5f080;
+  --surface-sidebar: #f7e8f1a8;
+  --surface-line: #cba8c344;
+  --surface-shadow: 0 8px 28px #76465e09, inset 0 1px 0 #ffffff80;
+  --button-bg: #fffafd80;
+  --button-color: #705769;
+  --button-line: #c7a1bb55;
+  --button-hover-bg: #efd3e5e6;
+  --button-hover-color: #873b66;
+  --button-hover-line: #bd89a8a6;
+  --focus-ring: #b8447980;
+  --toolbar-surface: #fff;
+  --segment-track: #ffffffa6;
+  --segment-line: #dca5bf80;
+  --segment-fill: #f6b8d1bf;
+  --detail-path: #f0dce775;
+  --detail-tag: #f0dce775;
+  --detail-utility: var(--surface);
+}
+
+[data-theme="dark"] {
+  --canvas: #18141d;
+  --canvas-glow: #75496824;
+  --canvas-light: #382b431f;
+  --surface: #2a2133a8;
+  --surface-raised: #2b2233ed;
+  --surface-soft: #49304866;
+  --surface-sidebar: #2a203399;
+  --surface-line: #aa83a233;
+  --surface-shadow: 0 8px 28px #09060d24, inset 0 1px 0 #ffffff0a;
+  --button-bg: #48364e80;
+  --button-color: #e1cede;
+  --button-line: #b28ba044;
+  --button-hover-bg: #6b455de6;
+  --button-hover-color: #fff0f8;
+  --button-hover-line: #d19bb7a6;
+  --focus-ring: #ed8ab899;
+  --toolbar-surface: #302735;
+  --segment-track: #352b3ca6;
+  --segment-line: #b78ba866;
+  --segment-fill: #915a78b3;
+  --detail-path: #49304866;
+  --detail-tag: #49304866;
+  --detail-utility: var(--surface);
+}
+
+/* Pearl-white glass with rose accents. The original pink palette stays intact. */
+[data-color-theme="white-pink"][data-theme="light"] {
+  --canvas: #fcfafc;
+  --canvas-glow: #f1c6dc55;
+  --canvas-light: #ffffffcc;
+  --surface: #ffffff8f;
+  --surface-raised: #fffdfbe8;
+  --surface-soft: #f5dce980;
+  --surface-sidebar: #ffffff8c;
+  --surface-line: #cfa9bf40;
+  --surface-shadow: 0 8px 28px #a16a840a, inset 0 1px 0 #ffffffcc;
+  --button-bg: #ffffff80;
+  --button-color: #775c6c;
+  --button-line: #d4b2c34d;
+  --button-hover-bg: #f5d9e8d9;
+  --button-hover-color: #913c65;
+  --button-hover-line: #ca95b0a6;
+  --focus-ring: #cf6d9d80;
+  --segment-track: #ffffffb3;
+  --segment-line: #dca5bf70;
+  --segment-fill: #f4bad3bd;
+  --pink: #d56b9b;
+  --pink-dark: #ad4c79;
+  --pink-soft: #f6dce980;
+  --line: var(--surface-line);
+  --muted: #9b8594;
+  --detail-path: #f2e7ef66;
+  --detail-tag: #f5dce966;
+  --detail-utility: var(--surface);
+  --detail-nav-active: #fff9fc99;
+  --detail-nav-line: #e1b9cf66;
+  --palette-302a35: #38303a;
+  --palette-493c4c: #564858;
+  --palette-514554: #5b4e5d;
+  --palette-59485b: #655568;
+  --palette-918490: #9b8594;
+  --palette-d75c95: #d56b9b;
+  --palette-b84479: #ad4c79;
+  --palette-eee5ed: #eae2e9;
+  --palette-fff: #ffffff;
+  --palette-fbf7fa: #fcfafc;
+  --palette-fbf8fa: #fcfafc;
+  --palette-fcf9fb: #fcfafc;
+  --palette-fffafc: #fffdfd;
+  --palette-fffafd: #fffdfd;
+  --palette-f7f0f8: #faf6fa;
+  --palette-f5edf4: #faf5f8;
+}
+
+/* The same pearl-and-rose palette at night, with translucent smoky glass. */
+[data-color-theme="white-pink"][data-theme="dark"] {
+  --canvas: #1c1920;
+  --canvas-glow: #a2618126;
+  --canvas-light: #76606d14;
+  --surface: #37303b80;
+  --surface-raised: #302833ed;
+  --surface-soft: #8d5b7833;
+  --surface-sidebar: #342c385e;
+  --surface-line: #e1bad42b;
+  --surface-shadow: 0 8px 28px #100a1224, inset 0 1px 0 #ffe5f20d;
+  --button-bg: #c5a7bc14;
+  --button-color: #e4cfdf;
+  --button-line: #d9b5cd33;
+  --button-hover-bg: #83546db3;
+  --button-hover-color: #ffebf6;
+  --button-hover-line: #e9accba6;
+  --focus-ring: #efa3c599;
+  --toolbar-surface: #302b35;
+  --segment-track: #332a38a6;
+  --segment-line: #d7abc45c;
+  --segment-fill: #9b6687b3;
+  --pink: #efa3c5;
+  --pink-dark: #efa3c5;
+  --pink-soft: #8d5b7833;
+  --line: var(--surface-line);
+  --muted: #b8a1b2;
+  --detail-path: #b08aab14;
+  --detail-tag: #a96b8a26;
+  --detail-utility: var(--surface);
+  --detail-nav-active: #69465b33;
+  --detail-nav-line: #b57e9a66;
+  --palette-302a35: #f0e8f0;
+  --palette-493c4c: #d3c4d2;
+  --palette-514554: #d0c0cf;
+  --palette-59485b: #e0d2e0;
+  --palette-918490: #b8a1b2;
+  --palette-d75c95: #efa3c5;
+  --palette-b84479: #efa3c5;
+  --palette-eee5ed: #4c3e4d;
+  --palette-fff: #302833;
+  --palette-fbf7fa: #1c1920;
+  --palette-fbf8fa: #1c1920;
+  --palette-fcf9fb: #1c1920;
+  --palette-fffafc: #302833;
+  --palette-fffafd: #302833;
+  --palette-f7f0f8: #342b36;
+  --palette-f5edf4: #342b36;
+}
+
+:root .app-shell[data-theme] {
+  background:
+    radial-gradient(ellipse at 4% 4%, var(--canvas-light), transparent 55%),
+    radial-gradient(ellipse at 100% 100%, var(--canvas-glow), transparent 65%),
+    var(--canvas);
+}
+
+.app-shell[data-theme] .sidebar {
+  background: var(--surface-sidebar);
+  border-color: var(--surface-line);
+  backdrop-filter: blur(20px) saturate(115%);
+}
+
+.app-shell[data-theme] :is(.library-bar, .settings-card, .account-panel,
+  .collections-panel, .reading-card, .detail-card, .patch-intro, .save-history) {
+  background: var(--surface);
+  border-color: var(--surface-line);
+  box-shadow: var(--surface-shadow);
+  backdrop-filter: blur(18px) saturate(110%);
+}
+
+.app-shell[data-theme] :is(.library-dialog, .editor-dialog, .choice-popup,
+  .game-context-menu, .context-submenu, .toast, .download-notice, .action-menu > div) {
+  background: var(--surface-raised);
+  border-color: var(--surface-line);
+  backdrop-filter: blur(24px) saturate(115%);
+}
+
+.app-shell[data-theme] .detail-panel {
+  background: var(--canvas);
+}
+
+.app-shell[data-color-theme="white-pink"] .detail-panel {
+  background:
+    radial-gradient(ellipse at 100% 0%, var(--canvas-glow), transparent 65%),
+    var(--canvas);
+}
+
+.app-shell[data-theme="light"] :is(.main-panel, .detail-panel) {
+  background: #fff;
+}
+
+.app-shell[data-theme] .detail-back-row {
+  background: transparent;
+}
+
+.app-shell[data-theme] :is(.bar-search, .path-entry input, .edit-field input,
+  .edit-field textarea, .choice-trigger, .choice-option, .folder-face) {
+  background: var(--button-bg);
+  border-color: var(--surface-line);
+}
+
+.app-shell[data-theme] :is(.choice-trigger:hover, .choice-trigger.open,
+  .choice-option:hover, .choice-option.active, .choice-option.selected) {
+  background: var(--surface-soft);
+}
+
+/* Posters and folder covers are interactive content, not capsule controls.
+   The three card actions and the dropdown system keep their existing styling. */
+:root .app-shell[data-theme] :is(button, .button):not(:where(
+  .choice-trigger, .choice-option, .game-face, .folder-face,
+  .card-action, .card-title, .detail-backdrop)) {
+  background: var(--button-bg);
+  color: var(--button-color);
+  border-color: var(--button-line);
+  box-shadow: none;
+  transition: background-color .16s, color .16s, border-color .16s;
+}
+
+/* Left navigation tabs retain the corner radii defined by their layouts. */
+:root .app-shell[data-theme] :is(button, .button):not(:where(
+  .choice-trigger, .choice-option, .game-face, .folder-face,
+  .card-action, .card-title, .detail-backdrop, .nav-item, .preference-tab)) {
+  border-radius: 999px;
+}
+
+:root .app-shell[data-theme] :is(button, .button):not(:where(
+  .choice-trigger, .choice-option, .game-face, .folder-face,
+  .card-action, .card-title, .detail-backdrop)):hover:not(:disabled) {
+  background: var(--button-hover-bg);
+  color: var(--button-hover-color);
+  border-color: var(--button-hover-line);
+  box-shadow: none;
+  transform: none;
+}
+
+:root .app-shell[data-theme] :is(button, .button):focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.app-shell[data-theme] .preference-tab {
+  position: relative;
+}
+
+.app-shell[data-theme] .preference-tab.active {
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+
+.app-shell[data-theme] .preference-switch > span {
+  background: currentColor;
+  box-shadow: none;
+}
+
+.app-shell[data-theme] .launch-control {
+  gap: 5px;
+}
+
+.app-shell[data-theme] :is(.back-library, .credit-link, .folder-breadcrumbs button) {
+  padding: 4px 10px;
+}
+
+/* Toolbars keep the same surface in normal and batch-selection states. */
+:root .app-shell[data-theme] :is([role="toolbar"], .library-bar,
+  .library-toolbar, .tag-toolbar, .resource-search, .resource-toolbar) {
+  background: var(--toolbar-surface);
+  border-color: var(--surface-line);
+  backdrop-filter: none;
+}
+
+.app-shell[data-theme] .resource-search {
+  border: 1px solid var(--surface-line);
+  border-radius: 13px;
+  padding: 14px;
+  box-shadow: var(--surface-shadow);
+}
+
+/* One continuous track and one retained, sliding selection background. */
+.app-shell[data-theme] .segmented-control {
+  position: relative;
+  isolation: isolate;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
+  padding: 3px;
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  border: 1px solid var(--segment-line);
+  border-radius: 999px;
+  background: var(--segment-track);
+}
+
+.settings-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#settings-source-default > .segment {
+  gap: 6px;
+}
+
+.source-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.app-shell[data-theme] .segmented-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  z-index: 0;
+  width: 0;
+  border-radius: 999px;
+  background: var(--segment-fill);
+  box-shadow: 0 1px 5px #9a5e7c12;
+  pointer-events: none;
+  transition: transform .28s cubic-bezier(.22,.7,.3,1), width .28s cubic-bezier(.22,.7,.3,1);
+}
+
+:root .app-shell[data-theme] .segmented-control > .segment,
+:root .app-shell[data-theme] .segmented-control > .segment:hover:not(:disabled) {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 32px;
+  height: auto;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--button-color);
+  box-shadow: none;
+  text-decoration: none;
+  font-size: calc(var(--ui-font,16px)*.8571);
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  transform: none;
+  transition: color .16s;
+}
+
+:root .app-shell[data-theme] .segmented-control > .segment[aria-pressed="true"] {
+  font-weight: 650;
+}
+
+:root .app-shell[data-theme] .segmented-control > .segment:hover:not(:disabled) {
+  color: var(--button-hover-color);
+}
+
+:root .app-shell[data-theme] .segmented-control > .segment:focus-visible {
+  outline-offset: -3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root .app-shell[data-theme] :is(button, .button) {
+    transition: none;
+  }
+  .app-shell[data-theme] .segmented-thumb {
+    transition: none;
+  }
+}

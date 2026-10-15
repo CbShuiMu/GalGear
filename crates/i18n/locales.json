@@ -265,9 +265,9 @@
     "en-US": "Large"
   },
   "settings.theme": {
-    "zh-CN": "粉红色主题",
-    "ja-JP": "ピンクテーマ",
-    "en-US": "Pink theme"
+    "zh-CN": "主题颜色",
+    "ja-JP": "テーマカラー",
+    "en-US": "Theme color"
   },
   "settings.config_path": {
     "zh-CN": "配置文件：",
@@ -2020,19 +2020,34 @@
     "en-US": "The current game or save location differs from the patch record. Reconfirm the target; backups are retained."
   },
   "theme.to_light": {
-    "zh-CN": "切换为亮色主题",
-    "ja-JP": "ライトテーマに切り替え",
-    "en-US": "Switch to light theme"
+    "zh-CN": "切换为亮色模式",
+    "ja-JP": "ライトモードに切り替え",
+    "en-US": "Switch to light mode"
+  },
+  "theme.mode": {
+    "zh-CN": "亮暗模式",
+    "ja-JP": "表示モード",
+    "en-US": "Appearance mode"
   },
   "theme.to_dark": {
-    "zh-CN": "切换为暗色主题",
-    "ja-JP": "ダークテーマに切り替え",
-    "en-US": "Switch to dark theme"
+    "zh-CN": "切换为暗色模式",
+    "ja-JP": "ダークモードに切り替え",
+    "en-US": "Switch to dark mode"
   },
   "theme.light": {
     "zh-CN": "亮色",
     "ja-JP": "ライト",
     "en-US": "Light"
+  },
+  "theme.pink": {
+    "zh-CN": "粉色",
+    "ja-JP": "ピンク",
+    "en-US": "Pink"
+  },
+  "theme.white_pink": {
+    "zh-CN": "白粉",
+    "ja-JP": "ホワイトピンク",
+    "en-US": "White & pink"
   },
   "theme.dark": {
     "zh-CN": "暗色",
