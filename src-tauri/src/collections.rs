@@ -1,5 +1,5 @@
 //! Collection editing and batch membership/exclusion commands.
-use super::{AppState, features, snapshot};
+use crate::{preferences, state::AppState, state::snapshot};
 use galgear_core::{Game, ScanResult, Settings, catalog, collections};
 use galgear_i18n::Message;
 use serde::Serialize;
@@ -11,7 +11,7 @@ pub fn delete_collections(
     ids: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
-    features::update(&state, |settings| collections::delete_many(settings, &ids))
+    preferences::update(&state, |settings| collections::delete_many(settings, &ids))
 }
 
 #[tauri::command]
@@ -22,7 +22,7 @@ pub fn edit_collection(
     parent: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
-    features::update(&state, |settings| {
+    preferences::update(&state, |settings| {
         collections::edit(settings, &operation, &id, &name, parent.as_deref())
     })
 }
@@ -189,7 +189,7 @@ pub fn set_library_bounds(
 ) -> Result<(), Message> {
     if !width.is_finite()
         || !height.is_finite()
-        || !(1180.0..=6000.0).contains(&width)
+        || !(1000.0..=6000.0).contains(&width)
         || !(640.0..=2160.0).contains(&height)
     {
         return Err(Message::new("error.operation"));

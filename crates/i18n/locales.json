@@ -1,4 +1,204 @@
 {
+  "settings.section_ai": {
+    "zh-CN": "AI",
+    "ja-JP": "AI",
+    "en-US": "AI"
+  },
+  "ai.help": {
+    "zh-CN": "配置服务商的 Token，并从接口获取当前可用模型。",
+    "ja-JP": "プロバイダーの Token を設定し、API から利用可能なモデルを取得します。",
+    "en-US": "Configure each provider's Token and fetch the models available through its API."
+  },
+  "ai.model": {
+    "zh-CN": "模型",
+    "ja-JP": "モデル",
+    "en-US": "Model"
+  },
+  "ai.model_placeholder": {
+    "zh-CN": "选择模型",
+    "ja-JP": "モデルを選択",
+    "en-US": "Choose a model"
+  },
+  "ai.refresh": {
+    "zh-CN": "获取模型",
+    "ja-JP": "モデルを取得",
+    "en-US": "Fetch models"
+  },
+  "ai.save": {
+    "zh-CN": "保存配置",
+    "ja-JP": "設定を保存",
+    "en-US": "Save configuration"
+  },
+  "ai.retry": {
+    "zh-CN": "重试",
+    "ja-JP": "再試行",
+    "en-US": "Retry"
+  },
+  "ai.loading": {
+    "zh-CN": "正在连接…",
+    "ja-JP": "接続中…",
+    "en-US": "Connecting…"
+  },
+  "ai.configured": {
+    "zh-CN": "已配置",
+    "ja-JP": "設定済み",
+    "en-US": "Configured"
+  },
+  "ai.not_configured": {
+    "zh-CN": "未配置",
+    "ja-JP": "未設定",
+    "en-US": "Not configured"
+  },
+  "ai.token_placeholder": {
+    "zh-CN": "输入服务商的 API Token",
+    "ja-JP": "プロバイダーの API Token を入力",
+    "en-US": "Enter the provider's API Token"
+  },
+  "ai.token_saved": {
+    "zh-CN": "Token 已保存，留空沿用；输入可替换",
+    "ja-JP": "保存済み。空欄で継続使用、入力で置き換え",
+    "en-US": "Token saved; leave blank to keep it or enter a replacement"
+  },
+  "ai.models_hint": {
+    "zh-CN": "输入 Token 后点击「获取模型」，再选择模型并保存。",
+    "ja-JP": "Token を入力して「モデルを取得」を押し、モデルを選択して保存してください。",
+    "en-US": "Enter a Token, fetch the model list, then choose a model and save."
+  },
+  "ai.model_count": {
+    "zh-CN": "已获取 {count} 个模型，可在下拉框中搜索。",
+    "ja-JP": "{count} 件のモデルを取得しました。一覧内で検索できます。",
+    "en-US": "Fetched {count} models. Search in the dropdown to find one."
+  },
+  "ai.empty": {
+    "zh-CN": "此 Token 未返回可用模型，请检查账号权限后重试。",
+    "ja-JP": "利用可能なモデルがありません。アカウントの権限を確認して再試行してください。",
+    "en-US": "No models were returned for this Token. Check your account permissions and try again."
+  },
+  "ai.vault": {
+    "zh-CN": "Token 保存在 Windows 凭据管理器中；所选模型会随配置保留。",
+    "ja-JP": "Token は Windows 資格情報マネージャーに保存され、選択したモデルは設定に保持されます。",
+    "en-US": "Tokens are stored in Windows Credential Manager. Selected models are kept in your settings."
+  },
+  "ai.cleared": {
+    "zh-CN": "AI 配置已清除。",
+    "ja-JP": "AI 設定を消去しました。",
+    "en-US": "AI configuration cleared."
+  },
+  "ai.invalid_provider": {
+    "zh-CN": "不支持此 AI 服务商。",
+    "ja-JP": "この AI プロバイダーには対応していません。",
+    "en-US": "This AI provider is not supported."
+  },
+  "ai.invalid_token": {
+    "zh-CN": "请输入有效的 API Token，不要包含空格或换行。",
+    "ja-JP": "空白や改行を含まない有効な API Token を入力してください。",
+    "en-US": "Enter a valid API Token without spaces or line breaks."
+  },
+  "ai.invalid_response": {
+    "zh-CN": "无法读取模型列表，请稍后重试。",
+    "ja-JP": "モデル一覧を読み取れません。しばらくしてから再試行してください。",
+    "en-US": "The model list could not be read. Try again later."
+  },
+  "ai.network_error": {
+    "zh-CN": "无法连接 AI 服务商，请检查网络后重试。",
+    "ja-JP": "AI プロバイダーに接続できません。ネットワークを確認して再試行してください。",
+    "en-US": "Could not connect to the AI provider. Check your network and try again."
+  },
+  "ai.unauthorized": {
+    "zh-CN": "Token 无效或已过期，请检查后重试。",
+    "ja-JP": "Token が無効か期限切れです。確認して再試行してください。",
+    "en-US": "The Token is invalid or expired. Check it and try again."
+  },
+  "ai.forbidden": {
+    "zh-CN": "此 Token 无权获取模型，请检查账号权限或服务可用地区。",
+    "ja-JP": "この Token にはモデル取得権限がありません。アカウントの権限や対応地域を確認してください。",
+    "en-US": "This Token cannot list models. Check account permissions and regional availability."
+  },
+  "ai.rate_limited": {
+    "zh-CN": "请求过于频繁或账号配额不足，请稍后重试或检查配额。",
+    "ja-JP": "リクエスト制限または利用枠に達しました。時間を置くか利用枠を確認してください。",
+    "en-US": "The request or account quota limit was reached. Try again later or check your quota."
+  },
+  "ai.http_error": {
+    "zh-CN": "AI 服务商返回 HTTP {status}，请稍后重试。",
+    "ja-JP": "AI プロバイダーが HTTP {status} を返しました。しばらくしてから再試行してください。",
+    "en-US": "The AI provider returned HTTP {status}. Try again later."
+  },
+  "ai.model_unavailable": {
+    "zh-CN": "所选模型不在此 Token 的可用列表中，请刷新并重新选择。",
+    "ja-JP": "選択したモデルはこの Token で利用できません。一覧を更新して選び直してください。",
+    "en-US": "The selected model is unavailable for this Token. Refresh the list and choose another model."
+  },
+  "local_patches.title": {
+    "zh-CN": "补丁管理",
+    "ja-JP": "パッチ管理",
+    "en-US": "Patch management"
+  },
+  "local_patches.help": {
+    "zh-CN": "每个子文件夹对应一个补丁。同名资源（不含扩展名）会替换并备份。",
+    "ja-JP": "各サブフォルダーが1つのパッチです。拡張子を除く名前が同じリソースをバックアップして置き換えます。",
+    "en-US": "Each subfolder is a patch. Resources with the same name, excluding the extension, are backed up and replaced."
+  },
+  "local_patches.empty": {
+    "zh-CN": "暂无补丁。将解压后的补丁放入 patch 下的独立子文件夹，然后刷新。",
+    "ja-JP": "パッチがありません。展開したパッチを patch 内の個別フォルダーに入れて更新してください。",
+    "en-US": "No patches yet. Put each unpacked patch in its own subfolder under patch, then refresh."
+  },
+  "local_patches.loading": {
+    "zh-CN": "正在读取补丁…",
+    "ja-JP": "パッチを読み込み中…",
+    "en-US": "Loading patches…"
+  },
+  "local_patches.refresh": {
+    "zh-CN": "刷新补丁列表",
+    "ja-JP": "パッチ一覧を更新",
+    "en-US": "Refresh patches"
+  },
+  "local_patches.open": {
+    "zh-CN": "打开补丁目录",
+    "ja-JP": "パッチフォルダーを開く",
+    "en-US": "Open patch folder"
+  },
+  "local_patches.install": {
+    "zh-CN": "安装",
+    "ja-JP": "インストール",
+    "en-US": "Install"
+  },
+  "local_patches.switch": {
+    "zh-CN": "切换",
+    "ja-JP": "切り替え",
+    "en-US": "Switch"
+  },
+  "local_patches.files": {
+    "zh-CN": "{count} 个文件",
+    "ja-JP": "{count} ファイル",
+    "en-US": "{count} files"
+  },
+  "local_patches.empty_patch": {
+    "zh-CN": "此补丁文件夹为空",
+    "ja-JP": "パッチフォルダーが空です",
+    "en-US": "This patch folder is empty"
+  },
+  "local_patches.unsafe": {
+    "zh-CN": "补丁包含不支持的路径或链接",
+    "ja-JP": "パッチに未対応のパスまたはリンクが含まれています",
+    "en-US": "The patch contains an unsupported path or link"
+  },
+  "local_patches.running": {
+    "zh-CN": "请先退出游戏，再安装或切换补丁。",
+    "ja-JP": "パッチを適用する前にゲームを終了してください。",
+    "en-US": "Exit the game before installing or switching patches."
+  },
+  "local_patches.applied": {
+    "zh-CN": "补丁已应用，替换的文件已备份",
+    "ja-JP": "パッチを適用し、置き換えたファイルをバックアップしました",
+    "en-US": "Patch applied. Replaced files have been backed up."
+  },
+  "local_patches.switched": {
+    "zh-CN": "补丁切换成功，替换的文件已备份",
+    "ja-JP": "パッチを切り替え、置き換えたファイルをバックアップしました",
+    "en-US": "Patch switched successfully. Replaced files have been backed up."
+  },
   "nav.main": {
     "zh-CN": "主导航",
     "ja-JP": "メインナビゲーション",
@@ -30,9 +230,54 @@
     "en-US": "About"
   },
   "common.close": {
-    "zh-CN": "关闭提示",
-    "ja-JP": "通知を閉じる",
-    "en-US": "Dismiss notification"
+    "zh-CN": "关闭",
+    "ja-JP": "閉じる",
+    "en-US": "Close"
+  },
+  "cover.loading": {
+    "zh-CN": "正在加载封面…",
+    "ja-JP": "カバーを読み込み中…",
+    "en-US": "Loading covers…"
+  },
+  "cover.saving": {
+    "zh-CN": "正在保存封面…",
+    "ja-JP": "カバーを保存中…",
+    "en-US": "Saving cover…"
+  },
+  "cover.empty": {
+    "zh-CN": "此数据源未找到封面，可切换数据源或选择本地图片。",
+    "ja-JP": "カバーが見つかりません。別のソースかローカル画像を選んでください。",
+    "en-US": "No covers found. Try another source or choose a local image."
+  },
+  "cover.search": {
+    "zh-CN": "搜索封面",
+    "ja-JP": "カバーを検索",
+    "en-US": "Search covers"
+  },
+  "cover.local": {
+    "zh-CN": "选择本地图片",
+    "ja-JP": "ローカル画像を選択",
+    "en-US": "Choose local image"
+  },
+  "cover.retry": {
+    "zh-CN": "重新加载",
+    "ja-JP": "再読み込み",
+    "en-US": "Reload"
+  },
+  "cover.select": {
+    "zh-CN": "使用此封面：{name}",
+    "ja-JP": "このカバーを使用：{name}",
+    "en-US": "Use this cover: {name}"
+  },
+  "backup.replace": {
+    "zh-CN": "替换存档",
+    "ja-JP": "セーブデータを置き換え",
+    "en-US": "Replace saves"
+  },
+  "backup.preview_loading": {
+    "zh-CN": "正在读取存档预览…",
+    "ja-JP": "セーブデータのプレビューを読み込み中…",
+    "en-US": "Loading save preview…"
   },
   "common.add": {
     "zh-CN": "添加",
@@ -60,9 +305,9 @@
     "en-US": "My games"
   },
   "games.add_library": {
-    "zh-CN": "添加游戏库",
-    "ja-JP": "ライブラリを追加",
-    "en-US": "Add library"
+    "zh-CN": "游戏库",
+    "ja-JP": "ライブラリ",
+    "en-US": "Library"
   },
   "games.search_placeholder": {
     "zh-CN": "搜索游戏名称…",
@@ -874,6 +1119,16 @@
     "ja-JP": "セーブ場所を指定",
     "en-US": "Choose save folder"
   },
+  "summary.agent_failed": {
+    "zh-CN": "AI 编写或验证读取程序未完成：{detail}",
+    "ja-JP": "AI による読み取りプログラムの作成・検証が未完了です：{detail}",
+    "en-US": "The AI could not finish writing or validating the extractor: {detail}"
+  },
+  "save.saved_games": {
+    "zh-CN": "Saved Games 中匹配的存档目录",
+    "ja-JP": "Saved Games 内の候補",
+    "en-US": "Matching folder in Saved Games"
+  },
   "save.searching": {
     "zh-CN": "正在识别存档位置…",
     "ja-JP": "セーブ場所を検索中…",
@@ -1525,9 +1780,9 @@
     "en-US": "Searching 2DFan and Kun Gal patch information…"
   },
   "network.metadata_fetch": {
-    "ja-JP": "2DFan のゲーム情報とカバーを取得中…",
-    "zh-CN": "正在获取 2DFan 游戏资料与封面…",
-    "en-US": "Fetching 2DFan game information and covers…"
+    "ja-JP": "ゲーム情報とカバーを取得中…",
+    "zh-CN": "正在获取游戏资料与封面…",
+    "en-US": "Fetching game information and covers…"
   },
   "network.update": {
     "ja-JP": "GitHub のリリースを確認中…",
@@ -1540,9 +1795,9 @@
     "en-US": "Fetching information from websites"
   },
   "network.metadata_search": {
-    "ja-JP": "2DFan のゲーム情報を検索中…",
-    "zh-CN": "正在搜索 2DFan 游戏资料…",
-    "en-US": "Searching 2DFan game information…"
+    "ja-JP": "ゲーム情報を検索中…",
+    "zh-CN": "正在搜索游戏资料…",
+    "en-US": "Searching game information…"
   },
   "network.enrich": {
     "ja-JP": "「{title}」の情報とカバーを取得中（{current}/{total}）…",
@@ -1774,10 +2029,10 @@
     "ja-JP": "保存先またはプレビューが変わりました。再確認してください。",
     "en-US": "The save location or preview changed. Preview and confirm again."
   },
-  "backup.folder": {
-    "zh-CN": "备份目录（留空使用应用数据目录）",
-    "ja-JP": "バックアップ先（空欄でアプリデータ）",
-    "en-US": "Backup folder (empty uses app data)"
+  "backup.location_help": {
+    "zh-CN": "存档备份保存在各游戏目录的 .galgear-backups/saves 中，旧备份会自动迁移。",
+    "ja-JP": "セーブのバックアップは各ゲームフォルダーの .galgear-backups/saves に保存され、既存のバックアップは自動的に移行されます。",
+    "en-US": "Save backups are stored in .galgear-backups/saves inside each game folder. Existing backups are migrated automatically."
   },
   "backup.retention": {
     "zh-CN": "每游戏保留份数",
@@ -1925,9 +2180,9 @@
     "en-US": "Current Magpie scaling hotkey"
   },
   "tools.help": {
-    "zh-CN": "转区默认选择日文配置；区域、参数在 Locale Emulator 中配置。Magpie 的算法、倍率和快捷键在其自身配置后填写。",
-    "ja-JP": "既定は日本語プロファイルです。地域・引数は Locale Emulator で設定してください。Magpie のアルゴリズム・倍率・キーは Magpie で設定します。",
-    "en-US": "Locale launch defaults to a Japanese profile. Configure regions and profile arguments in Locale Emulator. Configure scaling and hotkeys in Magpie."
+    "zh-CN": "填写后请点击本区域右上角的“保存”，保存成功后才会用于启动游戏。转区默认选择日文管理员配置 Run in Japanese (Admin)；区域、参数在 Locale Emulator 中配置。Magpie 的算法、倍率和快捷键在其自身配置后填写。",
+    "ja-JP": "入力後、この欄の右上の「保存」を押してください。保存が完了するとゲーム起動に反映されます。既定は管理者権限の日本語プロファイル Run in Japanese (Admin) です。地域・引数は Locale Emulator で設定してください。Magpie のアルゴリズム・倍率・キーは Magpie で設定します。",
+    "en-US": "After entering these values, click Save at the top right of this section. They apply to game launches once saved. Locale launch defaults to the Japanese administrator profile, Run in Japanese (Admin). Configure regions and profile arguments in Locale Emulator. Configure scaling and hotkeys in Magpie."
   },
   "tools.locale_launch": {
     "zh-CN": "转区启动",
@@ -1960,9 +2215,9 @@
     "en-US": "Upscale"
   },
   "tools.profile": {
-    "zh-CN": "区域配置 GUID（留空选择日文配置）",
-    "ja-JP": "プロファイル GUID（空欄で日本語）",
-    "en-US": "Locale profile GUID (empty selects Japanese)"
+    "zh-CN": "区域配置 GUID（留空使用日文管理员配置）",
+    "ja-JP": "プロファイル GUID（空欄で日本語・管理者権限）",
+    "en-US": "Locale profile GUID (empty selects Japanese with administrator rights)"
   },
   "tools.save_profile": {
     "zh-CN": "保存区域配置",
@@ -1970,14 +2225,19 @@
     "en-US": "Save locale profile"
   },
   "tools.locale_missing": {
-    "zh-CN": "请在设置中指定已安装的 LEProc.exe。",
-    "ja-JP": "設定でインストール済み LEProc.exe を指定してください。",
-    "en-US": "Set the installed LEProc.exe path in Settings."
+    "zh-CN": "尚未保存 LEProc.exe 路径。请在设置的“存档备份与外部工具”中填写完整路径，并点击右上角的“保存”。",
+    "ja-JP": "LEProc.exe の場所が保存されていません。設定の「バックアップと外部ツール」にフルパスを入力し、右上の「保存」を押してください。",
+    "en-US": "No LEProc.exe path has been saved. Enter its full path under Save backups and external tools in Settings, then click Save at the top right."
+  },
+  "tools.path_invalid": {
+    "zh-CN": "工具程序文件不存在或无法访问：{path}。请在设置中填写完整的程序文件路径，并点击“保存”。",
+    "ja-JP": "ツールのファイルが存在しないか、アクセスできません：{path}。設定にプログラムのフルパスを入力し、「保存」を押してください。",
+    "en-US": "The tool file does not exist or cannot be accessed: {path}. Enter the full program file path in Settings and click Save."
   },
   "tools.locale_profile": {
-    "zh-CN": "未找到所选区域配置，请在 Locale Emulator 中配置日文区域或选择已有配置。",
-    "ja-JP": "指定プロファイルがありません。Locale Emulator で日本語を設定するか既存プロファイルを選択してください。",
-    "en-US": "No matching locale profile. Configure Japanese or select an existing profile in Locale Emulator."
+    "zh-CN": "未找到区域配置。默认转区需要日文管理员配置 Run in Japanese (Admin)，也可填写已有配置的 GUID。",
+    "ja-JP": "プロファイルが見つかりません。既定のロケール起動には日本語の管理者プロファイル Run in Japanese (Admin) が必要です。既存のプロファイル GUID も指定できます。",
+    "en-US": "No matching locale profile. The default requires the Japanese administrator profile, Run in Japanese (Admin). You can also enter an existing profile GUID."
   },
   "tools.magpie_missing": {
     "zh-CN": "请在设置中指定已安装的 Magpie.exe。",
@@ -2108,6 +2368,11 @@
     "zh-CN": "更改资料关联",
     "ja-JP": "情報の関連付けを変更",
     "en-US": "Change metadata association"
+  },
+  "detail.change_tag_source": {
+    "zh-CN": "更换数据源",
+    "ja-JP": "データソースを変更",
+    "en-US": "Change source"
   },
   "detail.configure": {
     "zh-CN": "编辑配置",
@@ -2309,6 +2574,26 @@
     "ja-JP": "ゲーム",
     "en-US": "games"
   },
+  "library.playtime": {
+    "zh-CN": "游玩时长",
+    "ja-JP": "プレイ時間",
+    "en-US": "played"
+  },
+  "detail.last_played": {
+    "zh-CN": "最近游玩",
+    "ja-JP": "最終プレイ",
+    "en-US": "Last played"
+  },
+  "detail.never_played": {
+    "zh-CN": "未游玩",
+    "ja-JP": "未プレイ",
+    "en-US": "Never played"
+  },
+  "detail.playtime": {
+    "zh-CN": "{hours}h游玩时长",
+    "ja-JP": "{hours}h プレイ時間",
+    "en-US": "{hours}h played"
+  },
   "library.path_warning": {
     "zh-CN": "路径失效，可能已转移；打开详情重新定位。",
     "ja-JP": "パスが無効です。移動された可能性があります。詳細で場所を再指定してください。",
@@ -2343,6 +2628,201 @@
     "zh-CN": "高级操作",
     "ja-JP": "詳細操作",
     "en-US": "Advanced"
+  },
+  "tags.search_placeholder": {
+    "zh-CN": "搜索并添加标签、制作人员或制作组",
+    "ja-JP": "タグ・スタッフ・制作会社を検索して追加",
+    "en-US": "Search and add tags, staff or studios"
+  },
+  "setup.title": {
+    "zh-CN": "确认游戏资料与启动器",
+    "ja-JP": "ゲーム情報と起動ファイルの確認",
+    "en-US": "Confirm game details and launcher"
+  },
+  "setup.remaining": {
+    "zh-CN": "还有 {count} 款游戏待确认",
+    "ja-JP": "未確認のゲーム：{count} 本",
+    "en-US": "{count} games need confirmation"
+  },
+  "setup.help": {
+    "zh-CN": "为这款游戏选择数据源和对应词条，并确认实际启动游戏的 EXE。每款游戏独立保存。",
+    "ja-JP": "このゲームの情報源と項目を選び、起動する EXE を確認してください。設定はゲームごとに保存されます。",
+    "en-US": "Choose this game's source and matching entry, then confirm its game EXE. Each game is saved independently."
+  },
+  "setup.source": {
+    "zh-CN": "数据源",
+    "ja-JP": "情報源",
+    "en-US": "Source"
+  },
+  "setup.batch_help": {
+    "zh-CN": "选择数据源和对应词条并确认启动器后，可先保存已就绪的游戏；全部保存成功后自动关闭。超过四行可滚动查看。",
+    "ja-JP": "情報源と項目を選び、起動ファイルを確認すると、準備できたゲームから保存できます。すべて保存すると自動で閉じます。5 行目以降はスクロールできます。",
+    "en-US": "Choose each game's source and entry, then confirm its launcher. Save ready games first; this window closes when all are saved. Scroll to see more than four rows."
+  },
+  "setup.game": {
+    "zh-CN": "游戏",
+    "ja-JP": "ゲーム",
+    "en-US": "Game"
+  },
+  "setup.entry": {
+    "zh-CN": "对应词条",
+    "ja-JP": "関連項目",
+    "en-US": "Matching entry"
+  },
+  "setup.choose_source": {
+    "zh-CN": "选择数据源",
+    "ja-JP": "情報源を選択",
+    "en-US": "Choose source"
+  },
+  "setup.choose_entry": {
+    "zh-CN": "选择搜索结果",
+    "ja-JP": "検索結果を選択",
+    "en-US": "Choose a result"
+  },
+  "detail.completed": {
+    "zh-CN": "已通关",
+    "ja-JP": "クリア済み",
+    "en-US": "Completed"
+  },
+  "detail.not_completed": {
+    "zh-CN": "未通关",
+    "ja-JP": "未クリア",
+    "en-US": "Not completed"
+  },
+  "setup.confirm_short": {
+    "zh-CN": "已确认启动器",
+    "ja-JP": "起動ファイルを確認",
+    "en-US": "Launcher confirmed"
+  },
+  "setup.pending": {
+    "zh-CN": "待确认",
+    "ja-JP": "未確認",
+    "en-US": "Pending"
+  },
+  "setup.confirmed": {
+    "zh-CN": "已确认",
+    "ja-JP": "確認済み",
+    "en-US": "Confirmed"
+  },
+  "setup.queued": {
+    "zh-CN": "等待保存",
+    "ja-JP": "保存待ち",
+    "en-US": "Waiting to save"
+  },
+  "setup.saved": {
+    "zh-CN": "已保存",
+    "ja-JP": "保存済み",
+    "en-US": "Saved"
+  },
+  "setup.ready": {
+    "zh-CN": "已就绪 {count} 款，可先保存；未完成项将保留在窗口中。",
+    "ja-JP": "{count} 本を保存できます。未完了の項目はこの画面に残ります。",
+    "en-US": "{count} games ready to save; unfinished games will remain here."
+  },
+  "setup.source_for": {
+    "zh-CN": "{name}的数据源",
+    "ja-JP": "{name}の情報源",
+    "en-US": "Source for {name}"
+  },
+  "setup.search_for": {
+    "zh-CN": "搜索{name}的词条",
+    "ja-JP": "{name}の項目を検索",
+    "en-US": "Search entries for {name}"
+  },
+  "setup.entry_for": {
+    "zh-CN": "{name}的对应词条",
+    "ja-JP": "{name}の関連項目",
+    "en-US": "Matching entry for {name}"
+  },
+  "setup.executable_for": {
+    "zh-CN": "{name}的启动器",
+    "ja-JP": "{name}の起動ファイル",
+    "en-US": "Launcher for {name}"
+  },
+  "setup.confirm_for": {
+    "zh-CN": "确认{name}的启动器",
+    "ja-JP": "{name}の起動ファイルを確認",
+    "en-US": "Confirm launcher for {name}"
+  },
+  "tags.clear_filter": {
+    "zh-CN": "清除标签筛选",
+    "ja-JP": "タグの絞り込みを解除",
+    "en-US": "Clear tag filter"
+  },
+  "setup.searching": {
+    "zh-CN": "搜索中…",
+    "ja-JP": "検索中…",
+    "en-US": "Searching…"
+  },
+  "setup.no_results": {
+    "zh-CN": "没有找到对应词条，请修改名称或切换数据源后重试。",
+    "ja-JP": "項目が見つかりません。名前や情報源を変更して再検索してください。",
+    "en-US": "No matching entries. Edit the name or switch the source and try again."
+  },
+  "setup.selected": {
+    "zh-CN": "已选词条：",
+    "ja-JP": "選択した項目：",
+    "en-US": "Selected entry: "
+  },
+  "setup.executable": {
+    "zh-CN": "游戏启动器（EXE）",
+    "ja-JP": "ゲームの起動ファイル（EXE）",
+    "en-US": "Game launcher (EXE)"
+  },
+  "setup.browse": {
+    "zh-CN": "选择 EXE",
+    "ja-JP": "EXE を選択",
+    "en-US": "Choose EXE"
+  },
+  "setup.confirm_launcher": {
+    "zh-CN": "我已确认这是实际启动游戏的程序",
+    "ja-JP": "このファイルでゲームが起動することを確認しました",
+    "en-US": "I have confirmed this is the program that starts the game"
+  },
+  "setup.later": {
+    "zh-CN": "稍后处理",
+    "ja-JP": "後で確認",
+    "en-US": "Set up later"
+  },
+  "setup.save": {
+    "zh-CN": "确认并保存",
+    "ja-JP": "確認して保存",
+    "en-US": "Confirm and save"
+  },
+  "setup.saving": {
+    "zh-CN": "正在获取并保存…",
+    "ja-JP": "取得・保存中…",
+    "en-US": "Fetching and saving…"
+  },
+  "setup.confirm_required": {
+    "zh-CN": "请先确认游戏启动器位置。",
+    "ja-JP": "起動ファイルの場所を確認してください。",
+    "en-US": "Confirm the game launcher's location first."
+  },
+  "setup.entry_required": {
+    "zh-CN": "请选择当前数据源中的对应词条。",
+    "ja-JP": "選択した情報源の項目を選んでください。",
+    "en-US": "Select a matching entry from the chosen source."
+  },
+  "setup.executable_required": {
+    "zh-CN": "请选择实际存在的游戏 EXE 文件。",
+    "ja-JP": "存在するゲーム EXE ファイルを選択してください。",
+    "en-US": "Choose an existing game EXE file."
+  },
+  "tags.selected": {
+    "zh-CN": "已选标签",
+    "ja-JP": "選択したタグ",
+    "en-US": "Selected tags"
+  },
+  "tags.remove": {
+    "zh-CN": "取消标签：{name}",
+    "ja-JP": "タグを解除：{name}",
+    "en-US": "Remove tag: {name}"
+  },
+  "tags.filter_help": {
+    "zh-CN": "确认后显示同时包含全部已选标签的游戏。",
+    "ja-JP": "確認後、選択したすべてのタグを含むゲームを表示します。",
+    "en-US": "Confirm to show games matching all selected tags."
   },
   "tags.restore": {
     "zh-CN": "恢复网站标签",
@@ -2543,5 +3023,465 @@
     "zh-CN": "数据源请求失败：{detail}",
     "ja-JP": "データソースのリクエストに失敗：{detail}",
     "en-US": "Data source request failed: {detail}"
+  },
+  "summary.title": {
+    "zh-CN": "AI前情提要",
+    "ja-JP": "AIあらすじ",
+    "en-US": "AI story recap"
+  },
+  "ai.active_provider": {
+    "zh-CN": "当前使用的 AI",
+    "ja-JP": "使用する AI",
+    "en-US": "Active AI provider"
+  },
+  "summary.option": {
+    "zh-CN": "AI分析",
+    "ja-JP": "AI解析",
+    "en-US": "AI analysis"
+  },
+  "route.title": {
+    "zh-CN": "AI路线图",
+    "ja-JP": "AIルートマップ",
+    "en-US": "AI route map"
+  },
+  "route.generating": {
+    "zh-CN": "正在生成AI路线图…",
+    "ja-JP": "AIルートマップを生成中…",
+    "en-US": "Generating AI route map…"
+  },
+  "route.ready": {
+    "zh-CN": "AI路线图已生成并保存，可从游戏详情页打开。",
+    "ja-JP": "AIルートマップを生成・保存しました。ゲーム詳細から開けます。",
+    "en-US": "The AI route map is saved and ready to open from game details."
+  },
+  "route.opened": {
+    "zh-CN": "已使用默认浏览器打开AI路线图。",
+    "ja-JP": "既定のブラウザーでAIルートマップを開きました。",
+    "en-US": "Opened the AI route map in your default browser."
+  },
+  "route.failed": {
+    "zh-CN": "AI路线图操作失败：{detail}",
+    "ja-JP": "AIルートマップの処理に失敗しました：{detail}",
+    "en-US": "AI route map failed: {detail}"
+  },
+  "route.deepseek_required": {
+    "zh-CN": "请先在设置中配置DeepSeek API密钥并选择模型，以生成AI路线图。",
+    "ja-JP": "AIルートマップを生成するには、設定でDeepSeekのAPIキーとモデルを設定してください。",
+    "en-US": "Configure a DeepSeek API key and model in Settings to generate the AI route map."
+  },
+  "route.invalid_svg": {
+    "zh-CN": "DeepSeek未返回有效的静态SVG路线图，请重新生成。",
+    "ja-JP": "DeepSeekから有効な静的SVGルートマップが返されませんでした。再生成してください。",
+    "en-US": "DeepSeek did not return a valid static SVG route map. Retry generation."
+  },
+  "route.too_large": {
+    "zh-CN": "台词文件或路线分析超出当前模型的上下文上限，请选择支持更长上下文的DeepSeek模型。",
+    "ja-JP": "台詞ファイルまたはルート分析がモデルの上限を超えています。より長いコンテキストに対応したDeepSeekモデルを選択してください。",
+    "en-US": "The dialogue file or route analysis exceeds the selected model's context limit. Choose a larger-context DeepSeek model."
+  },
+  "route.invalid_analysis": {
+    "zh-CN": "DeepSeek返回的路线分析无效，请重新生成。",
+    "ja-JP": "DeepSeekから無効なルート分析が返されました。再生成してください。",
+    "en-US": "DeepSeek returned invalid route analysis. Retry generation."
+  },
+  "route.open_failed": {
+    "zh-CN": "无法打开AI路线图文件或调用默认浏览器，请重试。",
+    "ja-JP": "AIルートマップのファイルを開くか、既定のブラウザーを起動できません。再試行してください。",
+    "en-US": "Could not access the AI route map file or launch the default browser. Please retry."
+  },
+  "route.open_failed_detail": {
+    "zh-CN": "无法使用默认浏览器打开AI路线图：{detail}",
+    "ja-JP": "既定のブラウザーでAIルートマップを開けません：{detail}",
+    "en-US": "Could not open the AI route map in the default browser: {detail}"
+  },
+  "summary.recap": {
+    "zh-CN": "前情提要",
+    "ja-JP": "これまでのあらすじ",
+    "en-US": "Story so far"
+  },
+  "summary.progress": {
+    "zh-CN": "当前进度",
+    "ja-JP": "現在の進行状況",
+    "en-US": "Current progress"
+  },
+  "summary.cached": {
+    "zh-CN": "最新存档未改变，已展示之前保存的前情提要。",
+    "ja-JP": "最新セーブに変更がないため、保存済みのあらすじを表示しています。",
+    "en-US": "The latest save is unchanged. Showing the previously saved recap."
+  },
+  "summary.save_changed": {
+    "zh-CN": "游戏正在更新存档，请保存完成后重试。",
+    "ja-JP": "セーブが更新中です。保存が完了してから再試行してください。",
+    "en-US": "The game is updating its save. Try again after saving finishes."
+  },
+  "summary.preparing": {
+    "zh-CN": "正在准备存档读取程序、台词和背景资料，首次开启可能需要数分钟…",
+    "ja-JP": "セーブ解析・台詞・背景資料を準備中。初回は数分かかります…",
+    "en-US": "Preparing the save parser, dialogue and story background. First setup can take a few minutes…"
+  },
+  "summary.summarizing": {
+    "zh-CN": "正在读取最新存档并分析存档节点之前的台词，生成前情提要。首次分析可能需要数分钟…",
+    "ja-JP": "最新のセーブを解析し、進行状況をまとめています…",
+    "en-US": "Reading the latest save and summarizing your progress…"
+  },
+  "summary.ready": {
+    "zh-CN": "《{game}》AI分析前置准备已完成，功能已开启。",
+    "ja-JP": "『{game}』のAI解析の準備が完了し、機能を有効にしました。",
+    "en-US": "AI analysis setup for “{game}” is complete. The feature is now enabled."
+  },
+  "summary.retry": {
+    "zh-CN": "重新总结",
+    "ja-JP": "再試行",
+    "en-US": "Try again"
+  },
+  "summary.reprepare": {
+    "zh-CN": "检查并准备资源",
+    "ja-JP": "リソースを確認・準備",
+    "en-US": "Check and prepare resources"
+  },
+  "summary.model": {
+    "zh-CN": "模型",
+    "ja-JP": "モデル",
+    "en-US": "Model"
+  },
+  "summary.save": {
+    "zh-CN": "依据存档",
+    "ja-JP": "対象セーブ",
+    "en-US": "Save used"
+  },
+  "summary.language": {
+    "zh-CN": "台词语言",
+    "ja-JP": "台詞の言語",
+    "en-US": "Dialogue language"
+  },
+  "summary.latest_note": {
+    "zh-CN": "以最近修改的存档为依据；不同分支不能仅按时间比较远近，全局已读标记不代表实际阅读记录。",
+    "ja-JP": "更新日時が最新のセーブを使用。別ルートの進行度や実際の既読履歴は更新日時・全体の既読フラグでは判断できません。",
+    "en-US": "Uses the most recently modified save. Dates cannot rank parallel routes; global read flags do not establish actual reading history."
+  },
+  "summary.original_language": {
+    "zh-CN": "未找到对应界面语言的台词资源，当前使用已提取的其他语言台词。",
+    "ja-JP": "UI言語に対応する台詞が見つからないため、取得できた言語の台詞を使用しています。",
+    "en-US": "No dialogue resource matching the interface language was found; using the available extracted language."
+  },
+  "summary.invalid_program": {
+    "zh-CN": "AI生成的存档读取程序未通过校验，请重试准备。",
+    "ja-JP": "AIのセーブ解析プログラムを検証できません。準備を再試行してください。",
+    "en-US": "The generated save parser failed validation. Please prepare it again."
+  },
+  "summary.invalid_data": {
+    "zh-CN": "存档或脚本数据格式无效，或超出处理上限。",
+    "ja-JP": "セーブまたはスクリプトの形式が無効か、処理上限を超えています。",
+    "en-US": "Save or script data is invalid or exceeds processing limits."
+  },
+  "summary.io": {
+    "zh-CN": "AI总结文件操作失败：{detail}",
+    "ja-JP": "AIあらすじのファイル操作に失敗しました：{detail}",
+    "en-US": "AI summary file operation failed: {detail}"
+  },
+  "summary.tools_missing": {
+    "zh-CN": "缺少Galskill提取工具，请安装随应用分发的skills资源。",
+    "ja-JP": "Galskill抽出ツールがありません。アプリ付属のskillsリソースをインストールしてください。",
+    "en-US": "Galskill extraction tools are missing. Install the skills resources shipped with the app."
+  },
+  "summary.decode_failed": {
+    "zh-CN": "游戏资源或存档解码失败，当前引擎格式需要进一步适配。",
+    "ja-JP": "リソースまたはセーブの復号に失敗しました。この形式には追加対応が必要です。",
+    "en-US": "Game resource or save decoding failed. This engine format needs additional support."
+  },
+  "summary.no_dialogue": {
+    "zh-CN": "未能提取可验证的游戏台词，暂未开启AI总结。",
+    "ja-JP": "検証可能な台詞を抽出できず、AIあらすじは有効になりませんでした。",
+    "en-US": "No verifiable dialogue could be extracted. AI summary was not enabled."
+  },
+  "summary.ai_missing": {
+    "zh-CN": "请先在设置→AI中保存Token并选择可用的对话模型。",
+    "ja-JP": "設定→AIでTokenと利用可能な対話モデルを保存してください。",
+    "en-US": "Save a Token and select an available chat model in Settings → AI first."
+  },
+  "summary.background_missing": {
+    "zh-CN": "未能确认对应游戏的故事介绍，请先关联中文资料源（Bangumi或2dfan），英文界面请关联VNDB。",
+    "ja-JP": "作品紹介を確認できません。Bangumi・2dfan、英語UIの場合はVNDBに作品を関連付けてください。",
+    "en-US": "Could not confirm the game’s story introduction. Associate Bangumi/2dfan, or VNDB for the English interface."
+  },
+  "summary.no_saves": {
+    "zh-CN": "未发现可读取的进度存档，请先在游戏中保存或配置存档位置。",
+    "ja-JP": "読み取れるセーブがありません。ゲーム内で保存するか、セーブ先を設定してください。",
+    "en-US": "No readable progress saves were found. Save in the game or configure the save location."
+  },
+  "summary.missing_progress_save": {
+    "zh-CN": "未发现剧情进度存档。请进入游戏剧情，新建存档后重试开启 AI 分析。",
+    "ja-JP": "物語の進行状況を保存したセーブが見つかりません。ゲーム本編で新しくセーブしてから、AI分析をもう一度有効にしてください。",
+    "en-US": "No story progress save was found. Enter the story, create a new save, then try enabling AI analysis again."
+  },
+  "summary.no_match": {
+    "zh-CN": "存档中的台词尚未与预提取脚本匹配，无法可靠总结。",
+    "ja-JP": "セーブの台詞と抽出済みスクリプトが一致せず、進行状況を確認できません。",
+    "en-US": "Save dialogue could not be matched to the extracted script, so progress cannot be reliably summarized."
+  },
+  "summary.ambiguous_anchor": {
+    "zh-CN": "存档台词无法唯一定位到脚本节点，暂时无法可靠总结。请重新检查并准备资源。",
+    "ja-JP": "セーブの台詞に対応するスクリプト位置を一意に特定できません。リソースを再確認してください。",
+    "en-US": "The save dialogue cannot be matched to a unique script node. Check and prepare the resources again."
+  },
+  "summary.disabled": {
+    "zh-CN": "请先在游戏配置中开启AI分析。",
+    "ja-JP": "ゲーム設定でAI解析を有効にしてください。",
+    "en-US": "Enable AI analysis in the game configuration first."
+  },
+  "summary.setup_required": {
+    "zh-CN": "准备文件已改变或界面语言已切换，请重新开启AI总结以检查资源。",
+    "ja-JP": "準備ファイルまたはUI言語が変更されました。リソースを再確認してください。",
+    "en-US": "Setup files or the interface language changed. Prepare the resources again."
+  },
+  "summary.busy": {
+    "zh-CN": "这个游戏的AI总结任务正在进行中。",
+    "ja-JP": "このゲームのAI処理は実行中です。",
+    "en-US": "An AI summary task is already running for this game."
+  },
+  "summary.limited_history": {
+    "zh-CN": "前情结合脚本与当前存档推断；未核实的路线分支不代表你的实际游玩记录。",
+    "ja-JP": "あらすじは台本と現在のセーブに基づく推定です。未確認のルート分岐は実際のプレイ履歴を示すものではありません。",
+    "en-US": "The recap is reconstructed from the script and current save. Unconfirmed route branches are not a record of your actual play history."
+  },
+  "settings.section_cloud": {
+    "zh-CN": "云存储",
+    "ja-JP": "クラウドストレージ",
+    "en-US": "Cloud storage"
+  },
+  "cloud.help": {
+    "zh-CN": "通过 WebDAV 同步存档。下载的存档会加入本地备份历史；恢复前可预览变更。",
+    "ja-JP": "WebDAV でセーブデータを同期します。ダウンロードはローカル履歴に追加され、復元前に変更を確認できます。",
+    "en-US": "Sync save archives with a WebDAV service. Downloads are added to local backup history; review the restore preview before replacing saves."
+  },
+  "cloud.connection": {
+    "zh-CN": "WebDAV 连接",
+    "ja-JP": "WebDAV 接続",
+    "en-US": "WebDAV connection"
+  },
+  "cloud.url": {
+    "zh-CN": "服务器地址",
+    "ja-JP": "サーバー URL",
+    "en-US": "Server URL"
+  },
+  "cloud.username": {
+    "zh-CN": "用户名",
+    "ja-JP": "ユーザー名",
+    "en-US": "Username"
+  },
+  "cloud.password": {
+    "zh-CN": "密码 / 应用专用密码",
+    "ja-JP": "パスワード / アプリパスワード",
+    "en-US": "Password / app password"
+  },
+  "cloud.vault": {
+    "zh-CN": "密码保存在本机 Windows 凭据管理器中。",
+    "ja-JP": "パスワードはこの端末の Windows 資格情報マネージャーに保存されます。",
+    "en-US": "Passwords are stored in Windows Credential Manager on this device."
+  },
+  "cloud.remote_path": {
+    "zh-CN": "远程文件夹",
+    "ja-JP": "リモートフォルダー",
+    "en-US": "Remote folder"
+  },
+  "cloud.password_saved": {
+    "zh-CN": "留空以保留已保存的密码",
+    "ja-JP": "空欄で保存済みのパスワードを使用",
+    "en-US": "Leave blank to keep the saved password"
+  },
+  "cloud.password_placeholder": {
+    "zh-CN": "输入 WebDAV 密码",
+    "ja-JP": "WebDAV パスワードを入力",
+    "en-US": "Enter the WebDAV password"
+  },
+  "cloud.test": {
+    "zh-CN": "测试连接",
+    "ja-JP": "接続をテスト",
+    "en-US": "Test connection"
+  },
+  "cloud.clear": {
+    "zh-CN": "清除连接",
+    "ja-JP": "接続情報を削除",
+    "en-US": "Clear connection"
+  },
+  "cloud.configured": {
+    "zh-CN": "已配置",
+    "ja-JP": "設定済み",
+    "en-US": "Configured"
+  },
+  "cloud.not_configured": {
+    "zh-CN": "未配置",
+    "ja-JP": "未設定",
+    "en-US": "Not configured"
+  },
+  "cloud.loading": {
+    "zh-CN": "处理中…",
+    "ja-JP": "処理中…",
+    "en-US": "Working…"
+  },
+  "cloud.saved": {
+    "zh-CN": "云存储连接已保存",
+    "ja-JP": "クラウド接続を保存しました",
+    "en-US": "Cloud connection saved"
+  },
+  "cloud.cleared": {
+    "zh-CN": "云存储连接已清除",
+    "ja-JP": "クラウド接続情報を削除しました",
+    "en-US": "Cloud connection cleared"
+  },
+  "cloud.test_ok": {
+    "zh-CN": "WebDAV 连接成功",
+    "ja-JP": "WebDAV に接続できました",
+    "en-US": "WebDAV connection successful"
+  },
+  "cloud.invalid_response": {
+    "zh-CN": "云存储返回了无效响应。",
+    "ja-JP": "クラウドサービスの応答が不正です。",
+    "en-US": "The cloud service returned an invalid response."
+  },
+  "cloud.sync": {
+    "zh-CN": "存档同步",
+    "ja-JP": "セーブデータの同期",
+    "en-US": "Save synchronization"
+  },
+  "cloud.game": {
+    "zh-CN": "游戏",
+    "ja-JP": "ゲーム",
+    "en-US": "Game"
+  },
+  "cloud.game_placeholder": {
+    "zh-CN": "选择本地游戏",
+    "ja-JP": "ローカルのゲームを選択",
+    "en-US": "Choose a local game"
+  },
+  "cloud.upload": {
+    "zh-CN": "上传当前存档",
+    "ja-JP": "現在のセーブデータをアップロード",
+    "en-US": "Upload current saves"
+  },
+  "cloud.refresh": {
+    "zh-CN": "刷新云端备份",
+    "ja-JP": "クラウドのバックアップを更新",
+    "en-US": "Refresh cloud backups"
+  },
+  "cloud.download": {
+    "zh-CN": "下载到本地历史",
+    "ja-JP": "ローカル履歴にダウンロード",
+    "en-US": "Download to local history"
+  },
+  "cloud.uploaded": {
+    "zh-CN": "当前存档已上传至云端。",
+    "ja-JP": "現在のセーブデータをクラウドにアップロードしました。",
+    "en-US": "Current saves uploaded to the cloud."
+  },
+  "cloud.downloaded": {
+    "zh-CN": "已下载到本地备份历史。打开游戏后，可预览恢复以应用此备份。",
+    "ja-JP": "ローカル履歴にダウンロードしました。ゲームを開き、復元プレビューから適用できます。",
+    "en-US": "Downloaded to local backup history. Open the game and preview a restore to apply this backup."
+  },
+  "cloud.open_game": {
+    "zh-CN": "打开游戏备份历史",
+    "ja-JP": "ゲームのバックアップ履歴を開く",
+    "en-US": "Open game backup history"
+  },
+  "cloud.empty": {
+    "zh-CN": "此游戏暂无云端备份。",
+    "ja-JP": "このゲームのクラウドバックアップはありません。",
+    "en-US": "No cloud backups for this game."
+  },
+  "cloud.list_hint": {
+    "zh-CN": "选择游戏后，刷新其云端备份。",
+    "ja-JP": "ゲームを選択してクラウドのバックアップを更新してください。",
+    "en-US": "Choose a game, then refresh its cloud backups."
+  },
+  "cloud.save_first": {
+    "zh-CN": "同步前请先保存连接设置。",
+    "ja-JP": "同期する前に接続設定を保存してください。",
+    "en-US": "Save the connection settings before syncing."
+  },
+  "cloud.same_title": {
+    "zh-CN": "在不同设备上使用相同的游戏名称，即可共享云端备份。",
+    "ja-JP": "クラウドのバックアップを共有するには、各端末で同じゲーム名を使用してください。",
+    "en-US": "Use the same game title on each device to share cloud backups."
+  },
+  "cloud.provider_help": {
+    "zh-CN": "WebDAV 配置帮助",
+    "ja-JP": "WebDAV の設定方法",
+    "en-US": "WebDAV setup help"
+  },
+  "cloud.provider_generic": {
+    "zh-CN": "填写云存储服务提供的 WebDAV 地址和凭据。",
+    "ja-JP": "ストレージサービスが提供する WebDAV URL と認証情報を入力してください。",
+    "en-US": "Use the WebDAV URL and credentials supplied by your storage service."
+  },
+  "cloud.provider_123": {
+    "zh-CN": "123云盘：启用 WebDAV，从授权管理中复制服务器地址、用户名和密码，并开启读写权限。",
+    "ja-JP": "123 Cloud：WebDAV を有効にし、認証管理から URL、ユーザー名、パスワードをコピーして読み書きを許可してください。",
+    "en-US": "123 Cloud: enable WebDAV, copy its server URL, username and password from authorization settings, and allow read/write access."
+  },
+  "cloud.provider_jianguoyun": {
+    "zh-CN": "坚果云：地址为 https://dav.jianguoyun.com/dav/，用户名为账号邮箱，密码使用第三方应用管理中生成的应用密码。",
+    "ja-JP": "坚果云：URL は https://dav.jianguoyun.com/dav/、ユーザー名は登録メールアドレスです。サードパーティーアプリ管理で作成したアプリパスワードを使用してください。",
+    "en-US": "Jianguoyun: use https://dav.jianguoyun.com/dav/, your account email and an app password generated in third-party application settings."
+  },
+  "cloud.password_required": {
+    "zh-CN": "请输入 WebDAV 密码。修改服务器地址或用户名后需重新输入。",
+    "ja-JP": "WebDAV パスワードを入力してください。URL またはユーザー名を変更した場合は再入力が必要です。",
+    "en-US": "Enter the WebDAV password again after changing the server URL or username."
+  },
+  "cloud.invalid_settings": {
+    "zh-CN": "请填写有效的 HTTP(S) WebDAV 地址、用户名和远程文件夹。地址中不能包含密码、查询参数或片段。",
+    "ja-JP": "有効な HTTP(S) WebDAV URL、ユーザー名、リモートフォルダーを入力してください。URL にパスワード、クエリ、フラグメントは含められません。",
+    "en-US": "Enter a valid HTTP(S) WebDAV URL, username and remote folder. The URL must not include credentials, a query or a fragment."
+  },
+  "cloud.invalid_password": {
+    "zh-CN": "WebDAV 密码不能为空，不能包含控制字符，且不能超过 1024 字节。",
+    "ja-JP": "WebDAV パスワードは必須です。制御文字は使用できず、1024 バイト以内で入力してください。",
+    "en-US": "The WebDAV password is required, must not contain control characters and must be at most 1024 bytes."
+  },
+  "cloud.auth": {
+    "zh-CN": "WebDAV 认证或授权失败，请检查用户名、应用密码和读写权限。",
+    "ja-JP": "WebDAV の認証または権限が拒否されました。ユーザー名、アプリパスワード、読み書き権限を確認してください。",
+    "en-US": "WebDAV authentication or authorization failed. Check the username, app password and read/write permissions."
+  },
+  "cloud.network": {
+    "zh-CN": "无法连接 WebDAV 服务或传输超时，请检查网络和服务器地址。",
+    "ja-JP": "WebDAV に接続できないか、転送がタイムアウトしました。ネットワークと URL を確認してください。",
+    "en-US": "Could not connect to WebDAV or the transfer timed out. Check the network and server URL."
+  },
+  "cloud.http": {
+    "zh-CN": "WebDAV 请求失败（HTTP {status}）。",
+    "ja-JP": "WebDAV リクエストが失敗しました（HTTP {status}）。",
+    "en-US": "The WebDAV request failed (HTTP {status})."
+  },
+  "cloud.invalid_backup": {
+    "zh-CN": "云端备份无效、已损坏或包含不安全的路径，无法导入。",
+    "ja-JP": "クラウドのバックアップが不正、破損、または安全でないパスを含むため、インポートできません。",
+    "en-US": "The cloud backup is invalid, damaged or contains unsafe paths and cannot be imported."
+  },
+  "cloud.too_large": {
+    "zh-CN": "备份或服务器响应超过允许的大小。",
+    "ja-JP": "バックアップまたはサーバー応答のサイズが上限を超えています。",
+    "en-US": "The backup or server response exceeds the allowed size."
+  },
+  "cloud.conflict": {
+    "zh-CN": "同名备份已存在且内容不同，请刷新后重试。",
+    "ja-JP": "同じ名前で内容の異なるバックアップが存在します。更新して再試行してください。",
+    "en-US": "A backup with the same identity and different contents already exists. Refresh and try again."
+  },
+  "cloud.not_found": {
+    "zh-CN": "找不到此云端备份，请刷新列表。",
+    "ja-JP": "クラウドのバックアップが見つかりません。リストを更新してください。",
+    "en-US": "The cloud backup could not be found. Refresh the list."
+  },
+  "cloud.error": {
+    "zh-CN": "云存储操作失败：{detail}",
+    "ja-JP": "クラウドストレージの操作が失敗しました：{detail}",
+    "en-US": "Cloud storage operation failed: {detail}"
+  },
+  "summary.incomplete_response": {
+    "zh-CN": "AI未返回完整结果（{reason}），请重试或更换对话模型。",
+    "ja-JP": "AIの応答が完了しませんでした（{reason}）。再試行するかモデルを変更してください。",
+    "en-US": "AI did not return a complete result ({reason}). Retry or choose another chat model."
   }
 }

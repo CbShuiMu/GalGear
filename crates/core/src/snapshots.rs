@@ -1,4 +1,7 @@
 //! Complete save snapshots, verified contents, retention, and reversible restoration.
+mod migration;
+pub use migration::{game_data, migrate};
+
 use crate::{config::display_path, runtime::Status};
 use galgear_i18n::Message;
 use serde::{Deserialize, Serialize};
@@ -261,7 +264,31 @@ pub fn validate_roots(
         .chain(std::env::var_os("USERPROFILE").map(PathBuf::from))
         .filter_map(|p| fs::canonicalize(p).ok())
         .collect();
-    let data = fs::canonicalize(data).unwrap_or_else(|_| data.to_owned());
+    // A not-yet-created backup folder still needs the same canonical prefix as
+    // save roots (notably the Windows extended-length path prefix).
+    let mut existing = data;
+    let mut missing = Vec::new();
+    let data = loop {
+        match fs::canonicalize(existing) {
+            Ok(mut canonical) => {
+                for component in missing.iter().rev() {
+                    canonical.push(component);
+                }
+                break canonical;
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(
+                    existing
+                        .file_name()
+                        .ok_or_else(|| error("Invalid backup path"))?,
+                );
+                existing = existing
+                    .parent()
+                    .ok_or_else(|| error("Invalid backup parent"))?;
+            }
+            Err(err) => return Err(error(err)),
+        }
+    };
     let mut canonical: Vec<PathBuf> = Vec::new();
     for root in roots {
         if fs::symlink_metadata(root)
@@ -488,6 +515,111 @@ fn load(data: &Path, game: &str, id: &str) -> Result<Snapshot, Message> {
         .find(|s| s.id == id)
         .ok_or_else(|| error("Snapshot not found"))
 }
+
+/// Locate immutable snapshot contents without accepting path components as IDs.
+pub(crate) fn content_directory(data: &Path, game: &str, id: &str) -> Result<PathBuf, Message> {
+    safe_id(id)?;
+    Ok(directory(data, game)?.join(id))
+}
+
+/// Publish verified imported contents as an ordinary local snapshot. The caller
+/// owns its extraction staging directory; live save roots are never accessed.
+pub(crate) fn import_verified(
+    data: &Path,
+    game: &str,
+    mut snapshot: Snapshot,
+    extracted: &Path,
+) -> Result<Snapshot, Message> {
+    safe_id(&snapshot.id)?;
+    let parent = directory(data, game)?;
+    fs::create_dir_all(&parent).map_err(error)?;
+    let staged = tempfile::Builder::new()
+        .prefix(".incomplete-cloud-")
+        .tempdir_in(&parent)
+        .map_err(error)?;
+    let mut identities = std::collections::BTreeSet::new();
+    let mut size = 0u64;
+    for file in &snapshot.files {
+        if file.root >= snapshot.roots.len()
+            || !identities.insert((file.root, file.path.to_lowercase()))
+        {
+            return Err(error("Invalid imported snapshot file"));
+        }
+        let relative = relative(&file.path)?;
+        let source_root = extracted.join(file.root.to_string());
+        let mut source = source_root.clone();
+        for component in std::iter::once(Component::CurDir).chain(relative.components()) {
+            if let Component::Normal(component) = component {
+                source.push(component);
+            }
+            if fs::symlink_metadata(&source)
+                .map_err(error)?
+                .file_type()
+                .is_symlink()
+            {
+                return Err(error("Imported snapshot contains a link"));
+            }
+        }
+        if !fs::metadata(&source).map_err(error)?.is_file()
+            || fs::metadata(&source).map_err(error)?.len() != file.size
+            || hash(&source)? != file.hash
+        {
+            return Err(error("Imported snapshot contents failed verification"));
+        }
+        let target = staged.path().join(file.root.to_string()).join(relative);
+        fs::create_dir_all(
+            target
+                .parent()
+                .ok_or_else(|| error("Missing import parent"))?,
+        )
+        .map_err(error)?;
+        copy_file(&source, &target)?;
+        if hash(&target)? != file.hash {
+            return Err(error("Imported snapshot changed while copying"));
+        }
+        size = size
+            .checked_add(file.size)
+            .ok_or_else(|| error("Imported snapshot is too large"))?;
+    }
+    if size != snapshot.size || size > 2 * 1024 * 1024 * 1024 {
+        return Err(error("Invalid imported snapshot size"));
+    }
+    let previous = list(data, game)?;
+    let counter = match fs::read(parent.join("sequence.json")) {
+        Ok(bytes) => serde_json::from_slice::<u64>(&bytes).map_err(error)?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
+        Err(e) => return Err(error(e)),
+    };
+    snapshot.sequence = counter
+        .max(previous.iter().map(|item| item.sequence).max().unwrap_or(0))
+        .checked_add(1)
+        .ok_or_else(|| error("Backup sequence exhausted"))?;
+    if parent.join(&snapshot.id).exists() {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(error)?;
+        snapshot.id = format!(
+            "{:020}-{:x}",
+            timestamp.as_nanos(),
+            Sha256::digest(staged.path().to_string_lossy().as_bytes())
+        );
+    }
+    game.clone_into(&mut snapshot.game_id);
+    snapshot.locked = false;
+    // Imported root labels retain the root count, never another PC's absolute paths.
+    snapshot.roots = (0..snapshot.roots.len())
+        .map(|index| format!("Save {}", index + 1))
+        .collect();
+    for file in &mut snapshot.files {
+        // Existing preview fingerprints use the host's native path separators.
+        file.path = display_path(&relative(&file.path)?.components().collect::<PathBuf>());
+    }
+    write_sequence(&parent, snapshot.sequence)?;
+    write_manifest(&staged.path().join("manifest.json"), &snapshot)?;
+    fs::rename(staged.path(), parent.join(&snapshot.id)).map_err(error)?;
+    Ok(snapshot)
+}
+
 pub fn update(data: &Path, game: &str, id: &str, locked: bool, note: &str) -> Result<(), Message> {
     let mut snapshot = load(data, game, id)?;
     snapshot.locked = locked;

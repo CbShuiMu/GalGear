@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 48 48" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">GalGear</title>
+  <desc id="desc">与应用左侧导航栏顶部一致的粉色花朵 Logo。</desc>
+  <path d="M24 8c-12-12-22 5-11 11C-4 20 6 37 16 31c-3 17 17 17 16 4 13 9 24-7 12-14C50 8 33 1 28 14Z" fill="#d75c95" transform="translate(-2 2) scale(.92)"/>
+  <circle cx="24" cy="24" r="5" fill="white"/>
+  <path d="m20 24 3 3 6-7" stroke="white" stroke-width="2"/>
+</svg>

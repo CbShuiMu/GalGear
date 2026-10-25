@@ -1,139 +1,144 @@
 <div align="center">
 
-<img src="src-tauri/icons/icon.png" width="88" height="88" alt="GalGear 粉色花朵图标" />
+<img src="assets/readme/logo.svg" width="80" height="80" alt="GalGear 侧栏顶部的粉色花朵 Logo" />
 
 # GalGear
 
-**把游戏、资料、存档和补丁，整理进同一个 Galgame 游戏库。**
+**找游戏、开游戏，也照顾好你的存档。**
 
-Windows x64 · Rust / Tauri 2 · WebAssembly · 中文 / 日本語 / English
+Windows x64 · 简体中文 / 日本語 / English
 
-[下载 v0.1.0](https://github.com/CbShuiMu/GalGear/releases/tag/v0.1.0) · [开始使用](#开始使用) · [功能](#功能) · [开发与构建](#开发与构建) · [项目文档](#项目文档) · [MIT](LICENSE)
+[下载](https://github.com/CbShuiMu/GalGear/releases/latest) · [开始使用](#开始使用) · [功能介绍](#能做些什么) · [反馈问题](https://github.com/CbShuiMu/GalGear/issues)
 
 </div>
 
-![GalGear 游戏库：海报网格、搜索、标签筛选及批量操作](assets/readme/library.png)
+GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加进来，就能看封面、找游戏、整理收藏夹、启动游戏，也能在同一个地方管理存档和补丁。
 
-<p align="center"><sub>2026-10-15 · v0.1.0 最新发行 Rust/WASM 界面，白粉亮色主题。截图使用隔离演示数据与默认占位封面。</sub></p>
+![GalGear 游戏库：封面列表、搜索、标签筛选和收藏夹入口](assets/readme/library.png)
 
-GalGear 是面向本地已安装 EXE 游戏的 Windows 桌面管理器。添加游戏目录后，可以浏览海报、整理收藏夹、补全作品资料、启动游戏，并在详情页管理存档与备份。界面支持粉色与白粉两种主题色，各有亮色和夜间模式。
+<p align="center"><sub>游戏库界面。截图来自 v0.1.0，使用演示条目和占位封面。</sub></p>
 
-> [!IMPORTANT]
-> 当前版本为 [`v0.1.0`](https://github.com/CbShuiMu/GalGear/releases/tag/v0.1.0)，仍在开发和验收中。Release 提供 Windows x64 安装包及便携包；Windows 10、安装器实际安装、部分补丁格式及真实外部工具组合尚未完成全部验证，详见[当前限制](#当前限制)。私有仓库的下载需要有访问权限的 GitHub 账号。
-
-## 功能
-
-| 功能 | 当前支持 |
-| --- | --- |
-| 游戏库 | 多目录扫描、缓存启动、后台检查、手动添加、搜索、标签筛选、排序、游玩状态与路径失效提示。 |
-| 收藏夹 | 嵌套层级、多重归属、拖放整理、批量加入和移除，以及排除条目的恢复。 |
-| 游戏资料 | 关联 2DFan、VNDB、Bangumi、月幕 Galgame；缓存简介、制作人员、发行信息和封面，保留手动编辑及主动清空的字段。 |
-| 启动配置 | 指定 EXE、参数、工作目录和外部工具，检测游戏运行状态；可接入 Locale Emulator 与 Magpie。 |
-| 存档管理 | 检测游戏目录、AppData 和实际“文档”位置；支持手动确认、多位置快照、备注、锁定、历史浏览及恢复预览。 |
-| 补丁管理 | 搜索 2DFan 与鲲 Gal 资源；支持可用直链下载、本地补丁预览、覆盖确认、备份与恢复。 |
-| 界面偏好 | 中日英三语、粉色／白粉主题色与独立亮暗模式、字号、卡片悬停操作、关闭行为与托盘设置。 |
-
-<details>
-<summary>查看游戏详情界面</summary>
-
-![GalGear 游戏详情：启动入口、资料来源、标签及存档位置](assets/readme/detail.png)
-
-此图来自隔离测试，展示资料与存档入口的布局。启动按钮旁的齿轮用于配置程序、参数、转区和超分选项。
-
-</details>
-
-<details>
-<summary>查看主题与显示设置（亮色 / 夜间）</summary>
-
-![GalGear 显示与交互设置：语言、主题色、亮暗模式及字号分段选项](assets/readme/settings-light.png)
-
-![GalGear 白粉夜间模式：半透明设置面板与粉色选中状态](assets/readme/settings-dark.png)
-
-粉色与白粉各有亮色、夜间模式，主题色和亮暗分别保存。设置选项使用支持键盘切换的胶囊分段条，提供 14 / 16 / 18px 三档字号。封面随窗口宽度自适应，悬停卡片可查看名称、标签并进行操作。以上均为同一发行前端的隔离截图。
-
-</details>
+> 这份说明对应正在开发的 `develop` 分支。目前可下载的发行版是 **v0.1.0（2026-10-15）**；下文的游玩时长、WebDAV 云备份、AI 前情提要和路线图等新功能，需要从当前源码构建。
 
 ## 开始使用
 
-运行环境为 Windows x64，需要 Microsoft Edge WebView2 Runtime。Windows 10 / 11 是目标平台，Windows 10 尚待实机验收。前往 [v0.1.0 Release](https://github.com/CbShuiMu/GalGear/releases/tag/v0.1.0) 下载：
+前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
 
-| 文件 | 用途 |
-| --- | --- |
-| `GalGear_0.1.0_x64-setup.exe` | NSIS 安装包，安装后从开始菜单启动。 |
-| `GalGear-0.1.0-win64-portable.zip` | 解压后运行 `GalGear.exe`；附带 `portable.flag`，数据保存到解压目录的 `data/`。 |
-| `SHA256SUMS.txt` | 对安装包、便携包及独立 EXE 进行 SHA-256 校验。 |
+- **安装版**：下载 `GalGear_0.1.0_x64-setup.exe`，按提示安装。
+- **便携版**：下载 `GalGear-0.1.0-win64-portable.zip`，解压后运行 `GalGear.exe`。
 
-也可下载独立 `GalGear.exe`，默认使用 AppData 保存数据。需要自行构建时见[开发与构建](#开发与构建)。
+需要 Microsoft Edge WebView2 Runtime。目标系统为 Windows 10 / 11，Windows 10 还没有完成实机验证。仓库目前为私有，下载时需要登录有访问权限的 GitHub 账号。
 
-1. 启动 `GalGear.exe`，通过“添加”选择游戏库目录，或手动选择游戏 EXE。
-2. 等待扫描条目出现。可以立即搜索、筛选或整理收藏夹；扫描期间支持取消。
-3. 打开游戏详情，检查启动程序；在设置的“数据源”中选择默认资料来源，再搜索并关联作品。
-4. 确认存档位置后创建第一份备份，再按需使用补丁或恢复功能。
+第一次打开，可以按这个顺序来：
 
-### 资料来源与账号
+1. 点击游戏库右上角的 **添加**，选择放游戏的文件夹；也可以手动添加某个游戏的 EXE。
+2. 扫描后，在确认窗口里为游戏选好资料来源、对应作品和启动程序。可以先保存已经确认的几款，其余稍后再处理。
+3. 打开游戏详情，检查启动配置，点击启动。需要转区或超分时，再配置 Locale Emulator 或 Magpie。
+4. 找到存档位置并确认，做一份备份。以后换补丁、换电脑或重玩，都方便一些。
 
-作品资料来自 **2DFan、VNDB、Bangumi、月幕 Galgame**，补丁搜索来自 **2DFan、鲲 Gal**。资料和图片的范围取决于来源网站，游戏库和已缓存资料可在离线时使用。
+上面的批量确认窗口是开发版的新流程；v0.1.0 可以在游戏详情里关联资料、调整启动程序。
 
-- 可切换默认资料来源；已关联作品刷新时沿用其原来源。本地及手动指定封面优先，自动封面不会覆盖已有图片。
-- 需要认证的来源在“设置 → 数据源”配置。Token、Cookie 和客户端密钥保存在本机 Windows 凭据管理器中；2DFan 的 `authenticity_token` 单独不足以建立有效会话。
-- 2DFan 支持网站提供的直链、免费领取及逐项确认的积分购买；费用或余额无法确认时停止购买。鲲 Gal 当前仅搜索全年龄展示范围，并提供原站链接。
-- 月幕 Galgame API 用于非商业项目。接口接入与资料来源说明见[数据源文档](docs/interface-and-data-sources-2026-10-14.md)。
+## 能做些什么
 
-### 存档与补丁
+### 游戏多了，也能找得到
 
-存档检测会区分已确认位置、候选目录和尚未创建的位置。备份支持多个确认目录；恢复前需要预览和确认，并先备份当前状态。游戏运行中或运行状态无法确认时，相关写入操作会受到限制。
+游戏可以放在不同目录，不必为了使用 GalGear 重新搬家。支持按名称搜索、组合标签筛选和排序，也可以用多层收藏夹整理正在玩、想玩或已经通关的作品。一款游戏能放进多个收藏夹，支持拖放和批量整理。
 
-本地 **ZIP** 补丁无需额外解压工具，**RAR / 7z** 需要本机 7-Zip。安装前显示文件及覆盖冲突，安装后保留备份；恢复时校验文件，外部修改会阻止恢复，重叠补丁必须逆序撤销。EXE 补丁使用其自身安装流程，退出码不会被当成安装成功的证明。
+开发版会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游戏进程的检测，玩游戏时请保持 GalGear 运行。
 
-### 数据保存
+### 补齐资料，换一张喜欢的封面
 
-| 运行方式 | 数据位置 |
-| --- | --- |
-| 普通 EXE / 安装版 | `%APPDATA%/com.galgear.desktop` |
-| 便携模式 | 在 EXE 旁创建 `portable.flag`，数据保存到同目录的 `data/` |
+作品资料可从 **2DFan、VNDB、Bangumi、月幕 Galgame** 中选择，每款游戏可以使用不同来源。简介、制作组、制作人员和标签会保存在本地，也可以自己修改。
 
-迁移便携版时一起移动程序和 `data/`。账号凭据仍绑定本机 Windows 凭据管理器，迁移后需要重新配置。移除游戏条目只改变列表，不删除游戏、存档或备份。
-
-## 开发与构建
-
-准备 Windows x64、支持 Rust 2024 edition 的 Rust 工具链、Visual Studio C++ Build Tools / Windows SDK，以及 WebView2 Runtime。以下命令在项目根目录执行。
-
-```powershell
-git clone https://github.com/CbShuiMu/GalGear.git
-cd GalGear
-
-# 下载与项目版本一致的 wasm-bindgen，并安装 WASM 编译目标
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1
-
-# 编译前端并运行桌面程序
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1
-```
-
-仓库为私有库，克隆需要有访问权限的 GitHub 账号。前端由 Rust 编译为 WASM；日常开发和独立 EXE 构建不需要 Node.js。
-
-**生成独立 EXE：**
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
-```
-
-输出为 `artifacts/GalGear.exe`。构建脚本先生成 `dist/` 前端，再编译桌面程序。
+封面可以单独按名称搜索、换来源挑选，或使用本地图片，不影响已经关联的作品资料。点击详情里的标签、制作组或制作人员，就能回到游戏库找相关作品。已经缓存的资料和本地游戏库可以离线浏览。
 
 <details>
-<summary>构建 NSIS 安装包</summary>
+<summary>看看游戏详情和主题设置</summary>
 
-此步骤额外需要 Node.js / npm，用于运行 Tauri CLI。
+![GalGear 游戏详情：启动按钮、作品资料、标签和存档位置](assets/readme/detail.png)
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-frontend.ps1 -Release
-npx @tauri-apps/cli@2 build --bundles nsis
-```
+![GalGear 亮色模式下的显示与交互设置](assets/readme/settings-light.png)
 
-安装包输出到 `target/release/bundle/nsis/`。生成安装包不等同于安装与运行验收通过。
+![GalGear 夜间模式下的显示与交互设置](assets/readme/settings-dark.png)
+
+截图来自 v0.1.0。界面支持粉色、白粉两种主题色，可分别搭配亮色或夜间模式；语言和字号也能在设置中调整。
 
 </details>
 
-**运行检查：**
+### 给存档留个后路
+
+GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，也允许手动指定。确认位置后，可以备份多个存档目录、给备份写备注，或锁定一份不想被自动清理的记录。也可以按游戏开启退出后的自动备份。
+
+恢复前会先展示预览，并备份当前存档。游戏正在运行时，请先退出再恢复或应用补丁。
+
+开发版还支持 **WebDAV 云备份**：在“设置 → 云存储”里填好连接，便能手动上传存档，或把云端备份下载到本地历史，再选择恢复。换电脑时，两边使用相同的游戏标题；有多个存档位置的，确认顺序也要一致。连接示例和具体步骤见 [云存储说明](docs/cloud-storage.md)。
+
+云备份需要自己点击上传和下载，目前没有后台自动同步。
+
+### 补丁放在一起，安装前先看一眼
+
+可以搜索 **2DFan、鲲 Gal** 的补丁资源，查看原站说明，下载网站提供的可用直链；也可以直接导入本地补丁。需要登录或付费的资源，仍受原站账号和权限限制。
+
+本地 ZIP 可直接预览；RAR / 7z 需要电脑上安装 7-Zip。覆盖文件前会列出冲突并保留备份，之后可以恢复。叠加安装的补丁要按相反顺序撤销；EXE 补丁则使用它自己的安装流程。
+
+已经解压的补丁，可以放进游戏目录的 `patch/` 下，每个补丁单独一个子文件夹。开发版会在详情页列出它们，方便安装或切换，不用每次手动复制。
+
+### 隔了一阵子回来，接上剧情
+
+开发版提供可选的 **AI 前情提要**。在“设置 → AI”配置 DeepSeek 或 OpenAI 的 API Token 和模型，再到游戏的编辑配置里开启 **AI 分析**。首次准备可能需要一些时间，完成后可以在详情页查看前情提要和当前进度。
+
+另外还有 **AI 路线图**，会在默认浏览器里打开生成的分支与结局图。路线图固定使用 DeepSeek，需要另行配置 DeepSeek；它会分析完整台词，可能包含后续剧情和结局剧透。
+
+这部分还在实验中，能否读取存档和脚本取决于具体游戏，无法保证每款都能用，生成的总结和路线也可能有误。启用时，分析所需的游戏台词、存档信息和作品资料会发给相应的 AI 服务，调用费用由你的 API 账号承担。更详细的用法见 [AI 设置](docs/ai-settings.md) 和 [前情提要说明](docs/ai-summary.md)。
+
+## 数据放在哪里
+
+| 内容 | 保存位置 |
+| --- | --- |
+| 安装版 / 普通运行的配置和游戏列表 | `%APPDATA%/com.galgear.desktop` |
+| 便携模式的配置和游戏列表 | 程序旁的 `data/`，由同目录下的 `portable.flag` 启用 |
+| 开发版的存档备份 | 游戏目录下的 `.galgear-backups/saves/` |
+| 开发版的 AI 准备文件和缓存 | 游戏目录下的 `.galgear-ai-summary/` |
+
+便携版迁移时，一起带上程序目录和 `data/`；游戏目录里的备份也要保留。当前源码构建出的程序还附带 `skills/` 和 `tools/`，使用 AI 功能时请一起移动。
+
+账号 Token、Cookie 和云存储密码保存在本机 Windows 凭据管理器中，换电脑后需要重新配置。从游戏库移除条目只会改变列表，不会删除游戏、存档或备份。
+
+## 使用前知道这些就好
+
+- GalGear 管理的是已经安装好的本地 EXE 游戏，不提供游戏本体，也不负责光盘镜像挂载或安装。
+- 存档识别并不覆盖所有引擎，第一次备份前请检查位置。Locale Emulator、Magpie 和部分补丁格式的实际效果，也取决于游戏与本机环境。
+- 资源下载目前一次处理一个任务，暂不支持断点续传。
+- 私有仓库的更新请手动去 [Releases](https://github.com/CbShuiMu/GalGear/releases) 下载，应用内更新检查还不支持私有仓库认证。
+
+遇到问题，可以在 [Issues](https://github.com/CbShuiMu/GalGear/issues) 留下软件版本、出错步骤和报错信息。涉及存档或账号时，请先去掉个人信息。
+
+<details>
+<summary>想试开发版？从源码运行或构建</summary>
+
+需要 Windows x64、支持 Rust 2024 edition 的 Rust 工具链、Visual Studio C++ Build Tools / Windows SDK，以及 WebView2 Runtime。AI 功能还需要 Python 3；打包时需要 PyInstaller。前端使用 Rust / WebAssembly，日常运行和独立 EXE 构建不需要 Node.js。
+
+```powershell
+git clone --branch develop https://github.com/CbShuiMu/GalGear.git
+cd GalGear
+
+# 准备 WASM 编译目标及配套工具
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1
+
+# 编译前端并运行
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1
+```
+
+构建可分发的程序：
+
+```powershell
+python -m pip install pyinstaller
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
+```
+
+输出在 `artifacts/`，包括 `GalGear.exe`、`skills/` 和 `tools/`。请保留这个目录结构，AI 功能会使用随附的运行文件。
+
+代码检查：
 
 ```powershell
 cargo test --workspace --locked
@@ -141,36 +146,8 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy -p galgear-ui --target wasm32-unknown-unknown --locked -- -D warnings
 ```
 
-### 项目结构
+开发资料：[模块结构](docs/architecture.md) · [数据源接入](docs/interface-and-data-sources-2026-10-14.md) · [需求记录](docs/requirements.md)
 
-```text
-crates/core/    扫描、资料来源、收藏夹、运行检测、存档快照与补丁事务
-crates/ui/      Rust/WASM 页面、状态与交互
-crates/i18n/    中日英文本资源与结构化消息
-src-tauri/     桌面窗口、原生对话框、进程启动与 IPC
-web/           样式、站点图标与 DOM / IPC 桥接
-scripts/       环境准备、开发及构建脚本
-assets/readme/ README 界面截图
-docs/          需求、设计、实现记录与验收清单
-```
+</details>
 
-三语文本集中在 `crates/i18n/locales.json`。`dist/`、`target/`、`tools/` 和 `artifacts/` 为本地生成内容，不随源码提交；引擎实验与游戏素材位于本地 `analysis/`，也不随源码上传。
-
-## 当前限制
-
-- 当前只管理已安装的 EXE 游戏；不提供光盘挂载、镜像安装或内置 CG / 回想解锁。
-- 下载采用单任务模式；持久化队列、断点续传、下载历史、不同版本关联和作品分组暂缓。
-- 存档识别有引擎与搜索范围限制。复杂搬迁冲突、补丁历史目标重新绑定和异常退出后的下载临时文件清理仍需完善。
-- RAR 实包、安装器、Windows 10、真实游戏退出备份，以及 Locale Emulator / Magpie 的实际效果尚需进一步验收。
-- 更新检查读取 GitHub Releases 的公开 API。当前仓库为私有库，应用内尚未提供 GitHub 私有仓库认证；请登录有访问权限的 GitHub 账号，手动前往 [Releases](https://github.com/CbShuiMu/GalGear/releases) 下载。
-
-## 项目文档
-
-- [v0.1.0 发布说明](docs/releases/v0.1.0.md)：下载文件、本次验证与已知限制。
-- [需求基线](docs/requirements.md)：产品范围与已确认需求。
-- [游戏页与收藏夹设计](docs/library-page-design.md)：列表、层级及批量操作。
-- [界面与数据源实现](docs/interface-and-data-sources-2026-10-14.md)：详情配置、备份编号与四个资料来源。
-- [主题与按钮样式](docs/appearance-themes.md)：粉色／白粉主题色、亮暗模式及半透明效果。
-- [实现与验证记录](docs/implementation-status.md)：历史实现证据，需结合各记录日期阅读。
-- [发布验收清单](docs/release-checklist.md)：验收目标及待补场景，历史条目可能落后于后续实现。
-- [领域术语](GLOSSARY.md)：项目中的核心概念。
+GalGear 使用 [MIT 许可证](LICENSE)。第三方工具、图标和资料遵循各自的许可与使用条款。

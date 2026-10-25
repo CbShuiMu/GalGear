@@ -1,5 +1,5 @@
 //! Data source settings expose status, never stored secrets, to the UI.
-use super::{AppState, features};
+use crate::{preferences, state::AppState};
 use galgear_core::{
     Settings, credentials,
     data_sources::{self, Credentials, SourceStatus},
@@ -59,7 +59,7 @@ pub fn clear_data_source(
 #[tauri::command]
 pub fn set_data_source(source: String, state: State<'_, AppState>) -> Result<Settings, Message> {
     data_sources::validate_source(&source)?;
-    features::update(&state, |settings| {
+    preferences::update(&state, |settings| {
         settings.metadata_provider = source;
         Ok(())
     })

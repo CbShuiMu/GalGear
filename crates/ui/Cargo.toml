@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 serde.workspace = true
 serde_json.workspace = true
 galgear-i18n.workspace = true
+galgear-tags.workspace = true
 wasm-bindgen = "=0.2.127"
 time = "0.3"
 

@@ -1,18 +1,24 @@
 //! Section navigation keeps each settings task in its own reading pane.
-use super::*;
+use crate::{
+    accounts, ai, choices, cloud, downloads, features, requests::Pending, state::App,
+    view::account_label, view::f, view::t, widgets::button, widgets::esc, widgets::icon,
+};
+use galgear_i18n::Language;
+use serde::Deserialize;
+use std::fmt::Write;
 
-pub(super) const SOURCES: [(&str, &str); 4] = [
+pub(crate) const SOURCES: [(&str, &str); 4] = [
     ("2dfan", "2DFan"),
     ("vndb", "VNDB"),
     ("bangumi", "Bangumi"),
     ("ymgal", "月幕 Galgame"),
 ];
 #[derive(Clone, Default, Deserialize)]
-pub(super) struct SourceStatus {
+pub(crate) struct SourceStatus {
     pub source: String,
     pub configured: bool,
 }
-pub(super) fn source_for_url(url: &str) -> (&'static str, &'static str) {
+pub(crate) fn source_for_url(url: &str) -> (&'static str, &'static str) {
     let source = if url.starts_with("https://vndb.org/") {
         "vndb"
     } else if url.starts_with("https://bgm.tv/") || url.starts_with("https://bangumi.tv/") {
@@ -28,7 +34,7 @@ pub(super) fn source_for_url(url: &str) -> (&'static str, &'static str) {
         .unwrap_or(SOURCES[0])
 }
 
-pub(super) fn render(html: &mut String, app: &App) {
+pub(crate) fn render(html: &mut String, app: &App) {
     write!(
         html,
         r#"<div class="preferences-workspace"><nav class="preferences-nav" aria-label="{}">"#,
@@ -37,6 +43,8 @@ pub(super) fn render(html: &mut String, app: &App) {
     .unwrap();
     for (section, key) in [
         ("account", "settings.section_account"),
+        ("ai", "settings.section_ai"),
+        ("cloud", "settings.section_cloud"),
         ("library", "settings.section_library"),
         ("display", "settings.section_display"),
         ("system", "settings.section_system"),
@@ -46,6 +54,8 @@ pub(super) fn render(html: &mut String, app: &App) {
         write!(html,r#"<button class="preference-tab {}" data-action="settings-section" data-value="{}" aria-current="{}">{}</button>"#,if app.settings_section==section{"active"}else{""},section,if app.settings_section==section{"page"}else{"false"},t(app,key)).unwrap();
     }
     let section_label = match app.settings_section.as_str() {
+        "ai" => "settings.section_ai",
+        "cloud" => "settings.section_cloud",
         "library" => "settings.section_library",
         "display" => "settings.section_display",
         "system" => "settings.section_system",
@@ -60,6 +70,8 @@ pub(super) fn render(html: &mut String, app: &App) {
     )
     .unwrap();
     match app.settings_section.as_str() {
+        "ai" => ai::render(html, app),
+        "cloud" => cloud::render(html, app),
         "library" => library(html, app),
         "display" => display(html, app),
         "system" => system(html, app),
@@ -82,7 +94,10 @@ fn option(
     disabled: bool,
 ) {
     write!(html,r#"<button type="button" class="segment" data-action="{}" data-value="{}" aria-pressed="{}" tabindex="{}" {}>"#,esc(action),esc(value),selected,if selected{"0"}else{"-1"},if disabled{"disabled"}else{""}).unwrap();
-    if action == "source-default" {
+    if matches!(
+        action,
+        "source-default" | "metadata-provider" | "cover-provider"
+    ) {
         write!(
             html,
             r#"<img class="source-icon" src="assets/{}.ico" alt=""/>"#,
@@ -92,9 +107,22 @@ fn option(
     }
     write!(html, "{}</button>", esc(label)).unwrap();
 }
+pub(crate) fn source_picker(
+    html: &mut String,
+    app: &App,
+    action: &str,
+    selected: &str,
+    disabled: bool,
+) {
+    options_start(html, action, t(app, "sources.default"));
+    for (source, name) in SOURCES {
+        option(html, action, source, name, source == selected, disabled);
+    }
+    html.push_str("</div>");
+}
 fn account(html: &mut String, app: &App) {
-    write!(html,r#"<section class="account-panel"><div class="panel-heading"><h2>{}</h2><span class="connection-status {}">{}</span></div><div class="account-summary"><div><strong>{}</strong><small>{}</small></div><div class="account-balance"><span>{}</span><strong>{}</strong></div></div>"#,t(app,"auth.title"),if app.account.status=="authenticated"{"connected"}else{""},account_label(app),esc(app.account.username.as_deref().unwrap_or(t(app,"auth.account"))),esc(&app.settings.fan_domain),t(app,"auth.points"),app.account.balance.map(|balance|balance.to_string()).unwrap_or_else(||t(app,"auth.unknown").into())).unwrap();
-    if let Some(reason) = &app.account.reason {
+    write!(html,r#"<section class="account-panel"><div class="panel-heading"><h2>{}</h2><span class="connection-status {}">{}</span></div><div class="account-summary"><div><strong>{}</strong><small>{}</small></div><div class="account-balance"><span>{}</span><strong>{}</strong></div></div>"#,t(app,"auth.title"),if app.account.status.status=="authenticated"{"connected"}else{""},account_label(app),esc(app.account.status.username.as_deref().unwrap_or(t(app,"auth.account"))),esc(&app.settings.fan_domain),t(app,"auth.points"),app.account.status.balance.map(|balance|balance.to_string()).unwrap_or_else(||t(app,"auth.unknown").into())).unwrap();
+    if let Some(reason) = &app.account.status.reason {
         write!(
             html,
             "<p class=\"account-notice\" role=\"status\">{}</p>",
@@ -103,14 +131,14 @@ fn account(html: &mut String, app: &App) {
         .unwrap();
     }
     write!(html,r#"<label class="edit-field" for="fan-token"><span>Token</span><input type="password" id="fan-token" data-input="fan-token" value="{}" autocomplete="off" spellcheck="false" placeholder="{}"/></label><details class="session-fields"><summary>{}</summary><p class="field-help">{}</p><label class="edit-field" for="fan-cookie"><span>Cookie</span><input type="password" id="fan-cookie" data-input="fan-cookie" value="{}" autocomplete="off" spellcheck="false" placeholder="_session=…"/></label><label class="edit-field" for="fan-mode"><span>{}</span>{}</label></details><div class="account-actions">{}{}</div><p class="field-help vault-note">{}</p>"#,
-        esc(&app.credentials.token),t(app,"auth.token_placeholder"),t(app,"auth.session"),t(app,"auth.session_help"),esc(&app.credentials.cookie),t(app,"auth.token_type"),{let mut control=String::new();choices::control(&mut control,app,"fan-mode",t(app,"auth.token_type"),app.busy||account_busy(app)||download_busy(app));control},button("save-fan","",t(app,if account_busy(app){"auth.checking"}else{"auth.save_check"}),"save","primary",app.busy||account_busy(app)||download_busy(app)),button("clear-fan","",t(app,"auth.clear"),"close","quiet",app.busy||account_busy(app)||download_busy(app)),t(app,"auth.vault")).unwrap();
+        esc(&app.account.credentials.token),t(app,"auth.token_placeholder"),t(app,"auth.session"),t(app,"auth.session_help"),esc(&app.account.credentials.cookie),t(app,"auth.token_type"),{let mut control=String::new();choices::control(&mut control,app,"fan-mode",t(app,"auth.token_type"),app.busy()||accounts::busy(&app.account, &app.requests)||downloads::busy(&app.requests));control},button("save-fan","",t(app,if accounts::busy(&app.account, &app.requests){"auth.checking"}else{"auth.save_check"}),"save","primary",app.busy()||accounts::busy(&app.account, &app.requests)||downloads::busy(&app.requests)),button("clear-fan","",t(app,"auth.clear"),"close","quiet",app.busy()||accounts::busy(&app.account, &app.requests)||downloads::busy(&app.requests)),t(app,"auth.vault")).unwrap();
     write!(
         html,
         "<p class=\"field-help\">{}</p>",
         t(app, "auth.cache_help")
     )
     .unwrap();
-    if let Some(error) = &app.fan_cache_error {
+    if let Some(error) = &app.account.error {
         write!(
             html,
             "<p class=\"account-notice\">{} {}</p>",
@@ -152,7 +180,7 @@ fn account(html: &mut String, app: &App) {
                 t(app, "auth.save_check"),
                 "save",
                 "primary",
-                app.busy
+                app.busy()
             ),
             button(
                 "source-clear",
@@ -160,7 +188,7 @@ fn account(html: &mut String, app: &App) {
                 t(app, "auth.clear"),
                 "close",
                 "quiet",
-                app.busy
+                app.busy()
             )
         )
         .unwrap();
@@ -180,7 +208,7 @@ fn account(html: &mut String, app: &App) {
             source,
             name,
             app.settings.metadata_provider == source,
-            app.busy,
+            app.busy(),
         );
     }
     html.push_str("</div></section>");
@@ -199,21 +227,21 @@ fn source_field(
     write!(html,r#"<label class="edit-field" for="{}"><span>{}</span><input id="{}" data-input="{}" type="{}" value="{}" autocomplete="off" spellcheck="false" placeholder="{}"/></label>"#,key,label,key,key,if password{"password"}else{"text"},esc(&features::form(app,&key)),t(app,if saved{"sources.keep_saved"}else{"sources.optional"})).unwrap();
 }
 fn library(html: &mut String, app: &App) {
-    write!(html,r#"<section class="settings-card"><div class="panel-heading"><div><h2>{}</h2><p>{}</p></div>{}</div>"#,t(app,"settings.folders"),t(app,"settings.folders_help"),button("choose-folder","",t(app,"settings.add_folder"),"create_new_folder","primary",app.busy)).unwrap();
+    write!(html,r#"<section class="settings-card"><div class="panel-heading"><div><h2>{}</h2><p>{}</p></div>{}</div>"#,t(app,"settings.folders"),t(app,"settings.folders_help"),button("choose-folder","",t(app,"settings.add_folder"),"create_new_folder","primary",app.busy())).unwrap();
     for path in &app.settings.library_folders {
-        write!(html,r#"<div class="folder-row"><span class="folder-symbol">{}</span><div><strong>{}</strong></div>{}</div>"#,icon("folder"),esc(path),button("remove-folder",path,t(app,"settings.remove_folder"),"close","quiet",app.busy)).unwrap();
+        write!(html,r#"<div class="folder-row"><span class="folder-symbol">{}</span><div><strong>{}</strong></div>{}</div>"#,icon("folder"),esc(path),button("remove-folder",path,t(app,"settings.remove_folder"),"close","quiet",app.busy())).unwrap();
     }
     if app.settings.library_folders.is_empty() {
         write!(html, "<p>{}</p>", t(app, "settings.no_folders")).unwrap();
     }
-    write!(html,r#"<div class="path-entry"><input id="library-path" data-input="library-path" value="{}" placeholder="{}" aria-label="{}"/>{}</div></section>"#,esc(&app.path_input),t(app,"settings.path_placeholder"),t(app,"settings.path_label"),button("add-folder","",t(app,"common.add"),"plus","secondary",app.busy)).unwrap();
+    write!(html,r#"<div class="path-entry"><input id="library-path" data-input="library-path" value="{}" placeholder="{}" aria-label="{}"/>{}</div></section>"#,esc(&app.library.path_input),t(app,"settings.path_placeholder"),t(app,"settings.path_label"),button("add-folder","",t(app,"common.add"),"plus","secondary",app.busy())).unwrap();
     html.push_str(&button(
         "excluded-open",
         "",
         t(app, "library.restore"),
         "refresh",
         "secondary",
-        app.busy,
+        app.busy(),
     ));
 }
 fn display(html: &mut String, app: &App) {
@@ -236,7 +264,7 @@ fn display(html: &mut String, app: &App) {
             language.code(),
             t(app, key),
             app.settings.language == language,
-            app.busy,
+            app.busy(),
         );
     }
     write!(
@@ -288,7 +316,7 @@ fn display(html: &mut String, app: &App) {
             &size.to_string(),
             &format!("{size}px"),
             app.settings.font_size == size,
-            app.busy,
+            app.busy(),
         );
     }
     write!(
@@ -332,15 +360,15 @@ fn system(html: &mut String, app: &App) {
                 value,
                 t(app, key),
                 selected == value,
-                app.busy,
+                app.busy(),
             );
         }
         html.push_str("</div></div>");
     }
-    write!(html,r#"</section><section class="settings-card"><h2>{}</h2><p>{}</p><div class="preference-row"><h3>{}</h3><button id="patch-tab-toggle" class="preference-switch" role="switch" aria-label="{}" aria-checked="{}" data-action="patch-tab" data-value="{}" {}><span></span></button></div></section>"#,t(app,"settings.navigation"),t(app,"settings.navigation_help"),t(app,"nav.patches"),t(app,"settings.patch_tab"),app.settings.show_patches,!app.settings.show_patches,if app.busy{"disabled"}else{""}).unwrap();
+    write!(html,r#"</section><section class="settings-card"><h2>{}</h2><p>{}</p><div class="preference-row"><h3>{}</h3><button id="patch-tab-toggle" class="preference-switch" role="switch" aria-label="{}" aria-checked="{}" data-action="patch-tab" data-value="{}" {}><span></span></button></div></section>"#,t(app,"settings.navigation"),t(app,"settings.navigation_help"),t(app,"nav.patches"),t(app,"settings.patch_tab"),app.settings.show_patches,!app.settings.show_patches,if app.busy(){"disabled"}else{""}).unwrap();
 }
 fn paths(html: &mut String, app: &App) {
-    write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>{}</h2><div class="settings-card-actions">{}{}</div></div><p class="directory-value">{}</p></section><section class="settings-card"><div class="panel-heading"><h2>{}</h2>{}</div><div class="edit-grid">"#,t(app,"download.folder"),button("open-downloads","",t(app,"download.open_folder"),"folder_open","quiet",app.busy),button("download-folder","",t(app,"download.change_folder"),"edit","quiet",app.busy),esc(&download_folder(app)),t(app,"tools.title"),button("configure-tools","",t(app,"common.save"),"save","primary",app.busy)).unwrap();
+    write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>{}</h2><div class="settings-card-actions">{}{}</div></div><p class="directory-value">{}</p></section><section class="settings-card"><div class="panel-heading"><h2>{}</h2>{}</div><div class="edit-grid">"#,t(app,"download.folder"),button("open-downloads","",t(app,"download.open_folder"),"folder_open","quiet",app.busy()),button("download-folder","",t(app,"download.change_folder"),"edit","quiet",app.busy()),esc(&downloads::folder(&app.config_path, &app.settings)),t(app,"tools.title"),button("configure-tools","",t(app,"common.save"),"save","primary",app.busy())).unwrap();
     for (key, label, fallback) in [
         (
             "tool-locale",
@@ -354,11 +382,6 @@ fn paths(html: &mut String, app: &App) {
             app.settings.magpie_hotkey.clone(),
         ),
         (
-            "backup-folder",
-            "backup.folder",
-            app.settings.backup_folder.clone(),
-        ),
-        (
             "backup-retention",
             "backup.retention",
             app.settings.backup_retention.to_string(),
@@ -368,7 +391,8 @@ fn paths(html: &mut String, app: &App) {
     }
     write!(
         html,
-        "</div><p>{}</p></section><p class=\"config-note\">{}<br>{}</p>",
+        "</div><p>{}</p><p>{}</p></section><p class=\"config-note\">{}<br>{}</p>",
+        t(app, "backup.location_help"),
         t(app, "tools.help"),
         t(app, "settings.config_path"),
         esc(&app.config_path)
@@ -387,7 +411,7 @@ fn about(html: &mut String, app: &App) {
             t(app, "common.save"),
             "save",
             "secondary",
-            app.busy
+            app.busy()
         ),
         button(
             "check-update",
@@ -395,7 +419,7 @@ fn about(html: &mut String, app: &App) {
             t(app, "settings.check_update"),
             "update",
             "quiet",
-            app.busy
+            app.busy()
         )
     )
     .unwrap();
@@ -410,7 +434,7 @@ fn about(html: &mut String, app: &App) {
                 t(app, "settings.download"),
                 "arrow",
                 "secondary",
-                app.busy
+                app.busy()
             )
         )
         .unwrap();

@@ -19,6 +19,76 @@ use std::{
 };
 
 pub const SOURCES: [&str; 4] = ["2dfan", "vndb", "bangumi", "ymgal"];
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Cover {
+    pub title: String,
+    pub url: String,
+    pub image_url: String,
+    pub thumbnail_url: String,
+}
+
+fn add_cover(covers: &mut Vec<Cover>, title: &str, url: &str, image: &Value) {
+    let Some(image_url) = image["url"].as_str().filter(|url| !url.is_empty()) else {
+        return;
+    };
+    if covers.iter().any(|cover| cover.image_url == image_url) {
+        return;
+    }
+    covers.push(Cover {
+        title: title.into(),
+        url: url.into(),
+        image_url: image_url.into(),
+        thumbnail_url: image["thumbnail"]
+            .as_str()
+            .filter(|url| !url.is_empty())
+            .unwrap_or(image_url)
+            .into(),
+    });
+}
+
+fn add_release_covers(covers: &mut Vec<Cover>, value: &Value, url: &str, vn_id: &str) {
+    for release in value["results"].as_array().into_iter().flatten() {
+        for image in release["images"].as_array().into_iter().flatten() {
+            if matches!(image["type"].as_str(), Some("pkgfront" | "dig"))
+                && image["vn"].as_str().is_none_or(|id| id == vn_id)
+            {
+                add_cover(covers, &text(release, "title"), url, image);
+            }
+        }
+    }
+}
+
+/// Available front and digital covers for one associated work, without changing its metadata.
+pub fn covers(domain: &str, url: &str, credentials: &Credentials) -> Result<Vec<Cover>, Message> {
+    let (source, id) = source_for_url(url)?;
+    if source != "vndb" {
+        let metadata = metadata(domain, url, credentials)?;
+        let mut covers = Vec::new();
+        if let Some(image_url) = metadata.cover_url {
+            add_cover(&mut covers, &metadata.title, url, &json!({"url":image_url}));
+        }
+        return Ok(covers);
+    }
+    let client = providers::client()?;
+    let vn_id = format!("v{id}");
+    let value = request_json(auth(client.post("https://api.vndb.org/kana/vn"), source, credentials)
+        .json(&json!({"filters":["id","=",vn_id],"fields":"title,image.url,image.thumbnail","results":1})))?;
+    let mut covers = Vec::new();
+    if let Some(vn) = value["results"].as_array().and_then(|rows| rows.first()) {
+        add_cover(&mut covers, &text(vn, "title"), url, &vn["image"]);
+    }
+    // Release images include packaging backs and discs; offer only usable front covers.
+    for page in 1..=3 {
+        let value = request_json(auth(client.post("https://api.vndb.org/kana/release"), source, credentials)
+            .json(&json!({"filters":["vn","=",["id","=",vn_id]],"fields":"title,images.url,images.thumbnail,images.type,images.vn","results":100,"page":page})))?;
+        add_release_covers(&mut covers, &value, url, &vn_id);
+        if value["more"] != true {
+            break;
+        }
+    }
+    Ok(covers)
+}
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Credentials {
@@ -469,6 +539,7 @@ pub fn parse_vndb(value: &Value, url: &str) -> Result<Metadata, Message> {
         .filter_map(|tag| tag["name"].as_str().map(str::to_owned))
         .collect();
     for staff in vn["staff"].as_array().into_iter().flatten() {
+        meta.tags.push(text(staff, "name"));
         add_credit(
             &mut meta,
             &text(staff, "role"),
@@ -536,6 +607,7 @@ pub fn parse_ymgal(value: &Value, url: &str) -> Result<Metadata, Message> {
         ..Default::default()
     };
     for staff in game["staff"].as_array().into_iter().flatten() {
+        meta.tags.push(text(staff, "emp_name"));
         let link = numeric_id(&staff["pid"])
             .map(|id| format!("https://www.ymgal.games/pa{id}"))
             .unwrap_or_default();
@@ -582,6 +654,7 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
                 credentials,
             ))?;
             for person in people.as_array().into_iter().flatten() {
+                meta.tags.push(text(person, "name"));
                 add_credit(
                     &mut meta,
                     &text(person, "relation"),
@@ -616,6 +689,26 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
 mod tests {
     use super::*;
     #[test]
+    fn release_covers_deduplicate_images_and_exclude_backs_and_other_bundle_games() {
+        let value = json!({"results":[{"title":"Release", "images":[
+            {"url":"front.jpg","thumbnail":"thumb.jpg","type":"pkgfront","vn":null},
+            {"url":"front.jpg","type":"dig","vn":"v17"},
+            {"url":"back.jpg","type":"pkgback","vn":null},
+            {"url":"other.jpg","type":"pkgfront","vn":"v18"},
+            {"url":"digital.jpg","type":"dig","vn":"v17"}
+        ]}]});
+        let mut covers = Vec::new();
+        add_release_covers(&mut covers, &value, "https://vndb.org/v17", "v17");
+        assert_eq!(
+            covers
+                .iter()
+                .map(|cover| (cover.image_url.as_str(), cover.thumbnail_url.as_str()))
+                .collect::<Vec<_>>(),
+            vec![("front.jpg", "thumb.jpg"), ("digital.jpg", "digital.jpg")]
+        );
+    }
+
+    #[test]
     fn provider_urls_reject_confusable_hosts_paths_and_credentials() {
         for url in [
             "https://vndb.org.evil.test/v1",
@@ -645,5 +738,17 @@ mod tests {
         let meta = parse_ymgal(&value, "https://www.ymgal.games/ga1").unwrap();
         assert_eq!(meta.writers, "Writer");
         assert_eq!(meta.voices, "Voice");
+    }
+    #[test]
+    fn staff_with_other_roles_are_still_imported_as_tags() {
+        let value = json!({"results":[{"title":"Game","developers":[{"name":"Studio"}],"tags":[{"name":"ADV","spoiler":0}],"staff":[{"name":"Director","role":"director"},{"name":"Alice Smith","role":"scenario"}]}]});
+        let meta = parse_vndb(&value, "https://vndb.org/v1").unwrap();
+        assert_eq!(
+            meta.tag_names(),
+            vec!["ADV", "Director", "Alice Smith", "Studio"]
+        );
+        let value = json!({"game":{"gid":"1","name":"Game","staff":[{"emp_name":"Producer","job_name":"制作总指挥"}]}});
+        let meta = parse_ymgal(&value, "https://www.ymgal.games/ga1").unwrap();
+        assert_eq!(meta.tag_names(), vec!["Producer"]);
     }
 }

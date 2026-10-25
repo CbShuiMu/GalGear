@@ -10,3 +10,11 @@ The site artwork belongs to its respective owner.
 
 VNDB、Bangumi、月幕 Galgame 的图标来自各自官方网站 favicon，用于显示资料来源。
 
+AI provider logos added on 2026-10-19 from the MIT-licensed Lobe Icons library:
+
+- `openai.svg`: https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/openai.svg
+- `deepseek.svg`: https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/deepseek-color.svg
+- Library license: https://github.com/lobehub/lobe-icons/blob/master/LICENSE
+
+Provider names and logos belong to their respective owners.
+
