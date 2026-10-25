@@ -4,7 +4,7 @@
 
 # GalGear
 
-**找游戏、开游戏，也照顾好你的存档。**
+**GalGame游戏管理器，转区超分，补丁搜索管理**
 
 Windows x64 · 简体中文 / 日本語 / English
 
@@ -18,20 +18,21 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 <p align="center"><sub>游戏库界面。截图来自 v0.1.0，使用演示条目和占位封面。</sub></p>
 
-> 这份说明对应正在开发的 `develop` 分支。目前可下载的发行版是 **v0.1.0（2026-10-15）**；下文的游玩时长、WebDAV 云备份、AI 前情提要和路线图等新功能，需要从当前源码构建。
+> 这份说明对应正在开发的 `develop` 分支。目前可下载的发行版是 **v0.2.0（2026-10-15）**；
+> 新增下文的游玩时长、WebDAV 云备份、AI 前情提要和路线图等新功能
 
 ## 开始使用
 
 前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
 
-- **安装版**：下载 `GalGear_0.1.0_x64-setup.exe`，按提示安装。
-- **便携版**：下载 `GalGear-0.1.0-win64-portable.zip`，解压后运行 `GalGear.exe`。
+- **安装版**：下载 `GalGear_0.2.0_x64-setup.exe`，按提示安装。
+- **便携版**：下载 `GalGear-0.2.0-win64-portable.zip`，解压后运行 `GalGear.exe`。
 
 需要 Microsoft Edge WebView2 Runtime。目标系统为 Windows 10 / 11，Windows 10 还没有完成实机验证。仓库目前为私有，下载时需要登录有访问权限的 GitHub 账号。
 
 第一次打开，可以按这个顺序来：
 
-1. 点击游戏库右上角的 **添加**，选择放游戏的文件夹；也可以手动添加某个游戏的 EXE。
+1. 点击游戏库右上角的 **添加**，选择放游戏的文件夹；也可以手动添加某个Galgame的 EXE。
 2. 扫描后，在确认窗口里为游戏选好资料来源、对应作品和启动程序。可以先保存已经确认的几款，其余稍后再处理。
 3. 打开游戏详情，检查启动配置，点击启动。需要转区或超分时，再配置 Locale Emulator 或 Magpie。
 4. 找到存档位置并确认，做一份备份。以后换补丁、换电脑或重玩，都方便一些。
@@ -40,17 +41,19 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 ## 能做些什么
 
-### 游戏多了，也能找得到
+### Galgame管理
 
 游戏可以放在不同目录，不必为了使用 GalGear 重新搬家。支持按名称搜索、组合标签筛选和排序，也可以用多层收藏夹整理正在玩、想玩或已经通关的作品。一款游戏能放进多个收藏夹，支持拖放和批量整理。
 
 开发版会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游戏进程的检测，玩游戏时请保持 GalGear 运行。
 
-### 补齐资料，换一张喜欢的封面
+### 自动刮削来自多个数据源
 
-作品资料可从 **2DFan、VNDB、Bangumi、月幕 Galgame** 中选择，每款游戏可以使用不同来源。简介、制作组、制作人员和标签会保存在本地，也可以自己修改。
+作品资料可从 **2DFan、VNDB、Bangumi、月幕 Galgame、KunGal** 中选择，每款游戏可以使用不同来源。简介、制作组、制作人员和标签会保存在本地，也可以自己修改。
 
-封面可以单独按名称搜索、换来源挑选，或使用本地图片，不影响已经关联的作品资料。点击详情里的标签、制作组或制作人员，就能回到游戏库找相关作品。已经缓存的资料和本地游戏库可以离线浏览。
+封面可以单独按名称搜索、换来源挑选，或使用本地图片，不影响已经关联的作品资料。点击详情里的标签、制作组或制作人员，就能回到游戏库找相关作品。已经缓存的资料和本地游戏库可以离线浏览。  
+
+**感谢以上提到的平台。**
 
 <details>
 <summary>看看游戏详情和主题设置</summary>
@@ -65,17 +68,21 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 </details>
 
-### 给存档留个后路
+### 云上存档/存档管理
 
-GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，也允许手动指定。确认位置后，可以备份多个存档目录、给备份写备注，或锁定一份不想被自动清理的记录。也可以按游戏开启退出后的自动备份。
+GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，也允许手动指定。  
+
+确认位置后，可以备份多个存档目录、给备份写备注，或锁定一份不想被自动清理的记录。也可以按游戏开启退出后的自动备份。
 
 恢复前会先展示预览，并备份当前存档。游戏正在运行时，请先退出再恢复或应用补丁。
 
-开发版还支持 **WebDAV 云备份**：在“设置 → 云存储”里填好连接，便能手动上传存档，或把云端备份下载到本地历史，再选择恢复。换电脑时，两边使用相同的游戏标题；有多个存档位置的，确认顺序也要一致。连接示例和具体步骤见 [云存储说明](docs/cloud-storage.md)。
+新版还支持 **WebDAV 云备份**：在“设置 → 云存储”里填好连接，便能手动上传存档，或把云端备份下载到本地历史，再选择恢复。换电脑时，两边使用相同的游戏标题；有多个存档位置的，确认顺序也要一致。连接示例和具体步骤见 [云存储说明](docs/cloud-storage.md)。
 
 云备份需要自己点击上传和下载，目前没有后台自动同步。
 
-### 补丁放在一起，安装前先看一眼
+
+
+### 补丁搜索与管理
 
 可以搜索 **2DFan、鲲 Gal** 的补丁资源，查看原站说明，下载网站提供的可用直链；也可以直接导入本地补丁。需要登录或付费的资源，仍受原站账号和权限限制。
 
@@ -83,7 +90,9 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 已经解压的补丁，可以放进游戏目录的 `patch/` 下，每个补丁单独一个子文件夹。开发版会在详情页列出它们，方便安装或切换，不用每次手动复制。
 
-### 隔了一阵子回来，接上剧情
+
+
+### AI驱动剧情（测试中）
 
 开发版提供可选的 **AI 前情提要**。在“设置 → AI”配置 DeepSeek 或 OpenAI 的 API Token 和模型，再到游戏的编辑配置里开启 **AI 分析**。首次准备可能需要一些时间，完成后可以在详情页查看前情提要和当前进度。
 
@@ -91,7 +100,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 这部分还在实验中，能否读取存档和脚本取决于具体游戏，无法保证每款都能用，生成的总结和路线也可能有误。启用时，分析所需的游戏台词、存档信息和作品资料会发给相应的 AI 服务，调用费用由你的 API 账号承担。更详细的用法见 [AI 设置](docs/ai-settings.md) 和 [前情提要说明](docs/ai-summary.md)。
 
-## 数据放在哪里
+## 数据存放位置
 
 | 内容 | 保存位置 |
 | --- | --- |
@@ -102,51 +111,37 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 便携版迁移时，一起带上程序目录和 `data/`；游戏目录里的备份也要保留。当前源码构建出的程序还附带 `skills/` 和 `tools/`，使用 AI 功能时请一起移动。
 
-账号 Token、Cookie 和云存储密码保存在本机 Windows 凭据管理器中，换电脑后需要重新配置。从游戏库移除条目只会改变列表，不会删除游戏、存档或备份。
+账号 Token、Cookie 和云存储密码保存在本机 Windows 凭据管理器中，换电脑后需要重新配置。从游戏库移除条目只会改变列表，不会删除游戏、存档或备份。（2Dfan需自行抓取Token以及Cookie）
 
-## 使用前知道这些就好
+
+
+## 使用须知
 
 - GalGear 管理的是已经安装好的本地 EXE 游戏，不提供游戏本体，也不负责光盘镜像挂载或安装。
-- 存档识别并不覆盖所有引擎，第一次备份前请检查位置。Locale Emulator、Magpie 和部分补丁格式的实际效果，也取决于游戏与本机环境。
+- 存档识别并不覆盖所有引擎，第一次备份前请检查位置。Locale Emulator、Magpie 需要自行在设置-路径与备份中配置路径，也取决于游戏与本机环境。
 - 资源下载目前一次处理一个任务，暂不支持断点续传。
-- 私有仓库的更新请手动去 [Releases](https://github.com/CbShuiMu/GalGear/releases) 下载，应用内更新检查还不支持私有仓库认证。
 
 遇到问题，可以在 [Issues](https://github.com/CbShuiMu/GalGear/issues) 留下软件版本、出错步骤和报错信息。涉及存档或账号时，请先去掉个人信息。
 
-<details>
-<summary>想试开发版？从源码运行或构建</summary>
-
-需要 Windows x64、支持 Rust 2024 edition 的 Rust 工具链、Visual Studio C++ Build Tools / Windows SDK，以及 WebView2 Runtime。AI 功能还需要 Python 3；打包时需要 PyInstaller。前端使用 Rust / WebAssembly，日常运行和独立 EXE 构建不需要 Node.js。
-
-```powershell
-git clone --branch develop https://github.com/CbShuiMu/GalGear.git
-cd GalGear
-
-# 准备 WASM 编译目标及配套工具
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1
-
-# 编译前端并运行
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1
-```
-
-构建可分发的程序：
-
-```powershell
-python -m pip install pyinstaller
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
-```
-
-输出在 `artifacts/`，包括 `GalGear.exe`、`skills/` 和 `tools/`。请保留这个目录结构，AI 功能会使用随附的运行文件。
-
-代码检查：
-
-```powershell
-cargo test --workspace --locked
-cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo clippy -p galgear-ui --target wasm32-unknown-unknown --locked -- -D warnings
-```
-
 开发资料：[模块结构](docs/architecture.md) · [数据源接入](docs/interface-and-data-sources-2026-10-14.md) · [需求记录](docs/requirements.md)
+
+
+
+## 更新记录
+
+
+
+### v0.2.0
+
+AI功能（测试中）：AI前情提要以及AI路线图，AI路线图涉及剧情，介意请勿开启。AI功能开启平均耗时为几十分钟，Deepseek API 平均花费2元。功能开启后AI路线图与AI前情提要每次使用仅花费0.1元左右  
+云存档：支持WebDAV协议的云备份  
+
+自动刮削：加入**VNDB、Bangumi，月幕Galgame**，需在设置-数据源中自行配置。
+
+### v0.1.0
+
+主题切换：暗色模式  
+补丁搜索：补丁tab可设置-系统中关闭，补丁搜索可从游戏库中选取后搜索**2Dfan、KunGal**平台的补丁  
 
 </details>
 

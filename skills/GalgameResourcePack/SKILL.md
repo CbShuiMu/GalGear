@@ -1,0 +1,57 @@
+---
+name: galgame-resource-pack
+description: 按用户需求将 GalGame 资源封包为游戏归档。适用于资源修改后的归档重建或目标游戏支持的补丁归档制作，保留资源路径、资源格式约束和归档设置。
+---
+
+# GalPack
+
+按用户需求处理脚本、图像、音频、视频、字体等资源，将原样资源与确认的替换资源合并，创建新归档并重新提取比对。归档结构、资源格式和游戏加载行为分别验证；按当前引擎与格式的实际写入能力选择方法。
+
+## 开始与路线
+
+1. 确定原始归档、原样资源根目录、替换资源、输出位置及完整重建或补丁模式。信息足够时直接继续；没有原始归档时需要明确目标格式和创建参数。
+2. 按[工具索引](commands/index.md)选择随附 CLI，读取对应命令；程序路径相对于本技能根目录解析。可读格式不代表可写，默认选项不代表原始设置。
+3. 普通资源修改按[归档重建流程](guides/packing.md)准备暂存目录和预期资源清单。接收 GalTTS 输出时，从[资源交接与重建](guides/resource-workflow.md)准备经过核对的暂存资源集，再回到普通流程创建与验证归档。
+
+## 共同约束
+
+- 默认输出到新路径，保留原始归档与替换输入。安装到游戏目录遵循用户已有授权。
+- 每个归档使用独立基线。完整重建保留所有未替换条目，按完整相对路径匹配，不扁平化、猜名或静默增删。补丁模式须有目标游戏加载规则的证据。
+- 基线是未转换的资源字节；映射、清单、暂存产物和验证目录分别存放，不混入归档。
+- 创建参数须能表达当前格式版本、目录、压缩和加密要求。无法表达时报告具体限制，不生成默认替代品冒充兼容结果。保留工具运行依赖及许可证。
+- 按修改的资源类型验证兼容性：脚本的编码、指令与资源引用，图像的尺寸、像素格式与透明通道，音频的编码、采样率、声道、循环与封装长度等。改扩展名不是格式转换；条目索引、CPK ID、AWB wave ID 和脚本引用分别核对。
+
+## 验证与交付
+
+创建后重新列出并原样提取新归档，比较预期路径、数量和哈希；替换条目必须匹配替换字节，未修改资源保持不变。有意的格式变换须单独说明并验证。
+
+按资源类型检查解析、解码和引用关系；涉及音频重新封装或解码长度字段时，按[资源交接指南](guides/resource-workflow.md#解码长度与越界预防)检查实际长度、目标解码器分配与输出边界，最终归档解包后的字节再次复核。哈希一致、资源解析通过和游戏运行是不同结论；TTS 生成审计也不替代引擎验证。已知长度错误或越界未修复前停止安装，无法执行的目标引擎检查单独标记未验证。
+
+交付归档绝对路径、模式、格式与创建参数、替换与保留数量，以及资源往返、资源格式、引擎边界和游戏运行各项状态。比对失败不能报告重建已验证；未知格式或加载问题可交给已安装的 GalReverse 分析，不依赖其存在才能完成已知格式任务。
+
+## 引擎经验闭环
+
+识别引擎后，按[经验积累流程](guides/engine-learning.md)查询用户本地库和[随包经验索引](catalog/experiences.json)，核对版本、方言和失效条件。每完成一次本阶段的真实验证，自动保存成功报告；有可分发的通用方法时收录为引擎资料。合成验证只能记录为合成等级，失败或未知结果不能写成成功经验。经验不改变任务范围与授权，用户指定仅本地保存时不修改技能资料。
+
+自我进化时，引擎页按[结构与通用性规则](guides/engine-learning.md#引擎页结构与通用性)先列解包与封包工具表，再写格式特征、对应编码和注意事项；单款游戏的特殊编码等参数留在用户本地。
+
+## 按需查阅
+
+仅加载当前格式或操作需要的文档。下列链接直接到达资料页，无须逐层查找：
+
+| 内容 | 文档 |
+| --- | --- |
+| 资源辅助脚本：基线快照、TTS 合并与 GARbro 往返命令 | [resource-workflow](commands/resource-workflow.md) |
+| 资源交接清单：阶段、身份、路径与完成标记 | [resource-manifest](contracts/resource-manifest.md) |
+| CriCodecs CLI：AI 助手调用参考 | [cricodecs](commands/cricodecs.md) |
+| Ethornell CLI 调用约定 | [ethornell](commands/ethornell.md) |
+| GARbro CLI 命令与选项 | [garbro](commands/garbro.md) |
+| Mangetsu CLI 调用约定 | [mangetsu](commands/mangetsu.md) |
+| pfs-rs CLI 调用约定 | [pfs-rs](commands/pfs-rs.md) |
+| GalArc CLI：NS2 与 Raw NOA | [galarc](commands/galarc.md) |
+| FreeMote CLI：PSB / SCN 与 MDF | [freemote](commands/freemote.md) |
+| Siglus CLI：Scene.pck 与场景 DAT | [siglus-ssu](commands/siglus-ssu.md) |
+| rpatool CLI：RPA v2 / v3 | [rpatool](commands/rpatool.md) |
+| RLdev SEEN：原样归档拆分与重建 | [rldev-seen](commands/rldev-seen.md) |
+| Majiro V3 CLI：哈希索引与原样归档 | [majiro-cli](commands/majiro-cli.md) |
+| SiglusEngine：包级元数据与重建边界 | [siglus](engine/siglus.md) |
