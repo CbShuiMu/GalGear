@@ -1,13 +1,18 @@
+pub mod ai;
+pub mod ai_summary;
 pub mod auto_unlock;
 pub mod catalog;
+pub mod cloud;
 pub mod collections;
 pub mod config;
 pub mod credentials;
 pub mod data_sources;
 pub mod fan_account;
 pub mod game_details;
+pub mod game_setup;
 pub mod launcher_icons;
 pub mod patches;
+pub mod playtime;
 pub mod providers;
 pub mod runtime;
 pub mod saves;
@@ -45,8 +50,10 @@ pub struct Settings {
     pub dialog_directories: BTreeMap<String, String>,
     pub cover_scale: u32,
     pub font_size: u32,
+    /// Legacy shared directory, retained only to migrate existing snapshots.
     pub backup_folder: String,
     pub backup_retention: usize,
+    pub cloud: cloud::CloudSettings,
     pub locale_emulator: String,
     pub magpie: String,
     pub magpie_hotkey: String,
@@ -54,6 +61,8 @@ pub struct Settings {
     pub color_theme: String,
     pub show_patches: bool,
     pub metadata_provider: String,
+    pub ai_models: BTreeMap<String, String>,
+    pub ai_provider: String,
 }
 
 impl Default for Settings {
@@ -83,6 +92,7 @@ impl Default for Settings {
             font_size: 16,
             backup_folder: String::new(),
             backup_retention: 10,
+            cloud: cloud::CloudSettings::default(),
             locale_emulator: String::new(),
             magpie: String::new(),
             magpie_hotkey: "Ctrl+Alt+A".into(),
@@ -90,6 +100,8 @@ impl Default for Settings {
             color_theme: "pink".into(),
             show_patches: true,
             metadata_provider: "2dfan".into(),
+            ai_models: BTreeMap::new(),
+            ai_provider: "deepseek".into(),
         }
     }
 }
@@ -97,8 +109,14 @@ impl Default for Settings {
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct GameEdit {
+    pub metadata_provider: String,
+    pub setup_pending: bool,
+    pub setup_confirmed: bool,
     pub title: Option<String>,
     pub tags: Vec<String>,
+    pub source_tags: Option<Vec<String>>,
+    pub summary_brand: Option<String>,
+    pub summary_release_date: Option<String>,
     pub executable: Option<String>,
     pub arguments: Vec<String>,
     pub working_directory: Option<String>,
@@ -113,6 +131,7 @@ pub struct GameEdit {
     pub launch_mode: String,
     pub locale_profile: String,
     pub upscale: bool,
+    pub ai_summary: bool,
     pub play_status: PlayStatus,
 }
 
@@ -140,6 +159,10 @@ pub struct Game {
     pub play_status: PlayStatus,
     pub cover: Option<String>,
     pub modified: u64,
+    #[serde(default)]
+    pub playtime_seconds: u64,
+    #[serde(default)]
+    pub last_played: Option<u64>,
     pub cg_unlock_status: String,
     pub auto_unlock: auto_unlock::Summary,
     #[serde(default)]

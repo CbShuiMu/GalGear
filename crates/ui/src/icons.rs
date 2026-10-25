@@ -2,6 +2,18 @@
 
 pub(super) fn google(name: &str) -> Option<&'static str> {
     Some(match name {
+        "sparkle" => {
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 14.8 9.2 22 12 14.8 14.8 12 22 9.2 14.8 2 12 9.2 9.2Z"/></svg>"#
+        }
+        "database" => include_str!(
+            "../../../src-tauri/icons/database_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "open_in_new" => include_str!(
+            "../../../src-tauri/icons/open_in_new_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "download" => include_str!(
+            "../../../src-tauri/icons/download_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
         "gamepad" => include_str!(
             "../../../src-tauri/icons/gamepad_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
         ),

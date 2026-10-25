@@ -1,9 +1,12 @@
 //! One detail draft shared by the in-place editor and its save action.
-use super::*;
+use crate::{features, models::Metadata, requests::Pending, requests::issue, state::App};
+use serde_json::json;
+use std::collections::BTreeMap;
 
-pub(super) fn begin(app: &mut App) {
+pub(crate) fn begin(app: &mut App) {
     app.form.retain(|key, _| !key.starts_with("draft-"));
     let Some(game) = app
+        .detail
         .selected
         .as_ref()
         .and_then(|id| app.catalog.games.iter().find(|g| &g.id == id))
@@ -38,17 +41,17 @@ pub(super) fn begin(app: &mut App) {
             features::meta_value(metadata, field).into(),
         );
     }
-    app.detail_editing = true;
-    app.choice = None;
+    app.detail.editing = true;
+    app.choices.open = None;
 }
 
-pub(super) fn cancel(app: &mut App) {
-    app.detail_editing = false;
+pub(crate) fn cancel(app: &mut App) {
+    app.detail.editing = false;
     app.form.retain(|key, _| !key.starts_with("draft-"));
 }
 
-pub(super) fn save(app: &mut App) {
-    let Some(id) = app.selected.clone() else {
+pub(crate) fn save(app: &mut App) {
+    let Some(id) = app.detail.selected.clone() else {
         return;
     };
     let value = |key: &str| features::form(app, key);

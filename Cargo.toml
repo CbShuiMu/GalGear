@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/i18n", "crates/core", "crates/ui", "src-tauri"]
+members = ["crates/i18n", "crates/tags", "crates/core", "crates/ui", "src-tauri"]
 default-members = ["crates/core", "src-tauri"]
 resolver = "2"
 
@@ -13,6 +13,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 galgear-core = { path = "crates/core" }
 galgear-i18n = { path = "crates/i18n" }
+galgear-tags = { path = "crates/tags" }
 
 [profile.release]
 strip = true

@@ -1,5 +1,7 @@
-use crate::{AppState, snapshot};
+//! dialogs
+use crate::{state::AppState, state::snapshot};
 use galgear_i18n::Message;
+
 use std::path::{Path, PathBuf};
 
 pub fn nearest_directory(path: &Path) -> Option<PathBuf> {

@@ -1,4 +1,13 @@
 /* Image 1 is the detail layout baseline; keep these overrides scoped to that page. */
+.reference-detail .patch-card .utility-heading{margin-bottom:12px}
+.reference-detail .patch-card .patch-help,.reference-detail .patch-card .patch-empty,.reference-detail .patch-card .patch-error{font-size:calc(var(--ui-font)*.75);line-height:1.7;overflow-wrap:anywhere}
+.reference-detail .patch-card .patch-help{color:var(--muted);margin:10px 0 14px}
+.reference-detail .patch-card .patch-error{color:var(--palette-b84479)}
+.reference-detail .local-patch-entry{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.reference-detail .local-patch-copy{flex:1;min-width:0}
+.reference-detail .local-patch-copy h4{margin:0;font-size:calc(var(--ui-font)*.8125);font-weight:600;overflow-wrap:anywhere}
+.reference-detail .local-patch-copy p{margin:5px 0 0;font-size:calc(var(--ui-font)*.6875);color:var(--muted);line-height:1.6;overflow-wrap:anywhere}
+.reference-detail .local-patch-entry>.button{flex-shrink:0;min-height:32px;padding:6px 12px;font-size:calc(var(--ui-font)*.75)}
 :root,[data-theme="light"]{--detail-path:#f6eef4;--detail-tag:#f6edf4;--detail-utility:#fffafd;--detail-installed:#edf4ef;--detail-nav-active:#fff7fb;--detail-nav-line:#edcee0}
 [data-theme="dark"]{--detail-path:#35253d;--detail-tag:#302436;--detail-utility:#231c2a;--detail-installed:#24362c;--detail-nav-active:#35253d;--detail-nav-line:#694256}
 .app-shell:has(.reference-detail) .brand-type{color:var(--palette-d75c95);font-weight:650}
@@ -20,14 +29,18 @@
 .reference-detail .edit-title-hint{font-size:calc(var(--ui-font)*.75);color:var(--palette-a08096);margin-top:10px}
 .reference-detail .hero-facts{display:flex;flex-wrap:wrap;gap:6px 20px;margin-top:19px;font-size:calc(var(--ui-font)*.875);line-height:1.8;color:var(--palette-918490)}
 .reference-detail .hero-facts .credit-link{color:inherit}
+.reference-detail .hero-facts .last-played,.reference-detail .hero-facts .game-playtime{white-space:nowrap;font-variant-numeric:tabular-nums}
 .reference-detail .hero-actions{gap:10px;margin:24px 0 0;align-items:center}
 .reference-detail .hero-actions .button{min-height:40px;padding:9px 17px;border-radius:8px;font-size:calc(var(--ui-font)*.875)}
 .reference-detail .hero-actions .button.primary{min-width:118px;font-weight:600}
 .reference-detail .button:has(>svg+span:empty){display:none}
 .reference-detail .hero-tags{padding:0;margin:18px 0 0;background:none;border:0;box-shadow:none;min-width:0;grid-column:auto}
 .reference-detail .game-tags{display:flex;gap:8px;flex-wrap:wrap;margin:0}
+.reference-detail .game-completion-tag{display:table;border-radius:5px;padding:4px 9px;margin:0 0 12px;background:var(--incomplete-bg);color:var(--incomplete-color);font-size:calc(var(--ui-font)*.75);font-weight:600;line-height:1.5}
+.reference-detail .game-completion-tag.finished{background:var(--completion-bg);color:var(--completion-color)}
 .reference-detail .tag-button{display:inline-flex;align-items:center;padding:5px 12px;min-height:0;border:0;border-radius:20px;background:var(--detail-tag);color:var(--palette-96728a);font-size:calc(var(--ui-font)*.75);line-height:1.5;max-width:100%}
 .reference-detail .tag-button>.icon{display:none}.reference-detail .tag-edit{margin-top:7px;font-size:calc(var(--ui-font)*.75);color:var(--palette-a08096)}
+.reference-detail .credit-tag{margin:2px 6px 2px 0;white-space:normal;overflow-wrap:anywhere}.reference-detail .tag-button:hover{color:var(--pink-dark);background:var(--palette-f7f0f8)}
 .reference-detail .detail-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:24px;align-items:start}
 .reference-detail .reading-card{background:var(--palette-fff);border:1px solid var(--palette-eee5ed);border-radius:16px;padding:27px 30px 24px;min-width:0}
 .reference-detail .reading-heading{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-bottom:17px;margin-bottom:22px;border-bottom:1px solid var(--palette-eee5ed)}
@@ -79,7 +92,7 @@
 .reference-detail .official-card>h3{color:var(--palette-b84479)}
 
 /* Editing keeps the reading layout stable and uses a centered, bounded dialog. */
-.reference-detail .title-heading,.reference-detail .reading-controls{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;min-width:0}.reference-detail .title-heading h2{min-width:0;flex:1}.reference-detail .region-edit{flex-shrink:0;min-height:30px;font-size:calc(var(--ui-font)*.75);padding:5px 10px}.reference-detail .hero-tags>.utility-heading{margin-bottom:10px}.reference-detail .hero-tags h3{font-size:calc(var(--ui-font)*.8125);font-weight:500;color:var(--palette-918490)}.reference-detail .reading-controls{align-items:center;font-size:calc(var(--ui-font)*.75);color:var(--palette-96728a);flex-wrap:wrap;justify-content:flex-end}.reference-detail .reading-heading{align-items:flex-start}.reference-detail .utility-heading .region-edit{margin:0}
+.reference-detail .title-heading,.reference-detail .reading-controls{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;min-width:0}.reference-detail .title-heading h2{min-width:0;flex:1}.reference-detail .region-edit{flex-shrink:0;min-height:30px;font-size:calc(var(--ui-font)*.75);padding:5px 10px}.reference-detail .hero-tags>.utility-heading{margin-bottom:10px}.reference-detail .hero-tags h3{font-size:calc(var(--ui-font)*.9375);font-weight:650;color:var(--palette-735c6c)}.reference-detail .reading-controls{align-items:center;font-size:calc(var(--ui-font)*.75);color:var(--palette-96728a);flex-wrap:wrap;justify-content:flex-end}.reference-detail .reading-heading{align-items:flex-start}.reference-detail .utility-heading .region-edit{margin:0}
 .editor-overlay{position:fixed;inset:0;z-index:96;display:grid;place-items:center;background:var(--palette-46304035);backdrop-filter:blur(5px);padding:24px}.editor-dialog{display:flex;flex-direction:column;width:min(640px,100%);max-height:calc(100dvh - 48px);background:var(--palette-fffafc);border:1px solid var(--line);border-radius:14px;box-shadow:0 24px 70px var(--palette-59405425);color:var(--palette-493c4c)}.editor-dialog>header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid var(--line);flex-shrink:0}.editor-dialog h2{font-size:calc(var(--ui-font)*1.15);font-weight:600}.editor-body{overflow:auto;min-height:0;padding:20px 24px 24px;scrollbar-width:thin}.editor-body .edit-field{margin-top:0}.editor-body .edit-grid{margin:0 0 20px}.editor-body .edit-field textarea{min-height:96px}.editor-body .detail-actions{margin:12px 0 20px}.editor-body>.button{margin-right:8px}.editor-body .metadata-field+.metadata-field{padding-top:16px;border-top:1px solid var(--line)}.editor-body .metadata-search{margin:0;border:0;padding:0}.editor-body .metadata-search>h3,.editor-body .metadata-search>.detail-actions{display:none}.toast{z-index:130}
 @media(max-width:760px){.editor-overlay{padding:16px}.editor-dialog{max-height:calc(100dvh - 32px)}.editor-dialog>header{padding:16px 18px}.editor-body{padding:18px}.reference-detail .reading-heading{flex-wrap:wrap}.reference-detail .title-heading{gap:8px}}
 
@@ -98,7 +111,13 @@
 .reference-detail .hero-actions .game-settings-button{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--palette-fffafc);color:var(--pink-dark)}
 .game-settings-button .icon{width:22px;height:22px}
 .game-settings-dialog{width:min(620px,100%)}
-.game-settings-dialog .detail-card{margin:18px 0 12px;border:0;border-radius:0;padding:18px 0 0;border-top:1px solid var(--line);box-shadow:none;background:none}
+.game-settings-dialog .detail-card{margin:18px 0 0;border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:none;background:var(--detail-utility)}
+.game-settings-dialog .card-heading-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-left:auto}
+.game-settings-dialog .utility-heading{flex-wrap:wrap}
+.game-settings-dialog .utility-heading h3{margin:0;flex-shrink:0}
+.game-settings-dialog .utility-heading .button{min-height:34px;padding:6px 10px;font-size:calc(var(--ui-font)*.8)}
+.game-settings-dialog .location-status{margin:12px 0 0;font-size:calc(var(--ui-font)*.8);color:var(--muted)}
+.game-settings-dialog .configuration-summary:last-child,.game-settings-dialog .runtime-line:last-child,.game-settings-dialog .path-value:last-child{margin-bottom:0}
 .game-tool-options{display:flex;gap:12px;flex-wrap:wrap}
 .game-tool-option{display:flex;align-items:center;gap:10px;padding:12px 18px;border:1px solid var(--line);background:var(--palette-fffafc);border-radius:8px;font:inherit;color:var(--palette-493c4c)}
 .game-tool-option[aria-checked=true]{background:var(--pink-soft);border-color:var(--pink);color:var(--pink-dark)}
@@ -120,3 +139,21 @@
 .game-settings-dialog .path-value{margin:12px 0;padding:10px 12px;border-radius:6px;background:var(--detail-path);font-size:calc(var(--ui-font)*.8);overflow-wrap:anywhere}
 .game-settings-dialog .utility-heading{display:flex;align-items:center;gap:12px;justify-content:space-between}
 .game-settings-dialog .utility-heading>span{font-size:calc(var(--ui-font)*.8);color:var(--muted)}
+
+.reference-detail .hero-tags>.utility-heading{justify-content:flex-start}
+.reference-detail .hero-tags .tag-source-button{min-height:26px;padding:4px 7px;gap:4px;font-size:calc(var(--ui-font)*.6875);line-height:1.4;flex-shrink:0}
+.reference-detail .hero-tags .tag-source-button>.icon{width:calc(var(--ui-font)*.625);height:calc(var(--ui-font)*.625)}
+.reference-detail .reading-heading .metadata-actions .button>.icon{display:block;width:16px;height:16px}
+.ai-summary-dialog { width: min(760px, calc(100vw - 64px)); }
+.ai-summary-content { white-space: pre-wrap; line-height: 1.8; overflow-wrap: anywhere; margin-bottom: 24px; }
+.ai-summary-dialog dd { overflow-wrap: anywhere; }
+.ai-summary-section h3 { font-size: 1rem; margin: 0 0 10px; color: var(--text); }
+.ai-summary-dialog .configuration-summary { margin: 20px 0; }
+.ai-summary-dialog :is(.configuration-summary, .ai-summary-footer) { font-size: .85rem; font-weight: 400; color: var(--muted); line-height: 1.6; }
+.ai-summary-dialog .configuration-summary dd { margin: 4px 0 12px; }
+.ai-summary-footer { margin-top: 20px; }
+.ai-summary-footer p { margin: 0; }
+.ai-summary-footer p + p { margin-top: 8px; }
+.button.close-button { width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; flex-shrink: 0; }
+.ai-summary-loading { padding: 32px 0; color: var(--muted); }
+.detail-edit-actions .ai-summary-button { margin-right: 4px; }

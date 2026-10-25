@@ -1,12 +1,13 @@
 //! Game actions and persistent play states exposed by a card context menu.
-use super::*;
+use crate::{state::App, view::t, widgets::button, widgets::esc, widgets::icon};
+use std::fmt::Write;
 
-pub(super) struct Menu {
+pub(crate) struct Menu {
     pub id: String,
     pub x: f64,
     pub y: f64,
 }
-pub(super) const STATUSES: [(&str, &str, &str); 6] = [
+pub(crate) const STATUSES: [(&str, &str, &str); 6] = [
     ("wanted", "status.wanted", "☆"),
     ("playing", "status.playing", "▶"),
     ("finished", "status.finished", "✓"),
@@ -14,7 +15,7 @@ pub(super) const STATUSES: [(&str, &str, &str); 6] = [
     ("abandoned", "status.abandoned", "×"),
     ("unmarked", "status.unmarked", "−"),
 ];
-pub(super) fn label<'a>(app: &'a App, status: &str) -> &'a str {
+pub(crate) fn label<'a>(app: &'a App, status: &str) -> &'a str {
     t(
         app,
         STATUSES
@@ -23,7 +24,7 @@ pub(super) fn label<'a>(app: &'a App, status: &str) -> &'a str {
             .map_or("status.unmarked", |(_, key, _)| key),
     )
 }
-pub(super) fn render(html: &mut String, app: &App) {
+pub(crate) fn render(html: &mut String, app: &App) {
     let Some(menu) = &app.context_menu else {
         return;
     };
@@ -36,11 +37,11 @@ pub(super) fn render(html: &mut String, app: &App) {
             "launch-normal",
             "detail.launch",
             "play",
-            app.busy || !game.available,
+            app.busy() || !game.available,
         ),
-        ("game-detail", "context.detail", "about", app.busy),
-        ("context-delete", "context.delete", "close", app.busy),
-        ("open-folder", "detail.open_directory", "folder", app.busy),
+        ("game-detail", "context.detail", "about", app.busy()),
+        ("context-delete", "context.delete", "close", app.busy()),
+        ("open-folder", "detail.open_directory", "folder", app.busy()),
     ] {
         html.push_str(&button(
             action,

@@ -26,6 +26,8 @@ pub fn manual_game(path: &Path, title: String) -> Result<Game, Message> {
         play_status: Default::default(),
         cover: None,
         modified: 0,
+        playtime_seconds: 0,
+        last_played: None,
         cg_unlock_status: "unsupported".into(),
         auto_unlock: Default::default(),
         tags: Vec::new(),
@@ -64,6 +66,19 @@ pub fn apply_edits(game: &mut Game, settings: &Settings) {
             game.title.clone_from(&metadata.title);
         }
     }
+    let edit = settings.game_edits.get(&game.id);
+    let imported = edit
+        .and_then(|edit| edit.source_tags.clone())
+        .unwrap_or_else(|| {
+            game.metadata
+                .as_ref()
+                .map(|meta| meta.tag_names())
+                .unwrap_or_default()
+        });
+    if !imported.is_empty() {
+        let rules = edit.map(|edit| &edit.tag_rules);
+        game.tags = crate::tags::merge(&game.tags, &imported, rules.unwrap_or(&Default::default()));
+    }
     game.available = game
         .executable
         .as_ref()
@@ -101,6 +116,10 @@ pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> Sc
         }
     }
     for game in &mut fresh.games {
+        if let Some(cached) = old.games.iter().find(|cached| cached.id == game.id) {
+            game.playtime_seconds = cached.playtime_seconds;
+            game.last_played = cached.last_played;
+        }
         apply_edits(game, settings);
     }
     fresh.games.retain(|g| {
@@ -154,6 +173,43 @@ pub fn save(path: &Path, catalog: &ScanResult) -> Result<(), Message> {
 mod tests {
     use super::*;
     #[test]
+    fn fresh_scan_and_manual_settings_preserve_the_latest_cached_play_record() {
+        let mut game = manual_game(Path::new("F:/games/game.exe"), "Game".into()).unwrap();
+        let settings = Settings {
+            manual_games: vec![game.clone()],
+            ..Default::default()
+        };
+        let fresh = ScanResult {
+            games: vec![game.clone()],
+            ..Default::default()
+        };
+        game.playtime_seconds = 4500;
+        game.last_played = Some(1730000000);
+        let old = ScanResult {
+            games: vec![game.clone()],
+            ..Default::default()
+        };
+        let merged = merge(fresh, &old, &settings);
+        assert_eq!(
+            crate::playtime::Record::from_game(&merged.games[0]),
+            crate::playtime::Record::from_game(&game)
+        );
+    }
+
+    #[test]
+    fn legacy_catalog_without_play_records_loads_with_zero_hours_and_no_date() {
+        let game = manual_game(Path::new("F:/games/game.exe"), "Game".into()).unwrap();
+        let mut value = serde_json::to_value(game).unwrap();
+        value.as_object_mut().unwrap().remove("playtime_seconds");
+        value.as_object_mut().unwrap().remove("last_played");
+        let restored: Game = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            crate::playtime::Record::from_game(&restored),
+            crate::playtime::Record::default()
+        );
+    }
+
+    #[test]
     fn image_files_cannot_be_manually_added_or_restored_from_old_cache() {
         let directory = tempfile::tempdir().unwrap();
         assert!(manual_game(&directory.path().join("game.iso"), "Image".into()).is_err());
@@ -200,7 +256,44 @@ mod tests {
             .description = "New story".into();
         apply_edits(&mut game, &settings);
         assert_eq!(game.metadata.as_ref().unwrap().description, "");
-        assert_eq!(game.tags, vec!["LocalTag"]);
+        assert_eq!(game.tags, vec!["LocalTag", "Edited brand"]);
+    }
+    #[test]
+    fn cached_metadata_adds_all_credits_and_respects_local_tag_rules() {
+        let mut game = manual_game(Path::new("F:/game.exe"), "Game".into()).unwrap();
+        game.metadata = Some(crate::providers::Metadata {
+            tags: vec!["ADV".into()],
+            brand: "Studio".into(),
+            developer: "studio".into(),
+            writers: "Alice Smith、Bob".into(),
+            music: "Composer".into(),
+            ..Default::default()
+        });
+        apply_edits(&mut game, &Settings::default());
+        assert_eq!(
+            game.tags,
+            vec!["ADV", "studio", "Alice Smith", "Bob", "Composer"]
+        );
+        let settings = Settings {
+            game_edits: std::collections::BTreeMap::from([(
+                game.id.clone(),
+                crate::GameEdit {
+                    tags: vec!["Local".into()],
+                    tag_rules: std::collections::BTreeMap::from([
+                        ("bob".into(), None),
+                        ("studio".into(), Some("Renamed studio".into())),
+                    ]),
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        };
+        apply_edits(&mut game, &settings);
+        apply_edits(&mut game, &settings);
+        assert_eq!(
+            game.tags,
+            vec!["Local", "ADV", "Renamed studio", "Alice Smith", "Composer"]
+        );
     }
     #[test]
     fn edits_and_missing_entries_survive_scan_and_cache() {

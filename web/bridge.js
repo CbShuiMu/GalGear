@@ -14,6 +14,8 @@ let choiceReturnFocus = null;
 let restoringScroll = false;
 let libraryReturnFocus = null;
 let previousLibraryDialog = false;
+let previousSetup = null;
+let setupReturnFocus = null;
 let previousEditor = false;
 let previousContext = false;
 let contextReturnId = null;
@@ -27,8 +29,11 @@ let dragPreview = null;
 let suppressCardClickUntil = 0;
 let dragHoverTimer = null;
 let dragHoverKey = null;
-let libraryMinimum = 1180;
 let minimumRequest = '';
+let observedLibraryGrid = null;
+const libraryGridObserver = new ResizeObserver(() => alignLibraryToolbar());
+const pagePositions = new Map();
+let resetPageScroll = false;
 
 // Keep live inputs, posters and scroll containers across state updates.
 // Replacing the root restarted width transitions and made detail images reload.
@@ -65,6 +70,7 @@ function reconcile(current, next) {
     return;
   }
   reconcileChildren(current, next);
+  if (current instanceof HTMLSelectElement && current.value !== next.value) current.value = next.value;
 }
 function reconcileChildren(current, next) {
   let cursor = current.firstChild;
@@ -89,22 +95,47 @@ function reconcileChildren(current, next) {
   }
 }
 
+function alignLibraryToolbar() {
+  const page = document.querySelector('.library-page');
+  const bar = page?.querySelector('.library-bar');
+  const grid = page?.querySelector('.game-grid');
+  if (grid !== observedLibraryGrid) {
+    libraryGridObserver.disconnect();
+    observedLibraryGrid = grid;
+    if (grid) libraryGridObserver.observe(grid);
+  }
+  if (!bar) return;
+  const cards = grid?.querySelectorAll('.game-card');
+  if (!cards?.length) {
+    bar.style.removeProperty('width');
+    return;
+  }
+  const right = Math.max(...[...cards].map(card => card.getBoundingClientRect().right));
+  const bounds = grid.getBoundingClientRect();
+  const cardWidth = cards[0].getBoundingClientRect().width;
+  const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
+  const minimumRight = bounds.left + Math.min(bounds.width, cardWidth * 4 + gap * 3);
+  const width = Math.max(0, Math.max(right, minimumRight) - bar.getBoundingClientRect().left);
+  const value = `${width}px`;
+  if (bar.style.width !== value) bar.style.width = value;
+}
+
 function measureLibraryBounds() {
-  const bar = document.getElementById('library-bar');
+  alignLibraryToolbar();
+  const page = document.querySelector('.library-page');
+  const bar = page?.querySelector('.library-bar');
   const shell = document.querySelector('.app-shell');
-  if (!bar || !shell) return;
-  const clone = bar.cloneNode(true);
-  Object.assign(clone.style, { position: 'fixed', visibility: 'hidden', width: 'max-content', minWidth: 'max-content', left: '0', top: '0', margin: '0' });
-  const search = clone.querySelector('.bar-search');
-  if (search) Object.assign(search.style, { width: '240px', flexBasis: '240px', gap: '8px' });
-  shell.append(clone);
-  const natural = clone.getBoundingClientRect().width;
-  clone.remove();
   const pane = document.getElementById('page-scroll');
-  const style = getComputedStyle(pane);
-  const sidebar = document.querySelector('.sidebar').getBoundingClientRect().width;
-  libraryMinimum = Math.max(libraryMinimum, Math.ceil(natural + sidebar + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 28));
-  const bounds = { width: libraryMinimum, height: 640 };
+  if (!bar || !shell || !pane) return;
+  const style = getComputedStyle(page);
+  const cardMinimum = parseFloat(style.getPropertyValue('--library-card-min-width'));
+  const gap = parseFloat(style.getPropertyValue('--library-column-gap'));
+  const inset = parseFloat(style.getPropertyValue('--library-min-content-inset'));
+  const sidebar = pane.getBoundingClientRect().left - shell.getBoundingClientRect().left;
+  const gutter = pane.offsetWidth - pane.clientWidth;
+  // Use the four-column baseline so enlarging the window never raises its minimum.
+  const width = Math.ceil(cardMinimum * 4 + gap * 3 + inset * 2 + sidebar + gutter);
+  const bounds = { width, height: 640 };
   const key = JSON.stringify(bounds);
   // Keep bounds available to isolated UI verification without mocking window internals.
   shell.dataset.minimumWidth = String(bounds.width);
@@ -123,7 +154,7 @@ function placeChoice() {
   if (!anchor) return;
   const box = anchor.getBoundingClientRect();
   const optionWidth=Math.max(0,...[...menu.querySelectorAll('.choice-copy>span')].map(node=>node.scrollWidth+64));
-  const width = Math.min(Math.max(box.width, menu.classList.contains('game-menu') ? 340 : optionWidth), innerWidth - 16);
+  const width = Math.min(Math.max(box.width, menu.classList.contains('game-menu') ? 340 : menu.classList.contains('setup-menu') ? Math.min(560, optionWidth) : optionWidth), innerWidth - 16);
   menu.style.width = `${width}px`;
   menu.style.maxHeight = `${Math.min(340, innerHeight - 24)}px`;
   const height = menu.getBoundingClientRect().height;
@@ -161,7 +192,7 @@ let segmentedAppearanceChange = false;
 const initializedSegmentThumbs = new WeakSet();
 
 function syncSegmentedControls(animate = true) {
-  for (const group of document.querySelectorAll('.preferences-content .segmented-control')) {
+  for (const group of document.querySelectorAll('.segmented-control')) {
     const selected = group.querySelector('.segment[aria-pressed="true"]');
     const thumb = group.querySelector('.segmented-thumb');
     if (!selected || !thumb) continue;
@@ -189,7 +220,13 @@ function renderFrame(html) {
     const selectionDirection = active?.selectionDirection;
     const focusInChoice = !!active?.closest('.choice-popup') || active?.id === previousChoice;
     choiceScroll = document.querySelector('.choice-list')?.scrollTop || 0;
-    const scroll = document.getElementById('page-scroll')?.scrollTop || 0;
+    const currentPage = document.getElementById('page-scroll');
+    if (currentPage) pagePositions.set(currentPage.dataset.scrollKey, {
+      top: currentPage.scrollTop, left: currentPage.scrollLeft,
+      details: [...currentPage.querySelectorAll('details[open]')].map(node => renderKey(node) || node.className)
+    });
+    const setupTable = document.getElementById('setup-table-scroll');
+    const setupScroll = setupTable ? { top: setupTable.scrollTop, left: setupTable.scrollLeft } : null;
     const treeScroll = document.getElementById('collection-tree')?.scrollTop || 0;
     const treeLeft = document.getElementById('collection-tree')?.scrollLeft || 0;
     const hasEditor = html.includes('class="editor-overlay"');
@@ -200,7 +237,7 @@ function renderFrame(html) {
       libraryReturnFocus = active ? { id: focusId || active.closest('[data-game-id]')?.querySelector('.game-face')?.id, action: active.dataset.action, value: active.dataset.value } : null;
     }
     const detailsScroll = document.querySelector('.detail-scroll')?.scrollTop || 0;
-    const openDetails = [...document.querySelectorAll('details[open]')].map(e => e.className);
+    const openDetails = [...document.querySelectorAll('details[open]')].filter(node => !currentPage?.contains(node)).map(node => node.className);
     const hasDialog = html.includes('class="detail-overlay');
     if (hasDialog && !previousDialog) dialogReturnFocus = active?.dataset?.value;
     const template = document.createElement('template');
@@ -212,11 +249,23 @@ function renderFrame(html) {
       shell.style.setProperty('--ui-font', `${shell.dataset.fontSize}px`);
     }
     document.querySelectorAll('[data-game-id]').forEach(card => { card.draggable = false; });
-    for (const node of document.querySelectorAll('details')) if (openDetails.includes(node.className)) node.open = true;
+    for (const node of document.querySelectorAll('details')) if (!node.closest('#page-scroll') && openDetails.includes(node.className)) node.open = true;
     const language = document.querySelector('.app-shell')?.getAttribute('lang');
     if (language) document.documentElement.lang = language;
     const pane = document.getElementById('page-scroll');
-    if (pane) pane.scrollTop = scroll;
+    const pagePosition = pane && pagePositions.get(pane.dataset.scrollKey);
+    if (pane && pagePosition) {
+      for (const node of pane.querySelectorAll('details')) node.open = pagePosition.details.includes(renderKey(node) || node.className);
+    }
+    const pageTop = resetPageScroll ? 0 : pagePosition?.top || 0;
+    const pageLeft = resetPageScroll ? 0 : pagePosition?.left || 0;
+    resetPageScroll = false;
+    if (pane) { pane.scrollTop = pageTop; pane.scrollLeft = pageLeft; }
+    const restoreSetupScroll = () => {
+      const table = document.getElementById('setup-table-scroll');
+      if (table && setupScroll) { table.scrollTop = setupScroll.top; table.scrollLeft = setupScroll.left; }
+    };
+    restoreSetupScroll();
     const tree = document.getElementById('collection-tree');
     if (tree) { tree.scrollTop = treeScroll; tree.scrollLeft = treeLeft; }
     const details = document.querySelector('.detail-scroll');
@@ -266,6 +315,15 @@ function renderFrame(html) {
     if (hasEditor && !previousEditor) document.querySelector('.editor-body input,.editor-body textarea,.editor-dialog button')?.focus();
     else if (!hasEditor && previousEditor && editorReturnFocus) (document.getElementById(editorReturnFocus.id) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===editorReturnFocus.action && node.dataset.value===editorReturnFocus.value))?.focus({preventScroll:true});
     previousEditor = hasEditor;
+    const setup = document.querySelector('.setup-dialog');
+    const setupKey = setup?.dataset.renderKey || null;
+    if (setupKey && !previousSetup) setupReturnFocus = active;
+    document.querySelectorAll('.sidebar,.page-scroll,.detail-overlay,.editor-overlay,.library-overlay').forEach(node => {
+      node.inert = !!setup || (node.matches('.sidebar,.page-scroll,.detail-overlay') && (hasEditor || (node.matches('.detail-overlay') && !!detailReturnAnimation)));
+    });
+    if (setupKey && setupKey !== previousSetup) setup.querySelector('.choice-trigger')?.focus({ preventScroll: true });
+    else if (!setupKey && previousSetup && setupReturnFocus?.isConnected) setupReturnFocus.focus({ preventScroll: true });
+    previousSetup = setupKey;
     const context = document.querySelector('.game-context-menu');
     if (context) {
       const box=context.getBoundingClientRect();
@@ -285,6 +343,8 @@ function renderFrame(html) {
     }
     measureLibraryBounds();
     syncSegmentedControls();
+    if (pane) { pane.scrollTop = pageTop; pane.scrollLeft = pageLeft; }
+    restoreSetupScroll();
     requestAnimationFrame(() => { restoringScroll = false; });
     const more = document.querySelector('[data-action="load-more"]');
     if (more && !hasDialog) {
@@ -300,6 +360,11 @@ function renderFrame(html) {
 }
 
 window.GalGearBridge = {
+  local_date(seconds) {
+    const date = new Date(seconds * 1000);
+    if (!Number.isFinite(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  },
   schedule_toast_expiry(token, milliseconds) {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => ui.expire_toast(token), milliseconds);
@@ -309,8 +374,8 @@ window.GalGearBridge = {
     downloadNoticeTimer = setTimeout(() => ui.expire_download_notice(token), milliseconds);
   },
   reset_scroll() {
-    const pane = document.getElementById('page-scroll');
-    if (pane) pane.scrollTop = 0;
+    // Apply explicit resets to the incoming view after its content is reconciled.
+    resetPageScroll = true;
   },
   render(html) {
     if (marqueeDrag) { deferredDragFrame = html; return; }
@@ -391,12 +456,25 @@ document.addEventListener('click', event => {
   if (document.querySelector('.choice-popup') && !event.target.closest('.choice-popup,.choice-trigger')) ui.dispatch('choice-close', '');
   if (!element || element.disabled) return;
   event.preventDefault();
+  const addMenu = element.closest('.add-menu');
+  if (addMenu) addMenu.open = false;
   if (element.dataset.action === 'close-detail') { closeDetail(); return; }
   if (element.dataset.action === 'detail-top') {
     document.querySelector('.detail-scroll')?.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
     return;
   }
   ui.dispatch(element.dataset.action, element.dataset.value || '');
+  if (['tag-filter', 'tag-filter-remove'].includes(element.dataset.action)) {
+    document.getElementById('tag-query')?.focus({ preventScroll: true });
+  }
+});
+document.addEventListener('pointerout', event => {
+  const menu = event.target.closest?.('.add-menu[open]');
+  if (menu && !menu.contains(event.relatedTarget)) menu.open = false;
+});
+document.addEventListener('focusout', event => {
+  const menu = event.target.closest?.('.add-menu[open]');
+  if (menu && !menu.contains(event.relatedTarget)) menu.open = false;
 });
 document.addEventListener('input', event => {
   if (wasmReady && !event.isComposing && event.target.dataset.input) ui.input_changed(event.target.dataset.input, event.target.value);
@@ -420,6 +498,17 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!wasmReady || event.isComposing || event.keyCode === 229) return;
+  const tagResults = document.getElementById('tag-search-results');
+  if ((event.target.id === 'tag-query' || event.target.closest('.tag-search-results')) &&
+      ['ArrowDown', 'ArrowUp'].includes(event.key) && tagResults) {
+    const options = [...tagResults.querySelectorAll('button')];
+    const current = options.indexOf(document.activeElement);
+    const index = current < 0 ? (event.key === 'ArrowDown' ? 0 : options.length - 1)
+      : (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+    options[index]?.focus({ preventScroll: true });
+    event.preventDefault();
+    return;
+  }
   if (event.key === 'Escape' && marqueeDrag) { finishMarquee(false); event.preventDefault(); return; }
   if (event.key === 'Escape' && pointerDrag) { finishPointerDrag(); event.preventDefault(); return; }
   const context=event.target.closest('.game-context-menu');
@@ -435,17 +524,21 @@ document.addEventListener('keydown', event => {
   const choice = event.target.closest('.choice-popup,.choice-trigger');
   if (choice && ui.choice_key(choice.dataset.choiceAnchor || choice.id, event.key)) { event.preventDefault(); return; }
   if (event.key === 'Escape') {
-    const action = document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
+    const action = document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
     if (action === 'close-detail') closeDetail();
     else ui.dispatch(action, '');
     event.preventDefault();
   }
   if (event.key === 'Enter' && event.target.id === 'folder-name') { event.preventDefault(); ui.dispatch('folder-save', ''); }
+  if (event.key === 'Enter' && event.target.dataset.input?.startsWith('setup-query:')) { event.preventDefault(); ui.dispatch('setup-search', event.target.dataset.input.slice('setup-query:'.length)); }
+  if (event.key === 'Enter' && event.target.id === 'metadata-query') { event.preventDefault(); document.querySelector('[data-action="metadata-search"]:not(:disabled)')?.click(); }
+  if (event.key === 'Enter' && event.target.id === 'cover-query') { event.preventDefault(); document.querySelector('[data-action="cover-search"]:not(:disabled)')?.click(); }
+  if (document.querySelector('.setup-overlay') && (event.ctrlKey || event.metaKey) && ['s','Enter'].includes(event.key)) { event.preventDefault(); ui.dispatch('setup-save',''); return; }
   if ((event.ctrlKey || event.metaKey) && ['s','Enter'].includes(event.key) && document.querySelector('.reference-detail.editing')) { event.preventDefault(); ui.dispatch('detail-save',''); }
   if (event.key === 'Enter' && event.target.id === 'library-path') ui.dispatch('add-folder', '');
-  if (event.key === 'Tab' && document.querySelector('.editor-dialog,.library-dialog,.detail-panel')) {
-    const modal = document.querySelector('.editor-dialog') || document.querySelector('.library-dialog') || document.querySelector('.detail-panel');
-    const nodes = [...modal.querySelectorAll('button:not(:disabled), input, textarea, select, summary')].filter(e => e.getClientRects().length);
+  if (event.key === 'Tab' && document.querySelector('.setup-dialog,.editor-dialog,.library-dialog,.detail-panel')) {
+    const modal = document.querySelector('.setup-dialog') || document.querySelector('.editor-dialog') || document.querySelector('.library-dialog') || document.querySelector('.detail-panel');
+    const nodes = [...modal.querySelectorAll('button:not(:disabled), input, textarea, select, summary')].filter(e => !e.disabled && e.getClientRects().length);
     const first = nodes[0], last = nodes[nodes.length - 1];
     if (event.shiftKey && document.activeElement === first) { last.focus(); event.preventDefault(); }
     else if (!event.shiftKey && document.activeElement === last) { first.focus(); event.preventDefault(); }
@@ -512,22 +605,37 @@ function paintMarquee() {
 }
 function finishMarquee(commit=true) {
   if(!marqueeDrag)return;
+  if(commit && marqueeDrag.active) {
+    cancelAnimationFrame(marqueeFrame);
+    paintMarquee();
+  }
   const drag=marqueeDrag;marqueeDrag=null;cancelAnimationFrame(marqueeFrame);marqueeFrame=null;drag.box?.remove();
   if(drag.pane.hasPointerCapture(drag.id))drag.pane.releasePointerCapture(drag.id);
   if(drag.active) {
+    // The committed Rust paint already includes updates received during the drag.
+    deferredDragFrame=null;
     suppressCardClickUntil=performance.now()+400;
-    if(commit) ui.library_marquee(JSON.stringify([...drag.ids]),false);
-    else ui.library_marquee(JSON.stringify(drag.original),false);
+    if(commit) {
+      ui.library_marquee(JSON.stringify([...drag.ids]),false);
+      if(drag.ids.size===0) ui.dispatch('batch-toggle','');
+    }
+    else {
+      ui.library_marquee(JSON.stringify(drag.original),false);
+      if(!drag.wasSelecting) ui.dispatch('batch-toggle','');
+    }
   }
   if(deferredDragFrame){const html=deferredDragFrame;deferredDragFrame=null;window.GalGearBridge.render(html);}
 }
 document.addEventListener('pointerdown', event => {
+  if (pointerDrag || marqueeDrag || event.isPrimary === false) return;
   const source = event.target.closest('[data-game-id]');
   const grid=event.target.closest('.game-grid');
-  if(wasmReady && event.button===0 && !event.altKey && grid && document.querySelector('.library-bar.selecting') && !document.querySelector('.library-bar.selecting [data-action=batch-toggle]:disabled') && !event.target.closest('.card-action,.card-remove') && !document.querySelector('.library-overlay,.detail-overlay,.game-context-menu')) {
+  if(wasmReady && event.button===0 && !event.altKey && grid && !document.querySelector('.library-bar [data-action=batch-toggle]:disabled') && !event.target.closest('.card-action,.card-remove') && !document.querySelector('.library-overlay,.detail-overlay,.game-context-menu')) {
     const pane=document.getElementById('page-scroll');
+    if(!pane) return;
+    const bounds=grid.getBoundingClientRect();
     const original=[...document.querySelectorAll('.game-card.is-selected')].map(card=>card.dataset.gameId);
-    marqueeDrag={id:event.pointerId,pane,startX:event.clientX,startY:event.clientY+pane.scrollTop,x:event.clientX,y:event.clientY,active:false,original,initial:event.ctrlKey||event.shiftKey?original:[],ids:new Set()};
+    marqueeDrag={id:event.pointerId,pane,grid,offsetX:event.clientX-bounds.left,offsetY:event.clientY-bounds.top,startX:event.clientX,startY:event.clientY+pane.scrollTop,x:event.clientX,y:event.clientY,active:false,wasSelecting:!!document.querySelector('.library-bar.selecting'),original,initial:event.ctrlKey||event.shiftKey?original:[],ids:new Set()};
     return;
   }
   if (!wasmReady || event.button !== 0 || !source || event.target.closest('.card-action,.card-remove') || document.querySelector('.library-overlay,.detail-overlay')) return;
@@ -537,6 +645,17 @@ document.addEventListener('pointermove', event => {
   if(marqueeDrag && marqueeDrag.id===event.pointerId) {
     const drag=marqueeDrag;drag.x=event.clientX;drag.y=event.clientY;
     if(!drag.active && Math.hypot(drag.x-drag.startX,drag.y+drag.pane.scrollTop-drag.startY)>=6) {
+      if(!drag.wasSelecting) {
+        // Render batch controls before capturing the pointer and painting the rectangle.
+        marqueeDrag=null;
+        ui.dispatch('batch-toggle','');
+        marqueeDrag=drag;
+        if(!document.querySelector('.library-bar.selecting')) { finishMarquee(false); return; }
+        drag.pane=document.getElementById('page-scroll');
+        const bounds=drag.grid.getBoundingClientRect();
+        drag.startX=bounds.left+drag.offsetX;
+        drag.startY=bounds.top+drag.offsetY+drag.pane.scrollTop;
+      }
       drag.active=true;drag.pane.setPointerCapture(event.pointerId);
       drag.box=document.createElement('div');drag.box.className='marquee-box';drag.box.setAttribute('aria-hidden','true');document.body.append(drag.box);paintMarquee();
     }
@@ -576,12 +695,15 @@ document.addEventListener('pointerup', event => {
   }
   finishPointerDrag();
 });
-document.addEventListener('pointercancel', ()=>{finishPointerDrag();finishMarquee(false);});
+document.addEventListener('pointercancel', event=>{
+  if(pointerDrag?.id===event.pointerId) finishPointerDrag();
+  if(marqueeDrag?.id===event.pointerId) finishMarquee(false);
+});
 
 document.addEventListener('dragstart', event => {
   const card = event.target.closest('[data-game-id]');
   if (!wasmReady || !card || !event.dataTransfer) return;
-  if (pointerDrag) { event.preventDefault(); return; }
+  if (pointerDrag || marqueeDrag) { event.preventDefault(); return; }
   dragPayload = ui.library_drag_ids(card.dataset.gameId);
   event.dataTransfer.setData('application/x-galgear-games', dragPayload);
   event.dataTransfer.setData('text/plain', dragPayload);
@@ -617,7 +739,7 @@ document.addEventListener('dragend', () => {
   if (deferredDragFrame) { const frame = deferredDragFrame; deferredDragFrame = null; window.GalGearBridge.render(frame); }
 });
 document.addEventListener('scroll', event => {
-  if (wasmReady && !restoringScroll && event.target.isConnected && document.querySelector('.choice-popup') && event.target.matches?.('.page-scroll,.detail-scroll')) ui.dispatch('choice-close', '');
+  if (wasmReady && !restoringScroll && event.target.isConnected && document.querySelector('.choice-popup') && event.target.matches?.('.page-scroll,.detail-scroll,.setup-table-scroll')) ui.dispatch('choice-close', '');
 }, true);
 
 try {
@@ -629,6 +751,7 @@ try {
     await window.__TAURI__.event.listen('fan-download-progress', event => ui.download_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('fan-status-updated', event => ui.fan_status_updated(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('runtime-updated', event => ui.runtime_updated(JSON.stringify(event.payload)));
+    await window.__TAURI__.event.listen('playtime-updated', event => ui.playtime_updated(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('backup-completed', event => ui.backup_completed(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('tool-failed', event => ui.tool_failed(JSON.stringify(event.payload)));
   }

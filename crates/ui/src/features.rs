@@ -1,17 +1,24 @@
 //! Detail reading layout and local save/tool workflows.
-use super::*;
+use crate::{
+    ai, cloud, detail, detail_form, library, models::Game, models::Metadata, models::SaveSnapshot,
+    preferences, requests::Pending, requests::issue, state::App, state::show_toast, view::t,
+    widgets::button, widgets::bytes, widgets::esc,
+};
+use galgear_i18n::Message;
+use serde_json::json;
+use std::fmt::Write;
 
-pub(super) fn form(app: &App, key: &str) -> String {
+pub(crate) fn form(app: &App, key: &str) -> String {
     app.form.get(key).cloned().unwrap_or_default()
 }
-pub(super) fn setting(app: &App, key: &str, fallback: &str) -> String {
+pub(crate) fn setting(app: &App, key: &str, fallback: &str) -> String {
     app.form
         .get(key)
         .cloned()
         .unwrap_or_else(|| fallback.into())
 }
 fn request_history(app: &mut App, command: &str, payload: serde_json::Value) {
-    if let Some(id) = app.selected.clone() {
+    if let Some(id) = app.detail.selected.clone() {
         issue(app, Pending::History(id), command, payload);
     }
 }
@@ -26,14 +33,14 @@ fn game_tools(app: &mut App, id: &str, mode: Option<&str>, auto: Option<bool>) {
     );
 }
 
-pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
+pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if matches!(action, "launch-normal" | "open-folder") {
         app.context_menu = None;
     }
     match action {
-        "game-settings" => app.detail_editor = Some(detail::Editor::Tools),
+        "game-settings" => app.detail.editor = Some(detail::Editor::Tools),
         "toggle-locale" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 let locale = app
                     .settings
                     .game_edits
@@ -48,7 +55,7 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "toggle-upscale" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 let edit = app
                     .settings
                     .game_edits
@@ -68,9 +75,9 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 .iter()
                 .any(|(source, _)| *source == value) =>
         {
-            app.metadata_source = value.into();
-            if let Some(id) = &app.selected {
-                app.candidates.remove(id);
+            app.detail.metadata_source = value.into();
+            if let Some(id) = &app.detail.selected {
+                app.detail.candidates.remove(id);
             }
         }
         "source-default" => issue(
@@ -98,6 +105,7 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "detail-cancel" => detail_form::cancel(app),
         "detail-field-reset" => {
             if let Some(game) = app
+                .detail
                 .selected
                 .as_ref()
                 .and_then(|id| app.catalog.games.iter().find(|g| &g.id == id))
@@ -122,37 +130,51 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         }
         "detail-tags-reset" => {
             if let Some(game) = app
+                .detail
                 .selected
                 .as_ref()
                 .and_then(|id| app.catalog.games.iter().find(|g| &g.id == id))
             {
-                let tags: BTreeSet<_> = game
-                    .tags
-                    .iter()
-                    .chain(
-                        game.metadata
-                            .iter()
-                            .flat_map(|metadata| metadata.tags.iter()),
-                    )
-                    .collect();
-                app.form.insert(
-                    "draft-tags".into(),
-                    tags.into_iter()
-                        .map(String::as_str)
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                );
+                let source_tags = app
+                    .settings
+                    .game_edits
+                    .get(&game.id)
+                    .and_then(|edit| edit.source_tags.as_ref());
+                let mut imported = source_tags.cloned().unwrap_or_default();
+                if source_tags.is_none()
+                    && let Some(metadata) = &game.metadata
+                {
+                    imported.extend(metadata.tags.iter().cloned());
+                    for field in galgear_tags::CREDIT_FIELDS {
+                        imported.extend(galgear_tags::credit_names(
+                            meta_value(metadata, field),
+                            metadata
+                                .links
+                                .iter()
+                                .filter(|link| link.field == *field)
+                                .map(|link| link.name.as_str()),
+                        ));
+                    }
+                }
+                let tags = galgear_tags::normalize(game.tags.iter().cloned().chain(imported));
+                app.form.insert("draft-tags".into(), tags.join(", "));
                 app.form.insert("draft-reset-tags".into(), "true".into());
             }
         }
         "settings-section"
             if matches!(
                 value,
-                "account" | "library" | "display" | "system" | "paths" | "about"
+                "account" | "ai" | "cloud" | "library" | "display" | "system" | "paths" | "about"
             ) =>
         {
             app.settings_section = value.into();
-            app.choice = None;
+            app.choices.open = None;
+            if value == "ai" {
+                ai::load(app);
+            }
+            if value == "cloud" {
+                cloud::load(app);
+            }
         }
         "patch-tab" => issue(
             app,
@@ -173,7 +195,7 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         }
         "context-delete" => {
             if let Some(menu) = app.context_menu.take() {
-                app.library_dialog = Some(library::Dialog::Exclude { ids: vec![menu.id] });
+                app.library.dialog = Some(library::Dialog::Exclude { ids: vec![menu.id] });
             }
         }
         "card-finished" => {
@@ -193,31 +215,36 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         }
         "card-delete" => {
             if app.catalog.games.iter().any(|game| game.id == value) {
-                app.library_dialog = Some(library::Dialog::Exclude {
+                app.library.dialog = Some(library::Dialog::Exclude {
                     ids: vec![value.into()],
                 });
             }
         }
         "editor-close" => {
-            app.detail_editor = None;
+            app.detail.editor = None;
             app.form.remove("title-draft");
             app.form.remove("locale-profile");
-            app.confirmation = None;
-            app.choice = None;
+            app.detail.confirmation = None;
+            app.choices.open = None;
         }
-        "metadata-association" => {
-            app.detail_editor = Some(detail::Editor::Association);
-            app.metadata_source
-                .clone_from(&app.settings.metadata_provider);
+        "metadata-association" | "tags-association" => {
+            app.detail.editor = Some(if action == "tags-association" {
+                detail::Editor::TagSource
+            } else {
+                detail::Editor::Association
+            });
+            app.detail.metadata_source = "vndb".into();
             if let Some(game) = app
+                .detail
                 .selected
                 .as_ref()
                 .and_then(|id| app.catalog.games.iter().find(|g| &g.id == id))
             {
+                app.detail.candidates.remove(&game.id);
                 app.form.insert("metadata-query".into(), game.title.clone());
             }
         }
-        "metadata-association-close" => app.detail_editor = None,
+        "metadata-association-close" => app.detail.editor = None,
         "reset-cover" => issue(
             app,
             Pending::SelectMetadata,
@@ -225,7 +252,7 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             json!({"id":value}),
         ),
         "save-tags" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 let tags: Vec<_> = form(app, "edit-tags")
                     .split([',', '，'])
                     .map(str::to_owned)
@@ -238,17 +265,6 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 );
             }
         }
-        "detail-tag" => {
-            library::clear_selection(app);
-            app.collection = None;
-            app.batch = false;
-            app.page = "games".into();
-            app.selected = None;
-            app.tag_filter = value.into();
-            app.search.clear();
-            app.visible_count = 120;
-            reset_scroll();
-        }
         "font-size" => {
             if let Ok(size) = value.parse::<u32>() {
                 issue(
@@ -260,7 +276,7 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "meta-save" | "meta-reset" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 let text = (action == "meta-save").then(|| form(app, &format!("meta-{value}")));
                 issue(
                     app,
@@ -271,16 +287,16 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "restore-game-tags" => {
-            app.confirmation = Some(("restore-game-tags".into(), value.into()));
+            app.detail.confirmation = Some(("restore-game-tags".into(), value.into()));
         }
         "confirm-action" => {
-            if let Some((action, value)) = app.confirmation.clone() {
+            if let Some((action, value)) = app.detail.confirmation.clone() {
                 match action.as_str() {
                     "restore-game-tags" => {
                         issue(app, Pending::Edit, "reset_game_tags", json!({"id":value}))
                     }
                     "snapshot-delete" => {
-                        if let Some(id) = app.selected.clone() {
+                        if let Some(id) = app.detail.selected.clone() {
                             request_history(
                                 app,
                                 "update_snapshot",
@@ -293,26 +309,26 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     }
                     _ => {}
                 }
-                app.confirmation = None;
+                app.detail.confirmation = None;
             }
         }
-        "cancel-action" => app.confirmation = None,
+        "cancel-action" => app.detail.confirmation = None,
         "save-history" => {
-            app.history_open = true;
-            app.restore_preview = None;
+            app.detail.history_open = true;
+            app.detail.restore_preview = None;
             request_history(app, "save_history", json!({"id":value}));
         }
         "close-history" => {
-            app.history_open = false;
-            app.restore_preview = None;
-            app.confirmation = None;
+            app.detail.history_open = false;
+            app.detail.restore_preview = None;
+            app.detail.confirmation = None;
         }
         "backup-saves" => {
             let note = form(app, "backup-note");
             request_history(app, "backup_saves", json!({"id":value,"note":note}));
         }
         "confirm-save" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 issue(
                     app,
                     Pending::ConfirmSave(id.clone()),
@@ -322,7 +338,9 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "preview-restore" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
+                app.detail.history_open = true;
+                app.detail.restore_preview = None;
                 issue(
                     app,
                     Pending::RestorePreview,
@@ -332,8 +350,8 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "restore-saves" => {
-            if let Some(plan) = app.restore_preview.clone()
-                && let Some(id) = app.selected.clone()
+            if let Some(plan) = app.detail.restore_preview.clone()
+                && let Some(id) = app.detail.selected.clone()
             {
                 request_history(
                     app,
@@ -342,10 +360,12 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 );
             }
         }
-        "snapshot-delete" => app.confirmation = Some(("snapshot-delete".into(), value.into())),
+        "snapshot-delete" => {
+            app.detail.confirmation = Some(("snapshot-delete".into(), value.into()))
+        }
         "snapshot-lock" | "snapshot-note" => {
-            if let Some(snapshot) = app.history.iter().find(|s| s.id == value).cloned()
-                && let Some(id) = app.selected.clone()
+            if let Some(snapshot) = app.detail.history.iter().find(|s| s.id == value).cloned()
+                && let Some(id) = app.detail.selected.clone()
             {
                 let note = if action == "snapshot-note" {
                     form(app, &format!("edit-note-{value}"))
@@ -360,17 +380,17 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "auto-backup" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 game_tools(app, &id, None, Some(value == "true"));
             }
         }
         "save-profile" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 game_tools(app, &id, None, None);
             }
         }
         "default-launch" => {
-            if let Some(id) = app.selected.clone() {
+            if let Some(id) = app.detail.selected.clone() {
                 game_tools(app, &id, Some(value), None);
             }
         }
@@ -386,7 +406,7 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 Some("running") => show_toast(app, Message::new("error.already_running"), true),
                 Some("stopped") => launch(app, value, locale, false),
                 _ => {
-                    app.confirmation = Some((
+                    app.detail.confirmation = Some((
                         (if locale { "launch-locale" } else { "launch" }).into(),
                         value.into(),
                     ))
@@ -413,7 +433,6 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     &settings.magpie_hotkey
                 },
             );
-            let folder = setting(app, "backup-folder", &settings.backup_folder);
             if let Ok(retention) = setting(
                 app,
                 "backup-retention",
@@ -423,9 +442,9 @@ pub(super) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             {
                 issue(
                     app,
-                    Pending::Preferences,
+                    Pending::Tools,
                     "configure_tools",
-                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupFolder":folder,"backupRetention":retention}),
+                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupRetention":retention}),
                 );
             } else {
                 show_toast(app, Message::new("backup.retention_error"), true);
@@ -445,8 +464,8 @@ fn launch(app: &mut App, id: &str, locale: bool, confirmed: bool) {
     );
 }
 
-pub(super) fn confirmation(html: &mut String, app: &App) {
-    if let Some((action, _value)) = &app.confirmation {
+pub(crate) fn confirmation(html: &mut String, app: &App) {
+    if let Some((action, _value)) = &app.detail.confirmation {
         let message = if action.starts_with("launch") {
             t(app, "runtime.confirm").to_owned()
         } else if action == "restore-game-tags" {
@@ -454,11 +473,11 @@ pub(super) fn confirmation(html: &mut String, app: &App) {
         } else {
             t(app, "backup.delete_confirm").into()
         };
-        write!(html,r#"<section class="confirmation" role="alert"><p>{}</p><div class="detail-actions">{}{}</div></section>"#,esc(&message),button("confirm-action","",t(app,"common.confirm"),"check","primary",app.busy),button("cancel-action","",t(app,"common.cancel"),"close","quiet",false)).unwrap();
+        write!(html,r#"<section class="confirmation" role="alert"><p>{}</p><div class="detail-actions">{}{}</div></section>"#,esc(&message),button("confirm-action","",t(app,"common.confirm"),"check","primary",app.busy()),button("cancel-action","",t(app,"common.cancel"),"close","quiet",false)).unwrap();
     }
 }
 
-pub(super) const METADATA_FIELDS: [(&str, &str); 10] = [
+pub(crate) const METADATA_FIELDS: [(&str, &str); 10] = [
     ("description", "metadata.story"),
     ("brand", "metadata.brand"),
     ("developer", "metadata.developer"),
@@ -471,7 +490,7 @@ pub(super) const METADATA_FIELDS: [(&str, &str); 10] = [
     ("singers", "metadata.singers"),
 ];
 
-pub(super) fn meta_value<'a>(meta: &'a Metadata, field: &str) -> &'a str {
+pub(crate) fn meta_value<'a>(meta: &'a Metadata, field: &str) -> &'a str {
     match field {
         "description" => &meta.description,
         "brand" => &meta.brand,
@@ -487,12 +506,12 @@ pub(super) fn meta_value<'a>(meta: &'a Metadata, field: &str) -> &'a str {
     }
 }
 
-pub(super) fn save_busy(app: &App) -> bool {
+pub(crate) fn save_busy(app: &App) -> bool {
     app.requests
         .values()
         .any(|p| matches!(p, Pending::History(_) | Pending::RestorePreview))
 }
-pub(super) fn snapshot_name(game: &Game, snapshot: &SaveSnapshot) -> String {
+pub(crate) fn snapshot_name(game: &Game, snapshot: &SaveSnapshot) -> String {
     if !snapshot.name.is_empty() && !snapshot.name.starts_with('_') {
         snapshot.name.clone()
     } else {
@@ -508,15 +527,18 @@ pub(super) fn snapshot_name(game: &Game, snapshot: &SaveSnapshot) -> String {
         )
     }
 }
-pub(super) fn history(html: &mut String, app: &App, game: &Game) {
-    write!(html,"<section class=\"save-history detail-card\" role=\"dialog\" aria-label=\"{}\"><div class=\"card-heading\"><h3>{}</h3>{}</div><label class=\"edit-field\">{}<input id=\"backup-note\" data-input=\"backup-note\" value=\"{}\"/></label>{}",t(app,"backup.history"),t(app,"backup.history"),button("close-history","",t(app,"detail.close"),"close","quiet",false),t(app,"backup.note"),esc(&form(app,"backup-note")),button("backup-saves",&game.id,t(app,"backup.create"),"backup","secondary",save_busy(app))).unwrap();
-    if app.history.is_empty() {
-        write!(html, "<p>{}</p>", t(app, "backup.empty")).unwrap();
-    }
-    for snapshot in &app.history {
-        let date = snapshot_name(game, snapshot);
-        write!(html,"<article class=\"snapshot\"><strong>{}</strong><p>{} {}</p><label class=\"edit-field\">{}<input id=\"edit-note-{}\" data-input=\"edit-note-{}\" value=\"{}\"/></label><div class=\"detail-actions\">{}{}{}{}</div><details><summary>{}</summary><ul>",esc(&date),bytes(snapshot.size),if snapshot.locked {t(app,"backup.locked")}else{""},t(app,"backup.note"),snapshot.id,snapshot.id,esc(&setting(app,&format!("edit-note-{}",snapshot.id),&snapshot.note)),button("snapshot-note",&snapshot.id,t(app,"common.save"),"check","quiet",save_busy(app)),button("snapshot-lock",&snapshot.id,t(app,if snapshot.locked {"backup.unlock"}else{"backup.lock"}),"check","quiet",save_busy(app)),button("preview-restore",&snapshot.id,t(app,"backup.restore"),"refresh","secondary",save_busy(app)),button("snapshot-delete",&snapshot.id,t(app,"tags.delete"),"close","quiet",snapshot.locked||save_busy(app)),t(app,"backup.files")).unwrap();
-        for file in &snapshot.files {
+pub(crate) fn history(html: &mut String, app: &App, game: &Game) {
+    write!(html,r#"<div class="editor-overlay"><section class="editor-dialog restore-dialog" role="dialog" aria-modal="true" aria-labelledby="editor-title"><header><h2 id="editor-title">{}</h2>{}</header><div class="editor-body">"#,t(app,"backup.restore_preview"),button("close-history","",t(app,"common.close"),"close","quiet",save_busy(app))).unwrap();
+    if let Some(plan) = &app.detail.restore_preview {
+        write!(
+            html,
+            "<strong>{}</strong><p>{}</p><details><summary>{}</summary><ul>",
+            esc(&snapshot_name(game, &plan.snapshot)),
+            bytes(plan.snapshot.size),
+            t(app, "backup.files")
+        )
+        .unwrap();
+        for file in &plan.snapshot.files {
             write!(
                 html,
                 "<li>{}: {} · {}</li>",
@@ -526,9 +548,7 @@ pub(super) fn history(html: &mut String, app: &App, game: &Game) {
             )
             .unwrap();
         }
-        html.push_str("</ul></details></article>");
-    }
-    if let Some(plan) = &app.restore_preview {
+        html.push_str("</ul></details>");
         write!(
             html,
             "<section class=\"confirmation\"><h3>{}</h3><p>{}</p><ul>",
@@ -570,6 +590,40 @@ pub(super) fn history(html: &mut String, app: &App, game: &Game) {
             )
         )
         .unwrap();
+    } else {
+        write!(
+            html,
+            "<p class=\"muted\">{}</p>",
+            t(app, "backup.preview_loading")
+        )
+        .unwrap();
     }
-    html.push_str("</section>");
+    html.push_str("</div></section></div>");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn saving_tools_submits_the_draft_and_waits_for_save_confirmation() {
+        let mut app = App::default();
+        let path = "F:/Locale Emulator/LEProc.exe";
+        app.form.insert("tool-locale".into(), path.into());
+
+        dispatch(&mut app, "configure-tools", "");
+
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "configure_tools");
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(payload["localeEmulator"], path);
+        assert_eq!(payload["magpieHotkey"], "Ctrl+Alt+A");
+        assert!(matches!(
+            app.requests.complete(requests[0].0),
+            Some(Pending::Tools)
+        ));
+        assert!(app.settings.locale_emulator.is_empty());
+        assert!(app.toast.is_none());
+    }
 }

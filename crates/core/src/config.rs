@@ -87,6 +87,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cloud_settings_round_trip_and_older_settings_default_to_disconnected() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        fs::write(&path, r#"{"version":1}"#).unwrap();
+        let store = ConfigStore::new(path.clone());
+        let mut settings = store.load().unwrap();
+        assert!(settings.cloud.url.is_empty());
+        settings.cloud = crate::cloud::CloudSettings {
+            url: "https://dav.example.com/dav/".into(),
+            username: "user@example.com".into(),
+            remote_path: "GalGear/存档".into(),
+        };
+        store.save(&settings).unwrap();
+        assert_eq!(store.load().unwrap(), settings);
+        let json: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert!(json["cloud"].get("password").is_none());
+    }
+
+    #[test]
     fn settings_survive_reopening_and_replacing() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("settings.json");

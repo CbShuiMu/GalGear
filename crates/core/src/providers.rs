@@ -37,6 +37,21 @@ pub struct MetadataLink {
 }
 
 impl Metadata {
+    /// All imported categories, people and organizations as local tag names.
+    pub fn tag_names(&self) -> Vec<String> {
+        crate::tags::normalize(self.tags.iter().cloned().chain(
+            crate::tags::CREDIT_FIELDS.iter().flat_map(|field| {
+                crate::tags::credit_names(
+                    self.field(field).unwrap_or_default(),
+                    self.links
+                        .iter()
+                        .filter(|link| link.field == *field)
+                        .map(|link| link.name.as_str()),
+                )
+            }),
+        ))
+    }
+
     /// Return the cached value of an editable metadata field.
     pub fn field(&self, field: &str) -> Option<&str> {
         Some(match field {
@@ -541,19 +556,10 @@ fn parse_kun(value: &serde_json::Value) -> Vec<Resource> {
     results
 }
 
-pub fn save_cover(
-    game: &crate::Game,
-    metadata: &Metadata,
-    cache: &std::path::Path,
-) -> Result<(String, String, Option<Message>), Message> {
-    use std::io::{Read, Write};
-    let url = Url::parse(
-        metadata
-            .cover_url
-            .as_deref()
-            .ok_or_else(|| Message::new("error.metadata"))?,
-    )
-    .map_err(network)?;
+/// Download and normalize a source image with the same limits as local posters.
+pub fn cover_bytes(image_url: &str, referrer: &str) -> Result<Vec<u8>, Message> {
+    use std::io::Read;
+    let url = Url::parse(image_url).map_err(network)?;
     if url.scheme() != "https"
         || ![
             "img.achost.top",
@@ -562,14 +568,27 @@ pub fn save_cover(
             "2dfan.com",
             "fan2d.top",
             "acgfan.top",
+            "t.vndb.org",
+            "s.vndb.org",
+            "lain.bgm.tv",
+            "store.ymgal.games",
         ]
         .contains(&url.host_str().unwrap_or_default())
     {
         return Err(Message::new("error.site_url"));
     }
-    let response = client()?
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err(Message::new("error.site_url"));
+    }
+    let response = Client::builder()
+        .user_agent("GalGear/0.1 (+local game library)")
+        .timeout(Duration::from_secs(25))
+        .connect_timeout(Duration::from_secs(8))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(network)?
         .get(url)
-        .header(reqwest::header::REFERER, &metadata.url)
+        .header(reqwest::header::REFERER, referrer)
         .send()
         .map_err(network)?
         .error_for_status()
@@ -595,7 +614,22 @@ pub fn save_cover(
     image
         .write_to(&mut output, image::ImageFormat::Jpeg)
         .map_err(network)?;
-    let bytes = output.into_inner();
+    Ok(output.into_inner())
+}
+
+pub fn save_cover(
+    game: &crate::Game,
+    metadata: &Metadata,
+    cache: &std::path::Path,
+) -> Result<(String, String, Option<Message>), Message> {
+    use std::io::Write;
+    let bytes = cover_bytes(
+        metadata
+            .cover_url
+            .as_deref()
+            .ok_or_else(|| Message::new("error.metadata"))?,
+        &metadata.url,
+    )?;
     let local = std::path::PathBuf::from(&game.folder).join("cover.jpg");
     let write = |path: &std::path::Path| -> Result<(), Message> {
         let parent = path

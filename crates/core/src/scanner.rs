@@ -231,6 +231,8 @@ fn visit(
                     .and_then(|m| m.modified().ok())
                     .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
                     .map_or(0, |t| t.as_secs()),
+                playtime_seconds: 0,
+                last_played: None,
                 cg_unlock_status: "unsupported".into(),
                 auto_unlock: Default::default(),
                 tags: Vec::new(),

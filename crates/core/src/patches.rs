@@ -1,4 +1,6 @@
 //! Previewed patch writes with durable backups and hash-checked reversal.
+pub mod folders;
+
 use galgear_i18n::Message;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -14,6 +16,39 @@ fn error(e: impl ToString) -> Message {
 }
 fn hash(data: &[u8]) -> String {
     format!("{:x}", Sha256::digest(data))
+}
+fn file_hash(path: &Path) -> Result<String, Message> {
+    let mut file = fs::File::open(path).map_err(error)?;
+    let mut digest = Sha256::new();
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        let count = file.read(&mut buffer).map_err(error)?;
+        if count == 0 {
+            break;
+        }
+        digest.update(&buffer[..count]);
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+fn atomic_copy(path: &Path, source: &Path) -> Result<(), Message> {
+    let parent = path.parent().ok_or_else(|| error("Missing parent"))?;
+    fs::create_dir_all(parent).map_err(error)?;
+    let mut file = tempfile::NamedTempFile::new_in(parent).map_err(error)?;
+    std::io::copy(&mut fs::File::open(source).map_err(error)?, &mut file).map_err(error)?;
+    file.as_file().sync_all().map_err(error)?;
+    file.persist(path).map_err(error)?;
+    Ok(())
+}
+fn is_link(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        metadata.file_attributes() & 0x400 != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
+    }
 }
 fn read(path: &Path) -> Result<Vec<u8>, Message> {
     if fs::metadata(path).map_err(error)?.len() > 128 * 1024 * 1024 {
@@ -63,6 +98,16 @@ fn relative(name: &str) -> Result<PathBuf, Message> {
 }
 fn target(root: &Path, name: &str) -> Result<PathBuf, Message> {
     let path = root.join(relative(name)?);
+    for ancestor in path.ancestors().take_while(|ancestor| *ancestor != root) {
+        match fs::symlink_metadata(ancestor) {
+            Ok(metadata) if is_link(&metadata) => {
+                return Err(error("Patch targets cannot contain links"));
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(error(e)),
+        }
+    }
     let mut ancestor = path.as_path();
     while !ancestor.exists() {
         ancestor = ancestor.parent().ok_or_else(|| error("Missing ancestor"))?;
@@ -80,7 +125,8 @@ fn target(root: &Path, name: &str) -> Result<PathBuf, Message> {
 pub struct Change {
     pub path: String,
     pub before: Option<String>,
-    pub after: String,
+    /// The installed hash, or `None` when the old resource is removed by a switch.
+    pub after: Option<String>,
     pub size: u64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -151,7 +197,7 @@ pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, M
         info.files.push(Change {
             path: relative.to_string_lossy().into_owned(),
             before,
-            after: hash(&data),
+            after: Some(hash(&data)),
             size: data.len() as u64,
         });
         Ok(())
@@ -345,13 +391,15 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
     for (i, file) in plan.preview.files.iter().enumerate() {
         let path = target(&plan.root, &file.path)?;
         let current = if path.exists() {
-            Some(hash(&read(&path)?))
+            Some(file_hash(&path)?)
         } else {
             None
         };
-        if current != file.before
-            || hash(&read(&plan.staging.path().join(i.to_string()))?) != file.after
-        {
+        let staged_changed = match &file.after {
+            Some(after) => file_hash(&plan.staging.path().join(i.to_string()))? != *after,
+            None => false,
+        };
+        if current != file.before || staged_changed {
             return Err(error("Files changed since preview; select the patch again"));
         }
     }
@@ -373,9 +421,9 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
     };
     for (i, file) in record.preview.files.iter().enumerate() {
         if file.before.is_some() {
-            atomic(
+            atomic_copy(
                 &dir.join(format!("{i}.bak")),
-                &read(&target(&plan.root, &file.path)?)?,
+                &target(&plan.root, &file.path)?,
             )?;
         }
     }
@@ -384,14 +432,18 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
         for (i, file) in record.preview.files.iter().enumerate() {
             let path = target(&plan.root, &file.path)?;
             let current = if path.exists() {
-                Some(hash(&read(&path)?))
+                Some(file_hash(&path)?)
             } else {
                 None
             };
             if current != file.before {
                 return Err(error("Game files changed during installation"));
             }
-            atomic(&path, &read(&plan.staging.path().join(i.to_string()))?)?;
+            if file.after.is_some() {
+                atomic_copy(&path, &plan.staging.path().join(i.to_string()))?;
+            } else if path.exists() {
+                fs::remove_file(path).map_err(error)?;
+            }
         }
         record.status = "installed".into();
         write_record(&dir, &record)
@@ -410,11 +462,11 @@ fn rollback(dir: &Path, record: &mut Installed) -> Result<(), Message> {
     for (i, file) in record.preview.files.iter().enumerate() {
         let path = target(&root, &file.path)?;
         let current = if path.exists() {
-            Some(hash(&read(&path)?))
+            Some(file_hash(&path)?)
         } else {
             None
         };
-        if current.as_deref() != Some(&file.after)
+        if current != file.after
             && !(["installing", "restoring"].contains(&record.status.as_str())
                 && current == file.before)
         {
@@ -424,7 +476,7 @@ fn rollback(dir: &Path, record: &mut Installed) -> Result<(), Message> {
             )));
         }
         if let Some(before) = &file.before
-            && hash(&read(&dir.join(format!("{i}.bak")))?) != *before
+            && file_hash(&dir.join(format!("{i}.bak")))? != *before
         {
             return Err(error("Backup checksum mismatch"));
         }
@@ -434,7 +486,7 @@ fn rollback(dir: &Path, record: &mut Installed) -> Result<(), Message> {
     for (i, file) in record.preview.files.iter().enumerate().rev() {
         let path = target(&root, &file.path)?;
         if file.before.is_some() {
-            atomic(&path, &read(&dir.join(format!("{i}.bak")))?)?;
+            atomic_copy(&path, &dir.join(format!("{i}.bak")))?;
         } else if path.exists() {
             fs::remove_file(path).map_err(error)?;
         }
@@ -540,6 +592,47 @@ mod tests {
         zip.write_all(bytes).unwrap();
         zip.finish().unwrap();
     }
+    #[test]
+    fn reads_existing_patch_records_with_string_hashes() {
+        let change: Change =
+            serde_json::from_str(r#"{"path":"script.dat","before":"old","after":"new","size":3}"#)
+                .unwrap();
+        assert_eq!(change.after.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn recovers_interrupted_extension_switches_and_keeps_original_backups() {
+        for status in ["installing", "restoring"] {
+            for original_present in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                let root = temp.path().join("game");
+                fs::create_dir(&root).unwrap();
+                let patch = folders::directory(&root).unwrap().join("Patch");
+                fs::create_dir(&patch).unwrap();
+                fs::write(root.join("script.noa"), b"original").unwrap();
+                fs::write(patch.join("script.csx"), b"patch").unwrap();
+                let data = temp.path().join("backups");
+                let mut record = install(
+                    folders::preview(&root, "Patch", "game".into()).unwrap(),
+                    &data,
+                )
+                .unwrap();
+                record.status = status.into();
+                write_record(&data.join(&record.id), &record).unwrap();
+                if original_present {
+                    fs::write(root.join("script.noa"), b"original").unwrap();
+                }
+                assert!(recover(&data).is_empty());
+                assert!(!root.join("script.csx").exists());
+                assert_eq!(fs::read(root.join("script.noa")).unwrap(), b"original");
+                assert_eq!(
+                    fs::read(data.join(&record.id).join("1.bak")).unwrap(),
+                    b"original"
+                );
+            }
+        }
+    }
+
     #[test]
     fn preview_install_restore_and_external_changes() {
         let temp = tempfile::tempdir().unwrap();

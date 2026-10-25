@@ -29,6 +29,31 @@ struct ProcessSnapshot {
 }
 
 #[cfg(windows)]
+fn executable_stem(path: &Path) -> Option<String> {
+    path.file_stem()
+        .map(|name| name.to_string_lossy().to_ascii_lowercase())
+}
+
+#[cfg(windows)]
+fn matches_executable(image: &Path, executable: &Path) -> bool {
+    if image
+        .to_string_lossy()
+        .eq_ignore_ascii_case(&executable.to_string_lossy())
+    {
+        return true;
+    }
+    // Some launchers run a PE image with the same name and a different extension.
+    image
+        .parent()
+        .zip(executable.parent())
+        .is_some_and(|(a, b)| {
+            a.to_string_lossy()
+                .eq_ignore_ascii_case(&b.to_string_lossy())
+        })
+        && executable_stem(image).is_some_and(|name| Some(name) == executable_stem(executable))
+}
+
+#[cfg(windows)]
 fn processes(names: &std::collections::BTreeSet<String>) -> Result<ProcessSnapshot, String> {
     use windows_sys::Win32::{
         Foundation::*,
@@ -62,8 +87,10 @@ fn processes(names: &std::collections::BTreeSet<String>) -> Result<ProcessSnapsh
                 .iter()
                 .position(|c| *c == 0)
                 .unwrap_or(entry.szExeFile.len());
-            let name = String::from_utf16_lossy(&entry.szExeFile[..length]).to_ascii_lowercase();
-            if names.contains(&name) {
+            let filename = String::from_utf16_lossy(&entry.szExeFile[..length]);
+            if let Some(name) = executable_stem(Path::new(&filename))
+                && names.contains(&name)
+            {
                 let process =
                     OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, entry.th32ProcessID);
                 if process.is_null() {
@@ -105,18 +132,11 @@ fn processes(names: &std::collections::BTreeSet<String>) -> Result<ProcessSnapsh
 #[cfg(windows)]
 pub fn process_ids(path: &Path) -> Result<Vec<u32>, String> {
     let canonical = std::fs::canonicalize(path).map_err(|e| e.to_string())?;
-    let name = path
-        .file_name()
-        .ok_or("Missing executable name")?
-        .to_string_lossy()
-        .to_ascii_lowercase();
+    let name = executable_stem(path).ok_or("Missing executable name")?;
     let ProcessSnapshot { found, uncertain } = processes(&[name.clone()].into())?;
     let ids: Vec<_> = found
         .iter()
-        .filter(|(_, p)| {
-            p.to_string_lossy()
-                .eq_ignore_ascii_case(&canonical.to_string_lossy())
-        })
+        .filter(|(_, p)| matches_executable(p, &canonical))
         .map(|(id, _)| *id)
         .collect();
     if ids.is_empty() && uncertain.contains(&name) {
@@ -137,11 +157,7 @@ pub fn detect_many(
         .collect();
     let names = paths
         .iter()
-        .filter_map(|(_, p)| {
-            p.as_ref()?
-                .file_name()
-                .map(|n| n.to_string_lossy().to_ascii_lowercase())
-        })
+        .filter_map(|(_, p)| executable_stem(p.as_ref()?))
         .collect();
     let results = processes(&names);
     paths
@@ -149,14 +165,9 @@ pub fn detect_many(
         .map(|(id, path)| {
             let status = match (path, &results) {
                 (Some(path), Ok(ProcessSnapshot { found, uncertain })) => {
-                    if found.iter().any(|(_, p)| {
-                        p.to_string_lossy()
-                            .eq_ignore_ascii_case(&path.to_string_lossy())
-                    }) {
+                    if found.iter().any(|(_, p)| matches_executable(p, &path)) {
                         Status::Running
-                    } else if path.file_name().is_some_and(|n| {
-                        uncertain.contains(&n.to_string_lossy().to_ascii_lowercase())
-                    }) {
+                    } else if executable_stem(&path).is_some_and(|n| uncertain.contains(&n)) {
                         Status::Unknown
                     } else {
                         Status::Stopped
@@ -347,6 +358,85 @@ mod tests {
             Status::Running
         );
     }
+    #[cfg(windows)]
+    #[test]
+    fn alternate_image_extension_requires_the_same_directory_and_stem() {
+        let launcher = Path::new(r"C:\Games\Title\game.exe");
+        assert!(matches_executable(
+            Path::new(r"c:\games\title\GAME.log"),
+            launcher
+        ));
+        assert!(!matches_executable(
+            Path::new(r"C:\Games\Other\game.log"),
+            launcher
+        ));
+        assert!(!matches_executable(
+            Path::new(r"C:\Games\Title\updater.log"),
+            launcher
+        ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn runtime_detection_finds_a_running_pe_image_with_a_log_extension() {
+        use std::process::{Child, Command, Stdio};
+
+        struct Probe(Child);
+        impl Drop for Probe {
+            fn drop(&mut self) {
+                let _ = self.0.kill();
+                let _ = self.0.wait();
+            }
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let launcher = directory.path().join("game.exe");
+        let image = directory.path().join("game.log");
+        std::fs::write(&launcher, []).unwrap();
+        std::fs::copy(std::env::current_exe().unwrap(), &image).unwrap();
+        let probe = Probe(
+            Command::new(&image)
+                .args([
+                    "--ignored",
+                    "--exact",
+                    "runtime::tests::runtime_probe_waits_for_input",
+                ])
+                .env("GALGEAR_RUNTIME_PROBE", "1")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let other = directory.path().join("other").join("game.exe");
+        std::fs::create_dir(other.parent().unwrap()).unwrap();
+        std::fs::write(&other, []).unwrap();
+
+        assert!(process_ids(&launcher).unwrap().contains(&probe.0.id()));
+        assert_eq!(detect(Some(launcher.to_str().unwrap())), Status::Running);
+        assert_eq!(
+            detect_many(&[
+                ("game".into(), Some(launcher.to_string_lossy().into_owned())),
+                ("other".into(), Some(other.to_string_lossy().into_owned())),
+            ]),
+            [
+                ("game".into(), Status::Running),
+                ("other".into(), Status::Stopped),
+            ]
+            .into()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "Subprocess helper for the renamed PE image test"]
+    fn runtime_probe_waits_for_input() {
+        if std::env::var_os("GALGEAR_RUNTIME_PROBE").is_some() {
+            let mut byte = [0];
+            std::io::Read::read(&mut std::io::stdin(), &mut byte).unwrap();
+        }
+    }
+
     #[test]
     fn japanese_profile_can_be_selected_without_changing_tool_configuration() {
         let temp = tempfile::tempdir().unwrap();

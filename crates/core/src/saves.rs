@@ -1,5 +1,9 @@
 //! Read-only, bounded save discovery. A matching name is evidence, not certainty.
+mod kirikiri;
+mod steam;
+
 use crate::{Game, GameEdit, config::display_path};
+pub use kirikiri::{SaveKind, classify};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
@@ -32,18 +36,34 @@ pub fn user_roots() -> Vec<(String, PathBuf)> {
     if let Some(path) = documents_folder() {
         roots.push(("documents".into(), path));
     }
+    if let Some(path) = saved_games_folder() {
+        roots.push(("saved-games".into(), path));
+    }
+    for variable in ["ProgramFiles(x86)", "ProgramFiles"] {
+        if let Some(base) = std::env::var_os(variable) {
+            let path = PathBuf::from(base).join("Steam");
+            if path.is_dir() && !roots.iter().any(|(_, existing)| *existing == path) {
+                roots.push(("steam".into(), path));
+            }
+        }
+    }
     roots
 }
 
 #[cfg(windows)]
 fn documents_folder() -> Option<PathBuf> {
-    use windows_sys::Win32::{
-        System::Com::CoTaskMemFree,
-        UI::Shell::{FOLDERID_Documents, SHGetKnownFolderPath},
-    };
+    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_Documents)
+}
+#[cfg(windows)]
+fn saved_games_folder() -> Option<PathBuf> {
+    known_folder(&windows_sys::Win32::UI::Shell::FOLDERID_SavedGames)
+}
+#[cfg(windows)]
+fn known_folder(id: &windows_sys::core::GUID) -> Option<PathBuf> {
+    use windows_sys::Win32::{System::Com::CoTaskMemFree, UI::Shell::SHGetKnownFolderPath};
     unsafe {
         let mut value = std::ptr::null_mut();
-        if SHGetKnownFolderPath(&FOLDERID_Documents, 0, std::ptr::null_mut(), &mut value) < 0 {
+        if SHGetKnownFolderPath(id, 0, std::ptr::null_mut(), &mut value) < 0 {
             return None;
         }
         let mut length = 0;
@@ -60,6 +80,10 @@ fn documents_folder() -> Option<PathBuf> {
 #[cfg(not(windows))]
 fn documents_folder() -> Option<PathBuf> {
     std::env::var_os("HOME").map(|p| PathBuf::from(p).join("Documents"))
+}
+#[cfg(not(windows))]
+fn saved_games_folder() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|p| PathBuf::from(p).join("Saved Games"))
 }
 
 fn key(value: &str) -> String {
@@ -87,7 +111,8 @@ fn save_files(folder: &Path) -> bool {
                 && (name.starts_with("save")
                     || [".dat", ".sav", ".ksd", ".asd", ".rpgsave", ".rmmzsave"]
                         .iter()
-                        .any(|suffix| name.ends_with(suffix)))
+                        .any(|suffix| name.ends_with(suffix))
+                    || (name.ends_with(".bmp") && classify(&e.path()) == SaveKind::Progress))
                 && fs::File::open(e.path()).is_ok()
         })
 }
@@ -134,16 +159,22 @@ pub fn discover_in(
         .filter(|p| !p.trim().is_empty())
     {
         add(&mut report, PathBuf::from(path), "manual", "confirmed");
+        return report;
     }
     if let Some(edit) = edit {
         for path in &edit.save_paths {
             add(&mut report, PathBuf::from(path), "manual", "confirmed");
+        }
+        // Older configurations stored a single chosen folder in save_paths.
+        if edit.save_paths.len() == 1 {
+            return report;
         }
     }
     if game.executable.is_none() {
         return report;
     }
     let folder = Path::new(&game.folder);
+    steam::discover(folder, roots, &mut report);
     if game.engine == "AdvHD"
         && let Ok(paths) = crate::auto_unlock::save_locations(folder)
     {
@@ -225,14 +256,16 @@ pub fn discover_in(
         }
     }
     aliases.retain(|s| s.chars().count() >= 4);
+    search_local_game_folders(folder, &aliases, 0, false, &mut 0, &mut report);
     for value in configured {
         let normalized = value.replace('\\', "/");
         if let Some(base) = &configured_base {
             for (source, root) in roots {
-                let token = if source == "roaming" {
-                    "<ROAMINGAPPDATA>"
-                } else {
-                    "<PERSONAL>"
+                let token = match source.as_str() {
+                    "roaming" => "<ROAMINGAPPDATA>",
+                    "documents" => "<PERSONAL>",
+                    "saved-games" => "<SAVEDGAMES>",
+                    _ => continue,
                 };
                 if let Some(relative) = base.replace('\\', "/").strip_prefix(token) {
                     add(
@@ -277,8 +310,11 @@ pub fn discover_in(
             }
         }
     }
-    let mut visited = 0;
     for (source, root) in roots {
+        if matches!(source.as_str(), "steam" | "steam-userdata") {
+            continue;
+        }
+        let mut visited = 0;
         report.searched.push(display_path(root));
         search(root, source, &aliases, 0, false, &mut visited, &mut report);
     }
@@ -339,7 +375,16 @@ fn search(
             .is_ok_and(|t| t.is_dir() && !t.is_symlink())
         {
             let lower = entry.file_name().to_string_lossy().to_lowercase();
-            if ["node_modules", "cache", "logs", "crashdumps", ".git"].contains(&lower.as_str()) {
+            if [
+                "node_modules",
+                "cache",
+                "logs",
+                "crashdumps",
+                ".git",
+                ".galgear-backups",
+            ]
+            .contains(&lower.as_str())
+            {
                 continue;
             }
             search(
@@ -355,9 +400,164 @@ fn search(
     }
 }
 
+fn search_local_game_folders(
+    path: &Path,
+    aliases: &BTreeSet<String>,
+    depth: usize,
+    matched: bool,
+    visited: &mut usize,
+    report: &mut SaveReport,
+) {
+    if depth >= 2 || *visited >= 256 {
+        return;
+    }
+    for entry in fs::read_dir(path)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+    {
+        if *visited >= 256 {
+            report.limited = true;
+            break;
+        }
+        if !entry
+            .file_type()
+            .is_ok_and(|kind| kind.is_dir() && !kind.is_symlink())
+        {
+            continue;
+        }
+        *visited += 1;
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        if name.starts_with(".galgear-")
+            || ["cache", "logs", ".git", "node_modules"].contains(&name.as_str())
+        {
+            continue;
+        }
+        let normalized = key(&name);
+        let matches = matched
+            || save_name(&name)
+            || aliases.iter().any(|alias| {
+                normalized == *alias || (alias.chars().count() >= 8 && normalized.contains(alias))
+            });
+        if matches && local_save_evidence(&entry.path()) {
+            add(report, entry.path(), "game", "detected");
+        } else if matches || depth == 0 {
+            search_local_game_folders(&entry.path(), aliases, depth + 1, matches, visited, report);
+        }
+    }
+}
+
+fn local_save_evidence(folder: &Path) -> bool {
+    fs::read_dir(folder)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .take(128)
+        .any(|entry| {
+            entry.file_type().is_ok_and(|kind| kind.is_file())
+                && (entry
+                    .path()
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| {
+                        matches!(
+                            extension.to_ascii_lowercase().as_str(),
+                            "sav" | "rpgsave" | "rmmzsave"
+                        ) || extension.to_ascii_lowercase().ends_with("save-willplus")
+                    })
+                    || kirikiri::recognizable(&entry.path()))
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn local_normalized_title_directory_is_discovered_without_claiming_archive_assets() {
+        let root = tempfile::tempdir().unwrap();
+        let game_folder = root.path().join("Silver×Garden -After Story-");
+        let save = game_folder.join("silver_garden_after_story");
+        let assets = game_folder.join("assets/silver_garden_after_story");
+        fs::create_dir_all(&save).unwrap();
+        fs::create_dir_all(&assets).unwrap();
+        fs::write(save.join("slot.ksd"), br#"(const) %["currentStorage" => "menu.ks", "mainConductor" => (const) %["pos" => 7]]"#).unwrap();
+        fs::write(assets.join("texture.dat"), b"resource bytes").unwrap();
+        let game = crate::catalog::manual_game(
+            &game_folder.join("SilverGarden.exe"),
+            "Localized garden title".into(),
+        )
+        .unwrap();
+        let report = discover_in(&game, None, &[]);
+        assert_eq!(report.locations.len(), 1);
+        assert_eq!(report.locations[0].path, display_path(&save));
+    }
+    #[test]
+    fn documents_search_excludes_backups_inside_game_folder() {
+        let t = tempfile::tempdir().unwrap();
+        let documents = t.path().join("Documents");
+        let game_dir = documents.join("Test Game");
+        let saves = game_dir.join("savedata");
+        let backup = game_dir.join(".galgear-backups/saves/game-id/snapshot-id/0");
+        fs::create_dir_all(&saves).unwrap();
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(saves.join("slot.sav"), b"current save").unwrap();
+        fs::write(backup.join("slot.sav"), b"old save").unwrap();
+        let game =
+            crate::catalog::manual_game(&game_dir.join("game.exe"), "Test Game".into()).unwrap();
+
+        let report = discover_in(&game, None, &[("documents".into(), documents)]);
+
+        assert_eq!(
+            report
+                .locations
+                .iter()
+                .map(|location| &location.path)
+                .collect::<Vec<_>>(),
+            vec![&display_path(&saves)]
+        );
+    }
+
+    #[test]
+    fn saved_games_matches_normalized_name_and_custom_save_suffix() {
+        let t = tempfile::tempdir().unwrap();
+        let game_dir = t.path().join("Nightmare×Sisters");
+        fs::create_dir(&game_dir).unwrap();
+        let saved = t.path().join("Saved Games");
+        let target = saved.join("WillPlus").join("Nightmare_sisters");
+        fs::create_dir_all(&target).unwrap();
+        fs::write(
+            target.join("Save001.Nightmare_sistersSave-WillPlus"),
+            b"save",
+        )
+        .unwrap();
+        let game =
+            crate::catalog::manual_game(&game_dir.join("AdvHD.exe"), "Nightmare×Sisters".into())
+                .unwrap();
+        let report = discover_in(&game, None, &[("saved-games".into(), saved)]);
+        assert_eq!(report.locations.len(), 1);
+        assert_eq!(report.locations[0].path, display_path(&target));
+        assert!(report.locations[0].readable);
+    }
+
+    #[test]
+    fn selected_location_excludes_other_candidates_even_when_missing() {
+        let t = tempfile::tempdir().unwrap();
+        fs::create_dir(t.path().join("savedata")).unwrap();
+        let game =
+            crate::catalog::manual_game(&t.path().join("game.exe"), "Test Game".into()).unwrap();
+        let chosen = display_path(&t.path().join("chosen"));
+        let edit = GameEdit {
+            save_path: Some(chosen.clone()),
+            save_paths: vec![display_path(&t.path().join("old"))],
+            ..Default::default()
+        };
+        let report = discover_in(&game, Some(&edit), &[]);
+        assert_eq!(report.locations.len(), 1);
+        assert_eq!(report.locations[0].path, chosen);
+        assert_eq!(report.locations[0].confidence, "confirmed");
+        assert!(!report.locations[0].exists);
+    }
+
     #[test]
     fn finds_three_roots_and_does_not_claim_another_games_saves() {
         let t = tempfile::tempdir().unwrap();
