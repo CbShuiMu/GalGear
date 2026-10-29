@@ -8,7 +8,12 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{collections::BTreeMap, fmt::Write};
 
-const PROVIDERS: [(&str, &str); 2] = [("openai", "OpenAI"), ("deepseek", "DeepSeek")];
+const PROVIDERS: [(&str, &str); 4] = [
+    ("openai", "OpenAI"),
+    ("deepseek", "DeepSeek"),
+    ("qwen", "Qwen"),
+    ("kimi", "Kimi"),
+];
 
 #[derive(Clone)]
 pub(crate) enum Request {
@@ -441,6 +446,101 @@ pub(crate) fn render(html: &mut String, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn domestic_providers_support_discovery_selection_save_and_clear() {
+        let mut app = App::default();
+        resolve(
+            &mut app,
+            &Request::Statuses,
+            0,
+            true,
+            r#"[{"provider":"qwen","configured":false,"model":""},{"provider":"kimi","configured":false,"model":""}]"#,
+        );
+        for (provider, model) in [("qwen", "qwen-plus"), ("kimi", "kimi-k2.6")] {
+            let field = format!("ai-model:{provider}");
+            input(&mut app, &format!("ai-token:{provider}"), "test-token");
+            dispatch(&mut app, "ai-refresh", provider);
+            let requests = crate::bridge::take_requests();
+            assert_eq!(requests.len(), 1);
+            let (id, command, payload) = &requests[0];
+            assert_eq!(command, "list_ai_models");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(payload).unwrap(),
+                json!({"provider":provider,"token":"test-token"})
+            );
+            let Pending::Ai(request) = app.requests.complete(*id).unwrap() else {
+                panic!("AI request expected")
+            };
+            resolve(
+                &mut app,
+                &request,
+                *id,
+                true,
+                &json!([{"id":model}]).to_string(),
+            );
+            assert!(choice_enabled(&app, &field));
+            dispatch(&mut app, &field, model);
+            dispatch(&mut app, "ai-save", provider);
+            let requests = crate::bridge::take_requests();
+            assert_eq!(requests.len(), 1);
+            let (id, command, payload) = &requests[0];
+            assert_eq!(command, "save_ai_provider");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(payload).unwrap(),
+                json!({"provider":provider,"token":"test-token","model":model})
+            );
+            let Pending::Ai(request) = app.requests.complete(*id).unwrap() else {
+                panic!("AI request expected")
+            };
+            resolve(
+                &mut app,
+                &request,
+                *id,
+                true,
+                &json!({"provider":provider,"configured":true,"model":model}).to_string(),
+            );
+            assert!(app.ai.providers[provider].token.is_empty());
+            assert_eq!(choice_current(&app, &field), model);
+            dispatch(&mut app, "ai-select-provider", provider);
+            let requests = crate::bridge::take_requests();
+            assert_eq!(requests.len(), 1);
+            let (id, command, payload) = &requests[0];
+            assert_eq!(command, "set_active_ai_provider");
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(payload).unwrap(),
+                json!({"provider":provider})
+            );
+            let Pending::Ai(request) = app.requests.complete(*id).unwrap() else {
+                panic!("AI request expected")
+            };
+            resolve(&mut app, &request, *id, true, &json!({"library_folders":[],"card_size":200,"sort_by":"title","ai_provider":provider}).to_string());
+            assert_eq!(app.settings.ai_provider, provider);
+            dispatch(&mut app, "ai-clear", provider);
+            let requests = crate::bridge::take_requests();
+            assert_eq!(requests.len(), 1);
+            let (id, command, _) = &requests[0];
+            assert_eq!(command, "clear_ai_provider");
+            let Pending::Ai(request) = app.requests.complete(*id).unwrap() else {
+                panic!("AI request expected")
+            };
+            resolve(
+                &mut app,
+                &request,
+                *id,
+                true,
+                &json!({"provider":provider,"configured":false,"model":""}).to_string(),
+            );
+            assert!(!app.ai.providers[provider].configured);
+            assert!(choice_current(&app, &field).is_empty());
+        }
+        let mut html = String::new();
+        render(&mut html, &app);
+        for provider in ["qwen", "kimi"] {
+            assert!(html.contains(&format!("id=\"ai-token-{provider}\"")));
+            assert!(html.contains(&format!("src=\"assets/{provider}.svg\"")));
+        }
+    }
 
     #[test]
     fn active_provider_only_changes_after_successful_persistence() {

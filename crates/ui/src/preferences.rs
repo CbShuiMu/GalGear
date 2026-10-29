@@ -1,18 +1,39 @@
 //! Section navigation keeps each settings task in its own reading pane.
 use crate::{
-    accounts, ai, choices, cloud, downloads, features, requests::Pending, state::App,
-    view::account_label, view::f, view::t, widgets::button, widgets::esc, widgets::icon,
+    accounts, ai, choices, cloud, downloads, features, models::BackgroundImage, requests::Pending,
+    state::App, view::account_label, view::f, view::t, widgets::button, widgets::esc,
+    widgets::icon,
 };
 use galgear_i18n::Language;
 use serde::Deserialize;
 use std::fmt::Write;
 
-pub(crate) const SOURCES: [(&str, &str); 4] = [
+pub(crate) const SOURCES: [(&str, &str); 5] = [
     ("2dfan", "2DFan"),
     ("vndb", "VNDB"),
     ("bangumi", "Bangumi"),
     ("ymgal", "月幕 Galgame"),
+    ("nextmoe", "未萌NextMoe"),
 ];
+
+pub(crate) fn source_icon(source: &str) -> &'static str {
+    match source {
+        "vndb" => "assets/vndb.ico",
+        "bangumi" => "assets/bangumi.ico",
+        "ymgal" => "assets/ymgal.ico",
+        "nextmoe" => "assets/nextmoe.webp",
+        _ => "assets/2dfan.png",
+    }
+}
+
+pub(crate) fn background_url(image: &BackgroundImage) -> Option<String> {
+    (image.id.len() == 64
+        && image
+            .id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))
+    .then(|| format!("http://galgear-background.localhost/{}", image.id))
+}
 #[derive(Clone, Default, Deserialize)]
 pub(crate) struct SourceStatus {
     pub source: String,
@@ -25,6 +46,10 @@ pub(crate) fn source_for_url(url: &str) -> (&'static str, &'static str) {
         "bangumi"
     } else if url.starts_with("https://www.ymgal.games/") {
         "ymgal"
+    } else if url.starts_with("https://developer.nextmoe.dev/explore/work/")
+        || url.starts_with("https://api.nextmoe.dev/v2/catalog/works/")
+    {
+        "nextmoe"
     } else {
         "2dfan"
     };
@@ -100,8 +125,8 @@ fn option(
     ) {
         write!(
             html,
-            r#"<img class="source-icon" src="assets/{}.ico" alt=""/>"#,
-            esc(value)
+            r#"<img class="source-icon" src="{}" alt=""/>"#,
+            source_icon(value)
         )
         .unwrap();
     }
@@ -154,7 +179,7 @@ fn account(html: &mut String, app: &App) {
             .data_sources
             .iter()
             .any(|status| status.source == source && status.configured);
-        write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2><img src="assets/{}.ico" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source,name,if configured{"connected"}else{""},t(app,if configured{"sources.saved"}else{"sources.public"})).unwrap();
+        write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source_icon(source),name,if configured{"connected"}else{""},t(app,if configured{"sources.saved"}else{"sources.public"})).unwrap();
         if source == "ymgal" {
             write!(
                 html,
@@ -168,6 +193,20 @@ fn account(html: &mut String, app: &App) {
             ] {
                 source_field(html, app, source, field, label, password, configured);
             }
+        } else if source == "nextmoe" {
+            write!(
+                html,
+                "<p class=\"field-help\">{}</p>",
+                t(app, "sources.nextmoe_help")
+            )
+            .unwrap();
+            source_field(html, app, source, "token", "API Key", true, configured);
+            write!(
+                html,
+                "<p class=\"field-help vault-note\">{}</p>",
+                t(app, "auth.vault")
+            )
+            .unwrap();
         } else {
             source_field(html, app, source, "token", "Token", true, configured);
         }
@@ -275,7 +314,11 @@ fn display(html: &mut String, app: &App) {
     .unwrap();
     options_start(html, "color-theme", t(app, "settings.theme"));
     let theme_pending = app.requests.values().any(|p| matches!(p, Pending::Theme));
-    for (theme, label) in [("pink", "theme.pink"), ("white-pink", "theme.white_pink")] {
+    for (theme, label) in [
+        ("pink", "theme.pink"),
+        ("white-pink", "theme.white_pink"),
+        ("white", "theme.white"),
+    ] {
         option(
             html,
             "set-color-theme",
@@ -325,7 +368,74 @@ fn display(html: &mut String, app: &App) {
         t(app, "display.help")
     )
     .unwrap();
+    background(html, app);
+    navigation(html, app);
 }
+
+fn background(html: &mut String, app: &App) {
+    write!(
+        html,
+        r#"<section class="settings-card background-card"><h2>{}</h2><p>{}</p>"#,
+        t(app, "background.title"),
+        t(app, "background.help")
+    )
+    .unwrap();
+    let image = app
+        .settings
+        .background_image
+        .as_ref()
+        .and_then(|image| background_url(image).map(|url| (image, url)));
+    if let Some((image, url)) = &image {
+        write!(
+            html,
+            r#"<div class="background-preview"><img src="{}" alt=""/></div><p class="directory-value background-name">{}</p>"#,
+            url,
+            esc(&image.name)
+        )
+        .unwrap();
+    } else {
+        write!(
+            html,
+            r#"<div class="background-preview background-empty">{}<span>{}</span></div>"#,
+            icon("image"),
+            t(app, "background.none")
+        )
+        .unwrap();
+    }
+    write!(
+        html,
+        r#"<div class="background-actions">{}{}</div></section>"#,
+        button(
+            "background-choose",
+            "",
+            t(
+                app,
+                if image.is_some() {
+                    "background.change"
+                } else {
+                    "background.select"
+                }
+            ),
+            "image",
+            "primary",
+            app.busy()
+        ),
+        button(
+            "background-clear",
+            "",
+            t(app, "background.reset"),
+            "refresh",
+            "quiet",
+            app.busy() || app.settings.background_image.is_none()
+        )
+    )
+    .unwrap();
+}
+
+fn navigation(html: &mut String, app: &App) {
+    write!(html,r#"<section class="settings-card"><h2>{}</h2><p>{}</p><div class="preference-row"><h3>{}</h3><button id="patch-tab-toggle" class="preference-switch" role="switch" aria-label="{}" aria-checked="{}" data-action="patch-tab" data-value="{}" {}><span></span></button></div></section>"#,t(app,"settings.navigation"),t(app,"settings.navigation_help"),t(app,"nav.patches"),t(app,"settings.patch_tab"),app.settings.show_patches,!app.settings.show_patches,if app.busy(){"disabled"}else{""}).unwrap();
+}
+
 fn system(html: &mut String, app: &App) {
     html.push_str("<section class=\"settings-card\">");
     for (label, action, selected, options) in [
@@ -365,7 +475,7 @@ fn system(html: &mut String, app: &App) {
         }
         html.push_str("</div></div>");
     }
-    write!(html,r#"</section><section class="settings-card"><h2>{}</h2><p>{}</p><div class="preference-row"><h3>{}</h3><button id="patch-tab-toggle" class="preference-switch" role="switch" aria-label="{}" aria-checked="{}" data-action="patch-tab" data-value="{}" {}><span></span></button></div></section>"#,t(app,"settings.navigation"),t(app,"settings.navigation_help"),t(app,"nav.patches"),t(app,"settings.patch_tab"),app.settings.show_patches,!app.settings.show_patches,if app.busy(){"disabled"}else{""}).unwrap();
+    html.push_str("</section>");
 }
 fn paths(html: &mut String, app: &App) {
     write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>{}</h2><div class="settings-card-actions">{}{}</div></div><p class="directory-value">{}</p></section><section class="settings-card"><div class="panel-heading"><h2>{}</h2>{}</div><div class="edit-grid">"#,t(app,"download.folder"),button("open-downloads","",t(app,"download.open_folder"),"folder_open","quiet",app.busy()),button("download-folder","",t(app,"download.change_folder"),"edit","quiet",app.busy()),esc(&downloads::folder(&app.config_path, &app.settings)),t(app,"tools.title"),button("configure-tools","",t(app,"common.save"),"save","primary",app.busy())).unwrap();
@@ -440,4 +550,37 @@ fn about(html: &mut String, app: &App) {
         .unwrap();
     }
     html.push_str("</section>");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn background_url_cannot_escape_the_managed_image_cache() {
+        for id in [
+            "../image".into(),
+            "a".repeat(63),
+            "A".repeat(64),
+            format!("{}?key=value", "a".repeat(64)),
+        ] {
+            assert!(
+                background_url(&BackgroundImage {
+                    id,
+                    name: "image.png".into()
+                })
+                .is_none()
+            );
+        }
+        assert_eq!(
+            background_url(&BackgroundImage {
+                id: "a".repeat(64),
+                name: "image.png".into()
+            }),
+            Some(format!(
+                "http://galgear-background.localhost/{}",
+                "a".repeat(64)
+            ))
+        );
+    }
 }

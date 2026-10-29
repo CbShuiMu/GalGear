@@ -23,13 +23,14 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: http://galgear-cover.localhost galgear-cover: http://galgear-icon.localhost galgear-icon: https://t.vndb.org https://s.vndb.org https://lain.bgm.tv https://store.ymgal.games https://img.achost.top https://2dfmax.top https://2dfdf.de https://2dfan.com https://fan2d.top https://acgfan.top; connect-src ipc: http://ipc.localhost 'self'; object-src 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: http://galgear-cover.localhost galgear-cover: http://galgear-icon.localhost galgear-icon: http://galgear-background.localhost galgear-background: https://t.vndb.org https://s.vndb.org https://lain.bgm.tv https://store.ymgal.games https://image.kungal.iloveren.link https://img.achost.top https://2dfmax.top https://2dfdf.de https://2dfan.com https://fan2d.top https://acgfan.top; connect-src ipc: http://ipc.localhost 'self'; object-src 'none'; base-uri 'self'"
     }
   },
   "bundle": {
     "resources": {
-      "../skills/GalgameResourceExtract/": "skills/GalgameResourceExtract/",
-      "../tools/ai-agent/": "tools/ai-agent/"
+      "../Galgear-GalgameReverse-Skill/GalgameResourceExtract/": "Galgear-GalgameReverse-Skill/GalgameResourceExtract/",
+      "../tools/ai-agent/": "tools/ai-agent/",
+      "../tools/waifu2x/": "tools/waifu2x/"
     },
     "active": true,
     "targets": [

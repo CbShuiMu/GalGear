@@ -42,11 +42,14 @@ pub(crate) fn begin(app: &mut App) {
         );
     }
     app.detail.editing = true;
+    app.detail.editing_configuration =
+        matches!(app.detail.editor, Some(crate::detail::Editor::Tools));
     app.choices.open = None;
 }
 
 pub(crate) fn cancel(app: &mut App) {
     app.detail.editing = false;
+    app.detail.editing_configuration = false;
     app.form.retain(|key, _| !key.starts_with("draft-"));
 }
 

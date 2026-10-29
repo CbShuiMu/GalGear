@@ -61,7 +61,7 @@ pub(crate) fn set_color_theme(
     color_theme: String,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
-    if !matches!(color_theme.as_str(), "pink" | "white-pink") {
+    if !matches!(color_theme.as_str(), "pink" | "white-pink" | "white") {
         return Err(Message::new("error.operation"));
     }
     update(&state, |settings| {

@@ -43,7 +43,7 @@ class ColdIsolationTests(unittest.TestCase):
         host = self.root / 'crates/core/src/ai_summary/agent_host.py'
         host.parent.mkdir(parents=True)
         host.write_text('# synthetic host', encoding='utf-8')
-        skill = self.root / 'skills/GalgameResourceExtract'
+        skill = self.root / 'Galgear-GalgameReverse-Skill/GalgameResourceExtract'
         skill.mkdir(parents=True)
         (skill / 'SKILL.md').write_text('Synthetic portable skill', encoding='utf-8')
         self.settings = self.root / 'settings.json'

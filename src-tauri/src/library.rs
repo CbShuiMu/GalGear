@@ -14,6 +14,10 @@ pub(crate) struct ScanState {
     cancel: Arc<AtomicBool>,
 }
 
+impl ScanState {
+    pub(crate) fn is_scanning(&self) -> bool { self.scanning.load(Ordering::SeqCst) }
+}
+
 struct ScanGuard<'a>(&'a AtomicBool);
 impl Drop for ScanGuard<'_> {
     fn drop(&mut self) {
@@ -104,6 +108,7 @@ pub(crate) async fn refresh(
                     .is_none_or(|before| before != &updated.cover)
             {
                 game.cover.clone_from(&updated.cover);
+                game.cover_artwork.clone_from(&updated.cover_artwork);
             }
         }
     }
@@ -129,6 +134,8 @@ pub(crate) async fn refresh(
 #[tauri::command]
 pub(crate) async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, Message> {
     Ok(Bootstrap {
+        ai_available: galgear_core::ai::runtime::home()
+            .is_some_and(|home| galgear_core::ai::runtime::available(&home)),
         settings: snapshot(&state)?,
         catalog: state
             .catalog

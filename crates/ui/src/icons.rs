@@ -2,6 +2,16 @@
 
 pub(super) fn google(name: &str) -> Option<&'static str> {
     Some(match name {
+        "filter_plus" => include_str!(
+            "../../../src-tauri/icons/filter_plus_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "filter_cancel" => include_str!(
+            "../../../src-tauri/icons/filter_cancel_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "playstation-shapes" => include_str!("../../../src-tauri/icons/playstation-shapes-24.svg"),
+        "done_all" => {
+            r#"<svg viewBox="0 0 24 24" fill="currentColor"><path d="m18 7-1.4-1.4-6.3 6.3 1.4 1.4L18 7Zm4.2-1.4L11.7 16.1l-4.1-4.1L6.2 13.4l5.5 5.5L23.6 7l-1.4-1.4ZM.4 13.4l5.5 5.5 1.4-1.4-5.5-5.5-1.4 1.4Z"/></svg>"#
+        }
         "sparkle" => {
             r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 14.8 9.2 22 12 14.8 14.8 12 22 9.2 14.8 2 12 9.2 9.2Z"/></svg>"#
         }

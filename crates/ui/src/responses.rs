@@ -9,6 +9,21 @@ use galgear_i18n::Message;
 use serde_json::json;
 use wasm_bindgen::prelude::wasm_bindgen;
 
+fn resolve_background(app: &mut crate::state::App, id: u32, success: bool, payload: &str) {
+    if !success {
+        show_toast(app, Message::from_error(payload), true);
+        return;
+    }
+    match serde_json::from_str::<Option<Settings>>(payload) {
+        Ok(Some(settings)) => {
+            apply_settings(app, settings, id);
+            show_toast(app, Message::new("notice.saved"), false);
+        }
+        Ok(None) => {}
+        Err(error) => show_toast(app, Message::detail("error.read_data", error), true),
+    }
+}
+
 #[wasm_bindgen]
 pub fn resolve(id: u32, success: bool, payload: &str) {
     APP.with(|state| {
@@ -16,6 +31,11 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         let Some(kind) = app.requests.complete(id) else {
             return;
         };
+        if matches!(kind, Pending::Background) {
+            resolve_background(&mut app, id, success, payload);
+            paint(&app);
+            return;
+        }
         if matches!(kind, Pending::Enrich) {
             app.enrichment_progress = None;
         }
@@ -73,7 +93,8 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         } else {
             let handled: Result<(), String> = (|| {
                 match kind {
-                    Pending::Ai(_)
+                    Pending::Background
+                    | Pending::Ai(_)
                     | Pending::Cloud(_)
                     | Pending::SummarySetup(..)
                     | Pending::Summary(_)
@@ -251,6 +272,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         playtime::replace_catalog(&mut app.catalog, data.catalog);
                         app.config_path = data.config_path;
                         app.version = data.version;
+                        app.ai_available = data.ai_available;
                         app.initialized = true;
                         if matches!(kind, Pending::Bootstrap) {
                             issue(
@@ -502,4 +524,66 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         game_setup::sync(&mut app);
         paint(&app);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{models::BackgroundImage, state::App};
+
+    fn previous_background() -> BackgroundImage {
+        BackgroundImage {
+            id: "a".repeat(64),
+            name: "existing.png".into(),
+        }
+    }
+
+    #[test]
+    fn cancelling_background_selection_preserves_the_image_without_a_saved_notice() {
+        let mut app = App::default();
+        app.settings.background_image = Some(previous_background());
+
+        resolve_background(&mut app, 1, true, "null");
+
+        assert_eq!(app.settings.background_image, Some(previous_background()));
+        assert!(app.toast.is_none());
+    }
+
+    #[test]
+    fn failed_background_selection_preserves_the_existing_image_and_reports_the_error() {
+        let mut app = App::default();
+        app.settings.background_image = Some(previous_background());
+
+        resolve_background(
+            &mut app,
+            1,
+            false,
+            r#"{"key":"background.invalid","args":{}}"#,
+        );
+
+        assert_eq!(app.settings.background_image, Some(previous_background()));
+        assert!(
+            app.toast
+                .is_some_and(|(notice, error)| error && notice.key == "background.invalid")
+        );
+    }
+
+    #[test]
+    fn clearing_background_applies_the_saved_settings() {
+        let mut app = App::default();
+        app.settings.background_image = Some(previous_background());
+
+        resolve_background(
+            &mut app,
+            1,
+            true,
+            r#"{"library_folders":[],"card_size":200,"sort_by":"title","background_image":null}"#,
+        );
+
+        assert!(app.settings.background_image.is_none());
+        assert!(
+            app.toast
+                .is_some_and(|(notice, error)| !error && notice.key == "notice.saved")
+        );
+    }
 }

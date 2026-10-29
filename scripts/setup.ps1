@@ -21,4 +21,5 @@ if (-not (Test-Path -LiteralPath (Join-Path $toolsPath 'wasm-bindgen.exe'))) {
 rustup target add wasm32-unknown-unknown
 if ($LASTEXITCODE -ne 0) { throw 'WebAssembly 编译目标安装失败。' }
 Write-Host '构建工具已准备好。'
+& (Join-Path $PSScriptRoot 'setup-waifu2x.ps1')
 

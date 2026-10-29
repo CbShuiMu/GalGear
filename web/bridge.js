@@ -1,6 +1,9 @@
 // Only the DOM / WebAssembly / Tauri transport bridge lives in JavaScript.
 // Rendering, app state, event decisions and all application logic live in Rust.
 import init, * as ui from './pkg/galgear_ui.js';
+import {syncModalBoundary, topLayer, focusable} from './navigation.js';
+import {startGamepad} from './gamepad.js';
+import {installHomeNavigation, syncHomePresentation} from './home.js';
 
 let wasmReady = false;
 let previousDialog = false;
@@ -270,9 +273,9 @@ function renderFrame(html) {
     if (tree) { tree.scrollTop = treeScroll; tree.scrollLeft = treeLeft; }
     const details = document.querySelector('.detail-scroll');
     if (details) details.scrollTop = detailsScroll;
-    if (hasDialog && !previousDialog) document.getElementById('close-detail')?.focus();
+    if (hasDialog && !previousDialog) document.getElementById('close-detail')?.focus({preventScroll:true});
     else if (!hasDialog && previousDialog) {
-      document.getElementById(`game-${dialogReturnFocus}`)?.focus({ preventScroll: true });
+      (document.getElementById(`game-${dialogReturnFocus}`) || document.getElementById(`home-game-${dialogReturnFocus}`))?.focus({ preventScroll: true });
     } else if (focusId) {
       const next = document.getElementById(focusId);
       // A retained input already owns its caret and IME composition session.
@@ -300,7 +303,7 @@ function renderFrame(html) {
       else if (!trigger) choiceReturnFocus = null;
     }
     previousChoice = choiceId;
-    if (hasLibraryDialog && !previousLibraryDialog) (document.getElementById('folder-name') || document.getElementById('folder-query') || document.getElementById('tag-query') || document.getElementById('game-query') || document.getElementById('library-dialog-close'))?.focus();
+    if (hasLibraryDialog && !previousLibraryDialog) (document.getElementById('folder-name') || document.getElementById('folder-query') || document.getElementById('tag-query') || document.getElementById('game-query') || document.getElementById('library-dialog-close'))?.focus({preventScroll:true});
     else if (!hasLibraryDialog && previousLibraryDialog) {
       const origin=libraryReturnFocus;
       const target=(origin?.id && document.getElementById(origin.id)) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===origin?.action && node.dataset.value===origin?.value) || document.querySelector('.collection-bar [data-action=folder-new]');
@@ -312,8 +315,9 @@ function renderFrame(html) {
     });
     const editorBody = document.querySelector('.editor-body');
     if (editorBody) editorBody.scrollTop = editorScroll;
-    if (hasEditor && !previousEditor) document.querySelector('.editor-body input,.editor-body textarea,.editor-dialog button')?.focus();
+    if (hasEditor && !previousEditor) document.querySelector('.editor-body input,.editor-body textarea,.editor-dialog button')?.focus({preventScroll:true});
     else if (!hasEditor && previousEditor && editorReturnFocus) (document.getElementById(editorReturnFocus.id) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===editorReturnFocus.action && node.dataset.value===editorReturnFocus.value))?.focus({preventScroll:true});
+    if (details) details.scrollTop = detailsScroll;
     previousEditor = hasEditor;
     const setup = document.querySelector('.setup-dialog');
     const setupKey = setup?.dataset.renderKey || null;
@@ -335,12 +339,14 @@ function renderFrame(html) {
       const state=context.querySelector('.context-state').getBoundingClientRect();
       sub.style.top=`${Math.min(0,innerHeight-state.top-sub.getBoundingClientRect().height-8)}px`;
       sub.style.visibility='';sub.style.display='';
-      if(!previousContext) {contextReturnId=active?.closest('[data-game-id]')?.dataset.gameId;context.querySelector('button')?.focus();}
+      if(!previousContext) {contextReturnId=active?.closest('[data-game-id]')?.dataset.gameId;context.querySelector('button')?.focus({preventScroll:true});}
       previousContext=true;
     } else if(previousContext) {
       if(contextReturnId)document.getElementById(`game-${contextReturnId}`)?.focus({preventScroll:true});
       previousContext=false;contextReturnId=null;
     }
+    syncModalBoundary();
+    syncHomePresentation();
     measureLibraryBounds();
     syncSegmentedControls();
     if (pane) { pane.scrollTop = pageTop; pane.scrollLeft = pageLeft; }
@@ -395,7 +401,7 @@ window.GalGearBridge = {
       return;
     }
     const theme = /data-theme="(light|dark)"/.exec(html)?.[1];
-    const colorTheme = /data-color-theme="(pink|white-pink)"/.exec(html)?.[1];
+    const colorTheme = /data-color-theme="(pink|white-pink|white)"/.exec(html)?.[1];
     const previous = document.documentElement.dataset.theme;
     const previousColorTheme = document.documentElement.dataset.colorTheme;
     const apply = () => {
@@ -517,10 +523,10 @@ document.addEventListener('keydown', event => {
     const nodes=submenu?[...submenu.querySelectorAll('button')]:[...context.querySelectorAll(':scope>button,:scope>.context-state>button')];
     const current=nodes.indexOf(document.activeElement);
     const index=event.key==='Home'?0:event.key==='End'?nodes.length-1:(current+(event.key==='ArrowDown'?1:-1)+nodes.length)%nodes.length;
-    nodes[index]?.focus();event.preventDefault();return;
+    nodes[index]?.focus({preventScroll:true});event.preventDefault();return;
   }
-  if(context && event.key==='ArrowRight' && event.target.closest('.context-state')){context.querySelector('.context-submenu button')?.focus();event.preventDefault();return;}
-  if(context && event.key==='ArrowLeft' && event.target.closest('.context-submenu')){context.querySelector('.context-state>button')?.focus();event.preventDefault();return;}
+  if(context && event.key==='ArrowRight' && event.target.closest('.context-state')){context.querySelector('.context-submenu button')?.focus({preventScroll:true});event.preventDefault();return;}
+  if(context && event.key==='ArrowLeft' && event.target.closest('.context-submenu')){context.querySelector('.context-state>button')?.focus({preventScroll:true});event.preventDefault();return;}
   const choice = event.target.closest('.choice-popup,.choice-trigger');
   if (choice && ui.choice_key(choice.dataset.choiceAnchor || choice.id, event.key)) { event.preventDefault(); return; }
   if (event.key === 'Escape') {
@@ -536,12 +542,11 @@ document.addEventListener('keydown', event => {
   if (document.querySelector('.setup-overlay') && (event.ctrlKey || event.metaKey) && ['s','Enter'].includes(event.key)) { event.preventDefault(); ui.dispatch('setup-save',''); return; }
   if ((event.ctrlKey || event.metaKey) && ['s','Enter'].includes(event.key) && document.querySelector('.reference-detail.editing')) { event.preventDefault(); ui.dispatch('detail-save',''); }
   if (event.key === 'Enter' && event.target.id === 'library-path') ui.dispatch('add-folder', '');
-  if (event.key === 'Tab' && document.querySelector('.setup-dialog,.editor-dialog,.library-dialog,.detail-panel')) {
-    const modal = document.querySelector('.setup-dialog') || document.querySelector('.editor-dialog') || document.querySelector('.library-dialog') || document.querySelector('.detail-panel');
-    const nodes = [...modal.querySelectorAll('button:not(:disabled), input, textarea, select, summary')].filter(e => !e.disabled && e.getClientRects().length);
+  if (event.key === 'Tab' && topLayer() && !topLayer().matches('.app-shell')) {
+    const nodes = focusable();
     const first = nodes[0], last = nodes[nodes.length - 1];
-    if (event.shiftKey && document.activeElement === first) { last.focus(); event.preventDefault(); }
-    else if (!event.shiftKey && document.activeElement === last) { first.focus(); event.preventDefault(); }
+    if (event.shiftKey && (document.activeElement === first || !nodes.includes(document.activeElement))) { last?.focus({preventScroll:true}); event.preventDefault(); }
+    else if (!event.shiftKey && (document.activeElement === last || !nodes.includes(document.activeElement))) { first?.focus({preventScroll:true}); event.preventDefault(); }
   }
 });
 
@@ -747,6 +752,16 @@ try {
   if (window.__TAURI__?.event) {
     await window.__TAURI__.event.listen('scan-progress', event => ui.scan_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('game-enriched', event => ui.game_enriched(JSON.stringify(event.payload)));
+    await window.__TAURI__.event.listen('cover-enhanced', async event => {
+      // Keep the old artwork until both new images are decoded, including the 4K backdrop.
+      const data = event.payload;
+      try {
+        await Promise.all([data.cover, `http://galgear-cover.localhost/${data.cover_artwork.background}`].map(src => {
+          const image = new Image(); image.src = src; return image.decode();
+        }));
+        ui.cover_enhanced(JSON.stringify(data));
+      } catch (error) { console.warn('Artwork preload failed; keeping current cover', error); }
+    });
     await window.__TAURI__.event.listen('enrichment-progress', event => ui.enrichment_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('fan-download-progress', event => ui.download_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('fan-status-updated', event => ui.fan_status_updated(JSON.stringify(event.payload)));
@@ -762,3 +777,6 @@ catch (error) {
   screen.textContent = String(error);
   document.getElementById('app').replaceChildren(screen);
 }
+
+installHomeNavigation(ui.dispatch, () => wasmReady);
+startGamepad();

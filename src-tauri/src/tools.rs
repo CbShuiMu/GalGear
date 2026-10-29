@@ -252,7 +252,7 @@ pub(crate) fn schedule_upscale(
 pub(crate) fn scheduler(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut previous = BTreeMap::new();
-        let mut was_running = std::collections::BTreeSet::new();
+        let mut sessions = galgear_core::play_sessions::Tracker::default();
         let mut tracker = playtime::Tracker::default();
         let mut playtime_dirty = false;
         loop {
@@ -340,14 +340,8 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
                     })
                     .await;
                 }
-                for (id, status) in &current {
-                    if *status == Status::Running {
-                        was_running.insert(id.clone());
-                    }
-                    if *status == Status::Stopped
-                        && was_running.remove(id)
-                        && settings.game_edits.get(id).is_some_and(|e| e.auto_backup)
-                    {
+                for id in sessions.observe(&current) {
+                    if settings.game_edits.get(&id).is_some_and(|e| e.auto_backup) {
                         let result = backup(id.clone(), "Automatic backup".into(), &state).await;
                         let _ = app.emit(
                             "backup-completed",

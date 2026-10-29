@@ -572,6 +572,7 @@ pub fn cover_bytes(image_url: &str, referrer: &str) -> Result<Vec<u8>, Message> 
             "s.vndb.org",
             "lain.bgm.tv",
             "store.ymgal.games",
+            "image.kungal.iloveren.link",
         ]
         .contains(&url.host_str().unwrap_or_default())
     {

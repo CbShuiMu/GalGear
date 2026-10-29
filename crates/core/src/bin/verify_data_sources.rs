@@ -1,4 +1,5 @@
 //! Read-only provider verification, with optional credentials from standard input.
+//! Usage: verify_data_sources <source> <settings.json> <query> [--covers]
 use galgear_core::data_sources::{self, Credentials};
 use std::{io::Read, path::PathBuf};
 
@@ -44,6 +45,14 @@ fn run() -> Result<(), galgear_i18n::Message> {
             metadata.description.chars().count(),
             metadata.tags.len()
         );
+        if args.get(3).is_some_and(|arg| arg == "--covers") {
+            let covers = data_sources::covers("https://2dfmax.top", &resource.url, &credentials)?;
+            println!("{} cover candidates", covers.len());
+            if let Some(cover) = covers.first() {
+                let bytes = galgear_core::providers::cover_bytes(&cover.image_url, &cover.url)?;
+                println!("Cover downloaded and normalized: {} bytes", bytes.len());
+            }
+        }
     }
     Ok(())
 }

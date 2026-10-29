@@ -41,7 +41,7 @@ def _region(data, offset, length):
 def _erisa_assembly():
     # Both development and packaged layouts use the same bundled tool. No
     # adapter-controlled path, assembly, command or script is accepted.
-    relative = pathlib.Path('skills/GalgameResourceExtract/tools/GARbro-cli/ArcFormats.dll')
+    relative = pathlib.Path('Galgear-GalgameReverse-Skill/GalgameResourceExtract/tools/GARbro-cli/ArcFormats.dll')
     roots = [pathlib.Path(sys.executable).resolve().parent.parent.parent]
     source = pathlib.Path(__file__).resolve()
     if len(source.parents) > 4:
@@ -89,7 +89,7 @@ def _mdf(data):
 
 
 def _freemote_assembly():
-    relative = pathlib.Path('skills/GalgameResourceExtract/tools/freemote/FreeMote.dll')
+    relative = pathlib.Path('Galgear-GalgameReverse-Skill/GalgameResourceExtract/tools/freemote/FreeMote.dll')
     roots = [pathlib.Path(sys.executable).resolve().parent.parent.parent]
     source = pathlib.Path(__file__).resolve()
     if len(source.parents) > 4:

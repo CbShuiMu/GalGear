@@ -226,6 +226,7 @@ fn visit(
                 engine: detect_engine(&files, &children),
                 play_status: Default::default(),
                 cover,
+                cover_artwork: None,
                 modified: fs::metadata(dir)
                     .ok()
                     .and_then(|m| m.modified().ok())

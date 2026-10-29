@@ -96,7 +96,7 @@ pub fn files(root: &Path, depth: usize) -> Result<Vec<PathBuf>, Message> {
 
 pub fn tool(home: &Path) -> Result<PathBuf, Message> {
     [
-        home.join("skills/GalgameResourceExtract/tools/GARbro-cli/GARbro.Console.exe"),
+        home.join("Galgear-GalgameReverse-Skill/GalgameResourceExtract/tools/GARbro-cli/GARbro.Console.exe"),
         home.join("GARbro-cli/GARbro.Console.exe"),
     ]
     .into_iter()

@@ -51,10 +51,18 @@ pub(crate) struct Settings {
     pub(crate) theme: String,
     #[serde(default = "default_color_theme")]
     pub(crate) color_theme: String,
+    #[serde(default)]
+    pub(crate) background_image: Option<BackgroundImage>,
     #[serde(default = "default_source")]
     pub(crate) metadata_provider: String,
     #[serde(default = "default_ai_provider")]
     pub(crate) ai_provider: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub(crate) struct BackgroundImage {
+    pub(crate) id: String,
+    pub(crate) name: String,
 }
 pub(crate) fn default_ai_provider() -> String {
     "deepseek".into()
@@ -130,6 +138,8 @@ pub(crate) struct Game {
     #[serde(default)]
     pub(crate) play_status: String,
     pub(crate) cover: Option<String>,
+    #[serde(default)]
+    pub(crate) cover_artwork: Option<CoverArtwork>,
     pub(crate) modified: u64,
     #[serde(default)]
     pub(crate) playtime_seconds: u64,
@@ -146,6 +156,11 @@ pub(crate) struct Game {
 }
 pub(crate) fn true_value() -> bool {
     true
+}
+
+#[derive(Clone, Deserialize)]
+pub(crate) struct CoverArtwork {
+    pub(crate) background: String,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -288,6 +303,8 @@ pub(crate) struct Catalog {
 
 #[derive(Deserialize)]
 pub(crate) struct Bootstrap {
+    #[serde(default)]
+    pub(crate) ai_available: bool,
     pub(crate) settings: Settings,
     pub(crate) catalog: Catalog,
     pub(crate) config_path: String,

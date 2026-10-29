@@ -78,9 +78,22 @@ pub(crate) fn paint(app: &App) {
         return;
     }
     let mut html = String::with_capacity(24000);
-    write!(html, r#"<div class="app-shell cards-240" data-cover-scale="1.2" data-font-size="{}" data-theme="{}" data-color-theme="{}" lang="{}"><aside class="sidebar"><a class="brand" href="./" data-action="page" data-value="games" aria-label="GalGear" title="GalGear"><span class="brand-mark">{}</span></a><nav class="navigation" aria-label="{}">"#,
-        app.settings.font_size, if app.settings.theme=="dark" {"dark"}else{"light"}, if app.settings.color_theme=="white-pink"{"white-pink"}else{"pink"}, app.settings.language.code(), brand(), t(app,"nav.main")).unwrap();
+    let background = if app.page == "home" {
+        None
+    } else {
+        app.settings
+            .background_image
+            .as_ref()
+            .and_then(preferences::background_url)
+    };
+    write!(html, r#"<div class="app-shell cards-240" data-custom-background="{}" data-cover-scale="1.2" data-font-size="{}" data-theme="{}" data-color-theme="{}" lang="{}"><div id="app-background" class="app-background" aria-hidden="true">"#,
+        background.is_some(), app.settings.font_size, if app.settings.theme=="dark" {"dark"}else{"light"}, if matches!(app.settings.color_theme.as_str(), "white-pink" | "white") { app.settings.color_theme.as_str() } else { "pink" }, app.settings.language.code()).unwrap();
+    if let Some(url) = background {
+        write!(html, r#"<img id="app-background-image" src="{}" alt="" decoding="async" draggable="false"/>"#, esc(&url)).unwrap();
+    }
+    write!(html, r#"</div><aside class="sidebar"><a class="brand" href="./" data-action="page" data-value="home" aria-label="GalGear" title="GalGear"><span class="brand-mark">{}</span></a><nav class="navigation" aria-label="{}">"#, brand(), t(app,"nav.main")).unwrap();
     for (value, key) in [
+        ("home", "nav.home"),
         ("games", "nav.games"),
         ("collections", "folders.title"),
         ("patches", "nav.patches"),
@@ -106,6 +119,7 @@ pub(crate) fn paint(app: &App) {
     };
     write!(html, r#"</nav><div class="sidebar-version">GalGear <span>v{}</span></div></div></aside><main class="main-panel"><div class="page-scroll" id="page-scroll" data-scroll-key="{}">"#, esc(&app.version),esc(&scroll_key)).unwrap();
     match app.page.as_str() {
+        "home" => crate::home::render(&mut html, app),
         "settings" => settings_page(&mut html, app),
         "about" => about_page(&mut html, app),
         "patches" => patches_page(&mut html, app),
@@ -144,7 +158,8 @@ pub(crate) fn nav(html: &mut String, app: &App, value: &str, label: &str) {
         if active { "active" } else { "" },
         if active { "page" } else { "false" },
         icon(match value {
-            "games" => "gamepad",
+            "home" => "gamepad",
+            "games" => "playstation-shapes",
             "collections" => "star",
             _ => value,
         })

@@ -25,6 +25,7 @@ pub fn manual_game(path: &Path, title: String) -> Result<Game, Message> {
         engine: "unknown".into(),
         play_status: Default::default(),
         cover: None,
+        cover_artwork: None,
         modified: 0,
         playtime_seconds: 0,
         last_played: None,
@@ -108,6 +109,7 @@ pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> Sc
         let mut pinned = manual.clone();
         if let Some(cached) = old.games.iter().find(|g| g.id == manual.id) {
             pinned.cover.clone_from(&cached.cover);
+            pinned.cover_artwork.clone_from(&cached.cover_artwork);
         }
         if let Some(entry) = fresh.games.iter_mut().find(|g| g.id == manual.id) {
             *entry = pinned;

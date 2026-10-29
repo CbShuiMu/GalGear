@@ -164,9 +164,9 @@ class ContainerPolicyTests(unittest.TestCase):
         opaque = b'\x00\xff\x80opaque'
         target = b'conststr' + len(opaque).to_bytes(8, 'little') + opaque
         image = b'image   ' + (0).to_bytes(8, 'little')
-        shipped = ['skills/GalgameResourceExtract']
-        if (repository / 'skills/EN/GalgameResourceExtract').is_dir():
-            shipped.append('skills/EN/GalgameResourceExtract')
+        shipped = ['Galgear-GalgameReverse-Skill/GalgameResourceExtract']
+        if (repository / 'Galgear-GalgameReverse-Skill/EN/GalgameResourceExtract').is_dir():
+            shipped.append('Galgear-GalgameReverse-Skill/EN/GalgameResourceExtract')
         for relative in shipped:
             with self.subTest(skill=relative):
                 skill = repository / relative

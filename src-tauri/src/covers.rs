@@ -183,6 +183,7 @@ pub(crate) fn prepare_cover(game: &mut Game, cache: &std::path::Path) -> Result<
         }
         game.cover = Some(format!("http://galgear-cover.localhost/{key}"));
     }
+    galgear_core::cover_art::restore(game, cache);
     Ok(())
 }
 

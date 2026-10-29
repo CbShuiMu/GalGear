@@ -109,7 +109,7 @@ class LatestSkillCompatibilityTests(unittest.TestCase):
 
     def test_installed_memory_helper_supports_all_host_actions_in_work_local_state(self):
         repository = pathlib.Path(__file__).resolve().parents[4]
-        helper = repository / 'skills/GalgameResourceExtract/scripts/memory.py'
+        helper = repository / 'Galgear-GalgameReverse-Skill/GalgameResourceExtract/scripts/memory.py'
         self.assertTrue(helper.is_file())
         installed = self.skill / 'scripts/memory.py'
         installed.parent.mkdir()

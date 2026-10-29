@@ -21,6 +21,7 @@ pub(crate) enum Pending {
     Preferences,
     Tools,
     Display,
+    Background,
     Theme,
     Language,
     Cover,

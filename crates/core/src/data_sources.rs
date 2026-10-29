@@ -18,7 +18,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const SOURCES: [&str; 4] = ["2dfan", "vndb", "bangumi", "ymgal"];
+mod nextmoe;
+
+pub const SOURCES: [&str; 5] = ["2dfan", "vndb", "bangumi", "ymgal", "nextmoe"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Cover {
@@ -62,6 +64,9 @@ fn add_release_covers(covers: &mut Vec<Cover>, value: &Value, url: &str, vn_id: 
 /// Available front and digital covers for one associated work, without changing its metadata.
 pub fn covers(domain: &str, url: &str, credentials: &Credentials) -> Result<Vec<Cover>, Message> {
     let (source, id) = source_for_url(url)?;
+    if source == "nextmoe" {
+        return nextmoe::covers(&providers::client()?, &id, url, credentials);
+    }
     if source != "vndb" {
         let metadata = metadata(domain, url, credentials)?;
         let mut covers = Vec::new();
@@ -146,7 +151,7 @@ pub fn save(config: &Path, source: &str, value: &Credentials) -> Result<(), Mess
     credentials::save(&credential_target(config, source)?, &saved)
 }
 pub fn statuses(config: &Path) -> Result<Vec<SourceStatus>, Message> {
-    ["vndb", "bangumi", "ymgal"]
+    ["vndb", "bangumi", "ymgal", "nextmoe"]
         .into_iter()
         .map(|source| {
             let value = load(config, source)?;
@@ -305,6 +310,7 @@ pub fn check(source: &str, credentials: &Credentials) -> Result<(), Message> {
         "ymgal" => {
             ym_token(&client, credentials)?;
         }
+        "nextmoe" => nextmoe::check(&client, credentials)?,
         _ => {}
     }
     Ok(())
@@ -334,7 +340,8 @@ pub fn source_for_url(url: &str) -> Result<(&'static str, String), Message> {
         || !url.username().is_empty()
         || url.password().is_some()
         || url.port().is_some()
-        || url.query().is_some()
+        || (url.query().is_some()
+            && !(url.host_str() == Some("developer.nextmoe.dev") && url.query() == Some("nsfw=1")))
         || url.fragment().is_some()
     {
         return Err(Message::new("error.site_url"));
@@ -350,6 +357,14 @@ pub fn source_for_url(url: &str) -> Result<(&'static str, String), Message> {
             path.to_ascii_lowercase()
                 .strip_prefix("/ga")
                 .map(str::to_owned),
+        ),
+        Some("api.nextmoe.dev") => (
+            "nextmoe",
+            path.strip_prefix("/v2/catalog/works/").map(str::to_owned),
+        ),
+        Some("developer.nextmoe.dev") => (
+            "nextmoe",
+            path.strip_prefix("/explore/work/").map(str::to_owned),
         ),
         _ => return Ok(("2dfan", String::new())),
     };
@@ -373,6 +388,9 @@ pub fn search(
         return providers::search_fan(domain, query);
     }
     let client = providers::client()?;
+    if source == "nextmoe" {
+        return nextmoe::search(&client, query, credentials);
+    }
     let value = match source {
         "vndb" => request_json(
             auth(
@@ -681,6 +699,7 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
             }
             Ok(meta)
         }
+        "nextmoe" => nextmoe::metadata(&client, &id, url, credentials),
         _ => Err(Message::new("error.site_url")),
     }
 }
@@ -722,6 +741,27 @@ mod tests {
             source_for_url("https://www.ymgal.games/GA31147").unwrap(),
             ("ymgal", "31147".into())
         );
+    }
+    #[test]
+    fn nextmoe_work_urls_accept_only_catalog_paths_and_the_nsfw_switch() {
+        assert_eq!(
+            source_for_url("https://developer.nextmoe.dev/explore/work/15?nsfw=1").unwrap(),
+            ("nextmoe", "15".into())
+        );
+        assert_eq!(
+            source_for_url("https://developer.nextmoe.dev/explore/work/15").unwrap(),
+            ("nextmoe", "15".into())
+        );
+        for url in [
+            "https://developer.nextmoe.dev/explore/work/15?nsfw=1&other=1",
+            "https://developer.nextmoe.dev/explore/work/15?nsfw=true",
+            "https://developer.nextmoe.dev/explore/work/15/other",
+            "https://developer.nextmoe.dev/explore/work/not-a-number",
+            "https://user@developer.nextmoe.dev/explore/work/15?nsfw=1",
+            "https://api.nextmoe.dev/v2/catalog/works/15?nsfw=1",
+        ] {
+            assert!(source_for_url(url).is_err(), "accepted {url}");
+        }
     }
     #[test]
     fn source_metadata_preserves_story_credits_and_cover() {

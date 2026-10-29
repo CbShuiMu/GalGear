@@ -87,11 +87,19 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             json!({"source":value}),
         ),
         "source-save" => {
+            let (client_id, client_secret) = if value == "ymgal" {
+                (
+                    form(app, "source-ymgal-client-id"),
+                    form(app, "source-ymgal-client-secret"),
+                )
+            } else {
+                (String::new(), String::new())
+            };
             issue(
                 app,
                 Pending::DataSources(value.into()),
                 "save_data_source",
-                json!({"source":value,"token":form(app,&format!("source-{value}-token")),"clientId":form(app,"source-ymgal-client-id"),"clientSecret":form(app,"source-ymgal-client-secret")}),
+                json!({"source":value,"token":form(app,&format!("source-{value}-token")),"clientId":client_id,"clientSecret":client_secret}),
             );
         }
         "source-clear" => issue(
@@ -182,6 +190,24 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             "set_patch_tab",
             json!({"visible":value=="true"}),
         ),
+        "background-choose" | "background-clear" => {
+            if app.busy()
+                || (action == "background-clear" && app.settings.background_image.is_none())
+            {
+                return false;
+            }
+            app.background_request = app.requests.next_id();
+            issue(
+                app,
+                Pending::Background,
+                if action == "background-choose" {
+                    "choose_background_image"
+                } else {
+                    "clear_background_image"
+                },
+                json!({}),
+            );
+        }
         "context-close" => app.context_menu = None,
         "play-status" => {
             if let Some(menu) = app.context_menu.take() {
@@ -221,6 +247,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "editor-close" => {
+            if app.detail.editing_configuration {
+                detail_form::cancel(app);
+            }
             app.detail.editor = None;
             app.form.remove("title-draft");
             app.form.remove("locale-profile");
@@ -377,6 +406,16 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     "update_snapshot",
                     json!({"id":id,"snapshotId":value,"locked":if action=="snapshot-lock" {!snapshot.locked} else {snapshot.locked},"note":note,"delete":false}),
                 );
+            }
+        }
+        "toggle-auto-backup" => {
+            if let Some(id) = app.detail.selected.clone() {
+                let enabled = app
+                    .settings
+                    .game_edits
+                    .get(&id)
+                    .is_some_and(|edit| edit.auto_backup);
+                game_tools(app, &id, None, Some(!enabled));
             }
         }
         "auto-backup" => {
@@ -604,6 +643,78 @@ pub(crate) fn history(html: &mut String, app: &App, game: &Game) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_backup_toggle_preserves_other_launch_preferences() {
+        let mut app = App::default();
+        app.detail.selected = Some("game".into());
+        app.settings.game_edits.insert(
+            "game".into(),
+            crate::models::GameEdit {
+                launch_mode: "locale".into(),
+                upscale: true,
+                locale_profile: "profile".into(),
+                ..Default::default()
+            },
+        );
+        crate::bridge::take_requests();
+        dispatch(&mut app, "toggle-auto-backup", "");
+        let requests = crate::bridge::take_requests();
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(
+            payload,
+            json!({"id":"game","autoBackup":true,"launchMode":"locale","localeProfile":"profile","upscale":true})
+        );
+    }
+
+    #[test]
+    fn closing_configuration_does_not_leave_the_background_in_edit_mode() {
+        let mut app = App::default();
+        app.detail.editor = Some(detail::Editor::Tools);
+        app.detail.editing = true;
+        app.detail.editing_configuration = true;
+        app.form
+            .insert("draft-executable".into(), "draft.exe".into());
+        dispatch(&mut app, "editor-close", "");
+        assert!(!app.detail.editing && !app.detail.editing_configuration && app.form.is_empty());
+    }
+
+    #[test]
+    fn background_selection_blocks_duplicate_choose_and_reset_requests() {
+        let mut app = App::default();
+        dispatch(&mut app, "background-choose", "");
+        let selected_request = app.requests.last_id();
+
+        assert!(app.busy());
+        assert!(!dispatch(&mut app, "background-choose", ""));
+        assert!(!dispatch(&mut app, "background-clear", ""));
+        assert_eq!(app.background_request, selected_request);
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "choose_background_image");
+    }
+
+    #[test]
+    fn saving_nextmoe_keeps_other_source_credentials_out_of_the_request() {
+        let mut app = App::default();
+        app.form
+            .insert("source-nextmoe-token".into(), "nextmoe-key".into());
+        app.form
+            .insert("source-ymgal-client-id".into(), "ymgal-id".into());
+        app.form
+            .insert("source-ymgal-client-secret".into(), "ymgal-secret".into());
+
+        dispatch(&mut app, "source-save", "nextmoe");
+
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "save_data_source");
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(payload["source"], "nextmoe");
+        assert_eq!(payload["token"], "nextmoe-key");
+        assert_eq!(payload["clientId"], "");
+        assert_eq!(payload["clientSecret"], "");
+    }
 
     #[test]
     fn saving_tools_submits_the_draft_and_waits_for_save_confirmation() {

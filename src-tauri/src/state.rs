@@ -62,6 +62,7 @@ impl AppState {
             &mut cached,
         );
         for game in &mut cached.games {
+            let _ = prepare_cover(game, &store.path.with_file_name("covers").join("rendered"));
             catalog::apply_edits(game, &settings);
             if let Some(record) = play_records.get(&game.id) {
                 record.apply(game);

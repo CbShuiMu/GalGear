@@ -133,8 +133,8 @@ AI 总结并保存配置，游戏配置中的勾选及详情页前情提要入�
 不会把失败缓存成通过。
 
 没有已确认姓名的台词先进入说话人检查阶段，再验证存档。人物映射应在批量提取
-前加载，避免最后补人物表而重做整套验证。参考 [WillPlus / AdvHD](../skills/GalgameResourceExtract/engine/willplus.md)
-及 [KiriKiri](../skills/GalgameResourceExtract/engine/kirikiri.md) 文档，并核对实际资源结构。
+前加载，避免最后补人物表而重做整套验证。参考 [WillPlus / AdvHD](../Galgear-GalgameReverse-Skill/GalgameResourceExtract/engine/willplus.md)
+及 [KiriKiri](../Galgear-GalgameReverse-Skill/GalgameResourceExtract/engine/kirikiri.md) 文档，并核对实际资源结构。
 
 脚本或存档验证阶段若已有当前解析程序、累计 8 次探索请求却尚未实际测试，
 `test_attempted` 状态要求先调用对应 `test_program`，取得真实验证结果，再决定
@@ -152,7 +152,7 @@ AI 总结并保存配置，游戏配置中的勾选及详情页前情提要入�
 路由现有文档，兼容旧包的 `reference/format-index.json`；路径必须留在技能根目录内。
 `skill_documents` 提供当前包的技能、引擎、提取命令和记忆入口。模型先读匹配文档，
 再核对实际 magic、版本和来源；提示本身不是引擎确认。随包的
-[Entis GLS / Cotopha 文档](../skills/GalgameResourceExtract/engine/entis-gls.md)
+[Entis GLS / Cotopha 文档](../Galgear-GalgameReverse-Skill/GalgameResourceExtract/engine/entis-gls.md)
 及保留许可的工具资源供模型研究格式，不提供游戏固定路径、人物映射或存档答案。
 
 `project_reference_hints` 另列出当前工作目录 `references/` 下最多 8 份、每份不超过

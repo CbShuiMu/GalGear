@@ -1,6 +1,8 @@
 pub mod ai;
 pub mod ai_summary;
 pub mod auto_unlock;
+pub mod background;
+pub mod cover_art;
 pub mod catalog;
 pub mod cloud;
 pub mod collections;
@@ -13,6 +15,7 @@ pub mod game_setup;
 pub mod launcher_icons;
 pub mod patches;
 pub mod playtime;
+pub mod play_sessions;
 pub mod providers;
 pub mod runtime;
 pub mod saves;
@@ -59,6 +62,7 @@ pub struct Settings {
     pub magpie_hotkey: String,
     pub theme: String,
     pub color_theme: String,
+    pub background_image: Option<background::BackgroundImage>,
     pub show_patches: bool,
     pub metadata_provider: String,
     pub ai_models: BTreeMap<String, String>,
@@ -98,6 +102,7 @@ impl Default for Settings {
             magpie_hotkey: "Ctrl+Alt+A".into(),
             theme: "light".into(),
             color_theme: "pink".into(),
+            background_image: None,
             show_patches: true,
             metadata_provider: "2dfan".into(),
             ai_models: BTreeMap::new(),
@@ -158,6 +163,8 @@ pub struct Game {
     #[serde(default)]
     pub play_status: PlayStatus,
     pub cover: Option<String>,
+    #[serde(default)]
+    pub cover_artwork: Option<cover_art::Artwork>,
     pub modified: u64,
     #[serde(default)]
     pub playtime_seconds: u64,
@@ -190,6 +197,8 @@ pub struct ScanResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Bootstrap {
+    #[serde(default)]
+    pub ai_available: bool,
     pub settings: Settings,
     pub catalog: ScanResult,
     pub config_path: String,

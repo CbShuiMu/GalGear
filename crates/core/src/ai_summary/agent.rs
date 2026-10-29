@@ -20,13 +20,8 @@ pub(super) const SCRIPT_VERIFICATION_VERSION: u32 = 3;
 pub(super) const PREPARATION_TIMEOUT_SECONDS: u64 = 2700;
 
 fn command(home: &Path) -> Result<Command, Message> {
-    for path in [
-        home.join("tools/ai-agent/GalGear.AiAgent.exe"),
-        home.join("ai-agent/GalGear.AiAgent.exe"),
-    ] {
-        if path.is_file() {
-            return Ok(Command::new(path));
-        }
+    if let Some(path) = crate::ai::runtime::host(home) {
+        return Ok(Command::new(path));
     }
     #[cfg(debug_assertions)]
     {

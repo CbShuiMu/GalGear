@@ -90,6 +90,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, _value: &str) -> bool {
                 .game_edits
                 .get(&id)
                 .is_some_and(|e| e.ai_summary);
+            if !app.ai_available && !(action == "toggle-ai-summary" && enabled) {
+                return true;
+            }
             if action == "route-map-open" {
                 if enabled {
                     issue(
@@ -229,7 +232,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
                 t(app, "summary.retry"),
                 "refresh",
                 "secondary",
-                busy(app, &game.id)
+                !app.ai_available || busy(app, &game.id)
             )
         )
         .unwrap();
@@ -239,7 +242,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             t(app, "summary.reprepare"),
             "settings",
             "quiet",
-            busy(app, &game.id),
+            !app.ai_available || busy(app, &game.id),
         ));
     } else if let Some(result) = &app.summary.result {
         let model_label = format!("{} · {}", result.provider, result.model);
@@ -287,6 +290,7 @@ mod tests {
     use crate::{bridge::take_requests, state::apply_settings};
 
     fn selected_game(app: &mut App, enabled: bool) -> Game {
+        app.ai_available = true;
         let game: Game = serde_json::from_value(json!({"id":"game","title":"Title","folder":"F:/Games/Title","engine":"unknown","modified":0,"tags":[]})).unwrap();
         app.detail.selected = Some(game.id.clone());
         app.settings
@@ -295,6 +299,27 @@ mod tests {
             .or_default()
             .ai_summary = enabled;
         game
+    }
+
+    #[test]
+    fn missing_runtime_disables_analysis_and_blocks_enable_requests() {
+        let mut app = App::default();
+        let game = selected_game(&mut app, false);
+        app.ai_available = false;
+        app.detail.editor = Some(crate::detail::Editor::Tools);
+        take_requests();
+        dispatch(&mut app, "toggle-ai-summary", "");
+        assert!(take_requests().is_empty());
+        let mut html = String::new();
+        crate::detail::render(&mut html, &app, &game);
+        let option = html.split("<button").find(|tag| tag.contains("data-action=\"toggle-ai-summary\"")).unwrap();
+        assert!(option.split('>').next().unwrap().contains("disabled"));
+        assert!(html.contains("Galgear-GalgameReverse-Skill"));
+        app.settings.game_edits.get_mut(&game.id).unwrap().ai_summary = true;
+        dispatch(&mut app, "summary-run", "");
+        assert!(take_requests().is_empty());
+        dispatch(&mut app, "toggle-ai-summary", "");
+        assert_eq!(take_requests()[0].1, "set_ai_summary");
     }
 
     #[test]

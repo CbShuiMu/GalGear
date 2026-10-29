@@ -44,14 +44,14 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             "batch-all",
             "",
             t(app, "bulk.all"),
-            "check",
-            "quiet",
+            "done_all",
+            "quiet icon-only",
             app.busy() || games.is_empty(),
         ));
         html.push_str(&button(
             "batch-clear",
             "",
-            t(app, "bulk.clear"),
+            t(app, "common.cancel"),
             "close",
             "quiet",
             app.busy() || app.library.checked.is_empty(),
@@ -146,7 +146,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             "tag-filter-open",
             "",
             &esc(&filter_label),
-            "",
+            "filter_plus",
             if app.library.tag_filter.is_empty() {
                 "secondary"
             } else {
@@ -155,7 +155,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             false,
         ));
         if !app.library.tag_filter.is_empty() {
-            write!(html,r#"<button type="button" class="icon-button clear-filter" data-action="tag-clear" aria-label="{}" title="{}">{}</button>"#,t(app,"tags.clear_filter"),t(app,"tags.clear_filter"),icon("close")).unwrap();
+            write!(html,r#"<button type="button" class="icon-button clear-filter" data-action="tag-clear" aria-label="{}" title="{}">{}</button>"#,t(app,"tags.clear_filter"),t(app,"tags.clear_filter"),icon("filter_cancel")).unwrap();
         }
         html.push_str("</div>");
         html.push_str(&button(
@@ -163,14 +163,15 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             "",
             t(app, "bulk.enter"),
             "checklist",
-            "secondary",
+            "secondary icon-only",
             app.busy(),
         ));
         let _ = write!(
             html,
-            r#"<details class="action-menu add-menu"><summary class="button primary">{}{}</summary><div>{}{}</div></details>"#,
-            icon("plus"),
+            r#"<details class="action-menu add-menu"><summary class="button primary icon-only" aria-label="{}" title="{}">{}</summary><div>{}{}</div></details>"#,
             t(app, "common.add"),
+            t(app, "common.add"),
+            icon("plus"),
             button(
                 "choose-folder",
                 "",
@@ -214,9 +215,9 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
                 &refresh_label,
                 "refresh",
                 if app.library.scanning {
-                    "quiet scanning"
+                    "quiet scanning icon-only"
                 } else {
-                    "quiet"
+                    "quiet icon-only"
                 },
                 !app.library.scanning && app.busy()
             )
@@ -254,14 +255,14 @@ fn collection_toolbar(html: &mut String, app: &App) {
             "batch-all",
             "",
             t(app, "bulk.all"),
-            "check",
-            "quiet",
+            "done_all",
+            "quiet icon-only",
             app.busy(),
         ));
         html.push_str(&button(
             "batch-clear",
             "",
-            t(app, "bulk.clear"),
+            t(app, "common.cancel"),
             "close",
             "quiet",
             app.busy(),
@@ -327,7 +328,7 @@ fn collection_toolbar(html: &mut String, app: &App) {
             "",
             t(app, "bulk.enter"),
             "checklist",
-            "secondary",
+            "secondary icon-only",
             app.busy(),
         ));
         if app.library.collection.is_some() {
@@ -567,12 +568,6 @@ fn page_content(html: &mut String, app: &App) {
 }
 
 fn card_overlay(html: &mut String, app: &App, game: &Game) {
-    let collected = app
-        .settings
-        .collections
-        .iter()
-        .any(|collection| collection.games.contains(&game.id));
-    let finished = game.play_status == "finished";
     let _ = write!(
         html,
         r#"<div class="card-overlay"><div class="card-heading"><h3><button type="button" class="card-title" data-action="game-detail" data-value="{}" title="{}">{}</button></h3>"#,
@@ -601,46 +596,14 @@ fn card_overlay(html: &mut String, app: &App, game: &Game) {
         let _ = write!(html, "<p class=\"muted\">{}</p>", t(app, "detail.no_tags"));
     }
     html.push_str("</div><div class=\"card-actions\">");
-    for (action, key, symbol, kind, active) in [
-        (
-            "collection-picker",
-            "card.favorite",
-            "star",
-            "favorite",
-            collected,
-        ),
-        (
-            "card-finished",
-            "card.finished",
-            "trophy",
-            "finished",
-            finished,
-        ),
-        ("card-delete", "context.delete", "trash", "delete", false),
-    ] {
-        let _ = write!(
-            html,
-            r#"<button type="button" class="card-action {} {}" data-action="{}" data-value="{}" aria-label="{}" title="{}" {} {}>{}</button>"#,
-            kind,
-            if active { "is-active" } else { "" },
-            action,
-            esc(&game.id),
-            t(app, key),
-            t(app, key),
-            match action {
-                "collection-picker" => "aria-haspopup=\"dialog\"".to_owned(),
-                "card-finished" => format!("aria-pressed=\"{finished}\""),
-                _ => String::new(),
-            },
-            if app.busy() { "disabled" } else { "" },
-            icon(if symbol == "trophy" && active {
-                "trophy-filled"
-            } else if symbol == "star" && active {
-                "star-filled"
-            } else {
-                symbol
-            })
-        );
-    }
+    crate::game_actions::render(html, app, game);
+    html.push_str(&crate::widgets::icon_button(
+        "card-delete",
+        &game.id,
+        t(app, "context.delete"),
+        "trash",
+        "card-action delete",
+        app.busy(),
+    ));
     html.push_str("</div></div>");
 }

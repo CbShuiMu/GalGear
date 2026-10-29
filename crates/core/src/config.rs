@@ -87,6 +87,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn custom_background_defaults_off_and_survives_reopening() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.json");
+        fs::write(&path, r#"{"version":1}"#).unwrap();
+        let store = ConfigStore::new(path.clone());
+        let mut settings = store.load().unwrap();
+        assert!(settings.background_image.is_none());
+        let image = crate::background::BackgroundImage {
+            id: "a".repeat(64),
+            name: "自选背景.png".into(),
+        };
+        settings.background_image = Some(image.clone());
+        store.save(&settings).unwrap();
+        assert_eq!(store.load().unwrap().background_image, Some(image));
+        settings.background_image = None;
+        store.save(&settings).unwrap();
+        assert!(store.load().unwrap().background_image.is_none());
+    }
+
+    #[test]
     fn cloud_settings_round_trip_and_older_settings_default_to_disconnected() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("settings.json");

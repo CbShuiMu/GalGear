@@ -3,9 +3,11 @@
 mod accounts;
 mod ai;
 mod ai_summary;
+mod background;
 mod cloud_commands;
 mod collections;
 mod covers;
+mod cover_art;
 mod data_sources;
 mod default_browser;
 mod desktop;

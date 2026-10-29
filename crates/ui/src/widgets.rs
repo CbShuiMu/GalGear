@@ -18,7 +18,8 @@ pub(crate) fn icon(name: &str) -> String {
                 r#"<svg class="icon google-icon" aria-hidden="true""#,
                 1,
             )
-            .replace("fill=\"#1f1f1f\"", "fill=\"currentColor\"");
+            .replace("fill=\"#1f1f1f\"", "fill=\"currentColor\"")
+            .replace("stroke=\"#1f1f1f\"", "stroke=\"currentColor\"");
     }
     let body = match name {
         "top" => r#"<path d="m6 14 6-6 6 6M6 4h12"/>"#,
@@ -87,6 +88,9 @@ pub(crate) fn button(
     class: &str,
     disabled: bool,
 ) -> String {
+    if class.split_whitespace().any(|name| name == "icon-only") {
+        return icon_button(action, value, label, symbol, class, disabled);
+    }
     if matches!(action, "editor-close" | "summary-close" | "close-history") {
         return format!(
             r#"<button type="button" class="button {class} close-button" data-action="{action}" data-value="{}" aria-label="{}" title="{}" {}>{}</button>"#,
@@ -106,6 +110,24 @@ pub(crate) fn button(
         } else {
             icon(symbol)
         }
+    )
+}
+
+pub(crate) fn icon_button(
+    action: &str,
+    value: &str,
+    label: &str,
+    symbol: &str,
+    class: &str,
+    disabled: bool,
+) -> String {
+    format!(
+        r#"<button type="button" class="button icon-only {class}" data-action="{action}" data-value="{}" aria-label="{}" title="{}" {}>{}</button>"#,
+        esc(value),
+        esc(label),
+        esc(label),
+        if disabled { "disabled" } else { "" },
+        icon(symbol)
     )
 }
 

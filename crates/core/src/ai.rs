@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{io::Read, path::Path, time::Duration};
 
-pub const PROVIDERS: [&str; 2] = ["openai", "deepseek"];
+pub mod runtime;
+
+pub const PROVIDERS: [&str; 4] = ["openai", "deepseek", "qwen", "kimi"];
 
 pub fn select_provider(settings: &mut crate::Settings, provider: &str) -> Result<(), Message> {
     models_url(provider)?;
@@ -30,6 +32,8 @@ pub fn models_url(provider: &str) -> Result<&'static str, Message> {
     match provider {
         "openai" => Ok("https://api.openai.com/v1/models"),
         "deepseek" => Ok("https://api.deepseek.com/models"),
+        "qwen" => Ok("https://dashscope.aliyuncs.com/compatible-mode/v1/models"),
+        "kimi" => Ok("https://api.moonshot.cn/v1/models"),
         _ => Err(Message::new("ai.invalid_provider")),
     }
 }
@@ -78,7 +82,7 @@ pub struct Model {
     pub id: String,
     #[serde(default)]
     pub name: String,
-    #[serde(default)]
+    #[serde(default, alias = "context_length")]
     pub context_window: Option<u64>,
 }
 
@@ -151,17 +155,30 @@ pub fn complete(
     json: bool,
 ) -> Result<String, Message> {
     validate_token(token)?;
-    let url = match provider {
-        "deepseek" => "https://api.deepseek.com/chat/completions",
-        "openai" => "https://api.openai.com/v1/chat/completions",
-        _ => return Err(Message::new("ai.invalid_provider")),
-    };
+    let (url, body) = completion_request(provider, model, system, input, json)?;
     let client = Client::builder()
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(180))
         .redirect(Policy::none())
         .build()
         .map_err(|_| Message::new("ai.network_error"))?;
+    complete_with_client(&client, url, token, &body, Duration::from_millis(500))
+}
+
+fn completion_request(
+    provider: &str,
+    model: &str,
+    system: &str,
+    input: &str,
+    json: bool,
+) -> Result<(&'static str, serde_json::Value), Message> {
+    let url = match provider {
+        "deepseek" => "https://api.deepseek.com/chat/completions",
+        "openai" => "https://api.openai.com/v1/chat/completions",
+        "qwen" => "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "kimi" => "https://api.moonshot.cn/v1/chat/completions",
+        _ => return Err(Message::new("ai.invalid_provider")),
+    };
     let mut body = serde_json::json!({"model":model,"messages":[{"role":"system","content":system},{"role":"user","content":input}],"max_tokens":8192});
     if provider == "openai" {
         body.as_object_mut().map(|body| body.remove("max_tokens"));
@@ -170,10 +187,25 @@ pub fn complete(
     if provider == "deepseek" {
         body["thinking"] = serde_json::json!({"type":"disabled"});
     }
+    // DashScope's hybrid models require thinking disabled for JSON/non-streaming calls.
+    if provider == "qwen" {
+        body["enable_thinking"] = serde_json::json!(false);
+    }
+    // Only hybrid Kimi models accept disabled thinking; reasoning-only models do not.
+    if provider == "kimi"
+        && ["kimi-k2.5", "kimi-k2.6"].iter().any(|id| {
+            model == *id
+                || model
+                    .strip_prefix(id)
+                    .is_some_and(|suffix| suffix.starts_with('-'))
+        })
+    {
+        body["thinking"] = serde_json::json!({"type":"disabled"});
+    }
     if json {
         body["response_format"] = serde_json::json!({"type":"json_object"});
     }
-    complete_with_client(&client, url, token, &body, Duration::from_millis(500))
+    Ok((url, body))
 }
 
 struct CompletionFailure {
@@ -328,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn discovery_accepts_both_provider_formats_and_new_model_ids() {
+    fn discovery_accepts_provider_formats_and_new_model_ids() {
         let models = parse_models(br#"{"object":"list","data":[{"id":"future-model","name":"Future Model","context_window":100},{"id":"alpha"},{"id":"future-model"},{"id":""}]}"#).unwrap();
         assert_eq!(
             models
@@ -339,6 +371,35 @@ mod tests {
         );
         assert_eq!(models[1].name, "Future Model");
         assert!(parse_models(br#"{"error":{"message":"secret"}}"#).is_err());
+    }
+
+    #[test]
+    fn domestic_providers_persist_independent_models_and_credential_targets() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = crate::config::ConfigStore::new(temp.path().join("settings.json"));
+        let mut settings = store.load().unwrap();
+        let mut targets = std::collections::BTreeSet::new();
+        for provider in PROVIDERS {
+            settings
+                .ai_models
+                .insert(provider.into(), format!("{provider}-model"));
+            select_provider(&mut settings, provider).unwrap();
+            store.save(&settings).unwrap();
+            let restored = store.load().unwrap();
+            assert_eq!(
+                selected_model(&restored).unwrap(),
+                (provider, Some(format!("{provider}-model").as_str()))
+            );
+            assert!(targets.insert(credential_target(&store.path, provider).unwrap()));
+        }
+        assert_eq!(store.load().unwrap().ai_models.len(), 4);
+    }
+
+    #[test]
+    fn kimi_discovery_reads_context_length() {
+        let models =
+            parse_models(br#"{"data":[{"id":"kimi-k2.6","context_length":262144}]}"#).unwrap();
+        assert_eq!(models[0].context_window, Some(262144));
     }
 
     #[test]
@@ -523,6 +584,69 @@ mod tests {
     }
 
     const COMPLETED: &str = r#"{"choices":[{"finish_reason":"stop","message":{"content":"complete recap and progress"}}]}"#;
+
+    #[test]
+    fn domestic_completion_requests_use_provider_parameters_and_parse_final_content() {
+        for (provider, model) in [("qwen", "qwen-plus"), ("kimi", "kimi-k2.6")] {
+            for json in [false, true] {
+                let (url, body) =
+                    completion_request(provider, model, "Return JSON", "verified script", json)
+                        .unwrap();
+                assert!(url.ends_with("/chat/completions"));
+                assert_eq!(
+                    url.strip_suffix("chat/completions").unwrap(),
+                    models_url(provider)
+                        .unwrap()
+                        .strip_suffix("models")
+                        .unwrap()
+                );
+                assert_eq!(body["max_tokens"], 8192);
+                assert!(body.get("max_completion_tokens").is_none());
+                assert_eq!(body.get("response_format").is_some(), json);
+                if provider == "qwen" {
+                    assert_eq!(body["enable_thinking"], false);
+                    assert!(body.get("thinking").is_none());
+                } else {
+                    assert_eq!(body["thinking"]["type"], "disabled");
+                    assert!(body.get("enable_thinking").is_none());
+                }
+                let server = CompletionServer::start(vec![completion_reply(
+                    "200 OK",
+                    r#"{"choices":[{"finish_reason":"stop","message":{"reasoning_content":"internal reasoning","content":"{\"recap\":\"verified\"}"}}]}"#,
+                )]);
+                let result = complete_with_client(
+                    &completion_client(),
+                    &server.url,
+                    "test-token",
+                    &body,
+                    Duration::ZERO,
+                )
+                .unwrap();
+                assert_eq!(result, r#"{"recap":"verified"}"#);
+                let requests = server.requests();
+                assert_eq!(requests.len(), 1);
+                let sent: serde_json::Value =
+                    serde_json::from_str(requests[0].split_once("\r\n\r\n").unwrap().1).unwrap();
+                assert_eq!(sent, body);
+                assert_eq!(sent["model"], model);
+                assert_eq!(sent["messages"][1]["content"], "verified script");
+            }
+        }
+    }
+
+    #[test]
+    fn kimi_reasoning_only_and_legacy_models_keep_default_thinking() {
+        for model in [
+            "kimi-k2-thinking",
+            "kimi-k2.7-code",
+            "kimi-k3.1-pro",
+            "moonshot-v1-32k",
+        ] {
+            let (_, body) = completion_request("kimi", model, "system", "input", true).unwrap();
+            assert!(body.get("thinking").is_none(), "{model}");
+            assert!(body.get("temperature").is_none(), "{model}");
+        }
+    }
 
     #[test]
     fn completion_retries_rate_limit_with_the_same_request_payload() {

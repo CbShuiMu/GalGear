@@ -601,6 +601,10 @@
   color: var(--muted);
   font-size: calc(var(--ui-font) * .85);
 }
+.ai-provider-switch {
+  max-width: 100%;
+  overflow-x: auto;
+}
 .ai-provider-switch .segment {
   gap: 8px;
 }
@@ -635,6 +639,9 @@
 
 [data-theme="dark"] .ai-logo-openai {
   filter: invert(1);
+}
+[data-theme="dark"] .ai-logo-kimi {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 .ai-provider-name {
@@ -862,4 +869,155 @@
   .app-shell[data-theme] .segmented-thumb {
     transition: none;
   }
+}
+
+/* The retained background layer stays outside the grid's flow and scroll panes. */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.app-background {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-background > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.app-shell[data-custom-background="true"] .app-background::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: #fff8fc66;
+}
+
+.app-shell[data-custom-background="true"][data-theme="dark"] .app-background::after {
+  background: #17111d80;
+}
+
+.app-shell[data-custom-background="true"][data-theme] :is(.main-panel, .detail-panel) {
+  background: transparent;
+}
+
+.app-shell[data-custom-background="true"][data-theme="light"] {
+  --surface: #fff6fce0;
+  --surface-sidebar: #fff8fbd9;
+}
+
+.app-shell[data-custom-background="true"][data-theme="dark"] {
+  --surface: #302636e0;
+  --surface-sidebar: #261d2ed9;
+}
+
+.background-preview {
+  display: block;
+  width: min(100%, 480px);
+  aspect-ratio: 16 / 9;
+  margin: 18px 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--surface-line);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.background-preview > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.background-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(100%, 480px);
+  aspect-ratio: 16 / 9;
+  margin: 18px 0 12px;
+  border: 1px dashed var(--surface-line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+
+.background-empty .icon {
+  width: 28px;
+  height: 28px;
+}
+
+.background-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* Neutral white is a separate palette, preserving the existing rose palettes. */
+[data-color-theme="white"][data-theme="light"] {
+  --canvas:#ffffff;--canvas-glow:transparent;--canvas-light:transparent;
+  --surface:#f4f5f7;--surface-raised:#ffffff;--surface-soft:#f5f6f8;--surface-sidebar:#ffffff;
+  --surface-line:#dfe2e8;--surface-shadow:0 4px 16px #27304706;
+  --button-bg:#ffffff;--button-color:#454a57;--button-line:#d9dde5;
+  --button-hover-bg:#edf0f5;--button-hover-color:#232936;--button-hover-line:#b9c1ce;
+  --toolbar-surface:#f4f5f7;--focus-ring:#bd467d80;
+  --segment-track:#eceef2;--segment-line:#dce0e7;--segment-fill:#fff;
+  --detail-path:#eceef3;--detail-tag:#eceef3;--detail-utility:#f4f5f7;
+  --pink:#ba467c;--pink-dark:#a23467;--pink-soft:#f5e6ee;--muted:#687080;--line:#dfe2e8;
+  --palette-302a35:#292e38;--palette-493c4c:#454a57;--palette-918490:#687080;
+  --palette-fff:#fff;--palette-fffafc:#fff;--palette-fffafd:#fff;--palette-fbf7fa:#fff;--palette-fbf8fa:#fff;
+}
+[data-color-theme="white"][data-theme="dark"] {
+  --canvas:#191c22;--canvas-glow:transparent;--canvas-light:transparent;
+  --surface:#252932;--surface-raised:#2b303a;--surface-soft:#303640;--surface-sidebar:#1e222a;
+  --surface-line:#3c424e;--button-bg:#303640;--button-color:#e1e5ed;--button-line:#48505e;
+  --button-hover-bg:#414956;--button-hover-color:#fff;--button-hover-line:#687386;
+  --toolbar-surface:#252932;--segment-track:#303640;--segment-line:#48505e;--segment-fill:#4b5462;
+  --detail-path:#303640;--detail-tag:#303640;--detail-utility:#252932;
+  --muted:#adb7c8;--line:#3c424e;
+}
+.app-shell[data-color-theme="white"] .nav-item.active{background:var(--surface);color:var(--pink-dark)}
+.app-shell[data-color-theme="white"] .nav-item:hover{background:var(--surface-soft)}
+.app-shell[data-color-theme="white"] .bar-search,.app-shell[data-color-theme="white"] .choice-trigger{background:var(--button-bg);border-color:var(--button-line)}
+.app-shell[data-theme] .cover-picker-dialog{height:min(780px,calc(100dvh - 48px));width:min(960px,100%)}
+.app-shell[data-theme] .cover-results{flex:1;min-height:160px}
+.cover-option img{height:clamp(200px,30vh,300px);object-fit:contain}
+
+/* Stroke-based supplied symbols keep their open geometry in dark mode too. */
+.google-icon[stroke]{fill:none!important}
+:root .app-shell[data-color-theme="white"] .nav-item:not(.active){background:transparent;border-color:transparent;box-shadow:none}
+
+/* The home stage and game details share the same launch control and typography. */
+:root .app-shell[data-theme] .button.game-launch-button {
+  min-width:200px;
+  height:48px;
+  min-height:48px;
+  padding:7px 13px;
+  border-radius:999px;
+  font-family:inherit;
+  font-size:var(--ui-font,16px);
+  font-weight:500;
+  line-height:1.55;
+  letter-spacing:normal;
+  gap:7px;
+  background:var(--pink-dark);
+  border-color:var(--pink-dark);
+  color:#fff;
+  box-shadow:none;
+}
+:root .app-shell[data-theme="dark"] .button.game-launch-button {
+  background:#a23467;
+  border-color:#c35e8e;
+}
+@media(max-width:900px) {
+  :root .app-shell[data-theme] .button.game-launch-button {min-width:150px}
 }

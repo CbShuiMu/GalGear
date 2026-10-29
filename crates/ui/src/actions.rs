@@ -15,11 +15,16 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         return render;
     }
     match action {
+        "home-select" if app.catalog.games.iter().any(|game| game.id == value) => {
+            app.home_selected = Some(value.into());
+        }
         "toggle-theme" | "set-theme" | "set-color-theme"
             if !app.requests.values().any(|p| matches!(p, Pending::Theme)) =>
         {
             let (command, payload) = if action == "set-color-theme" {
-                if !matches!(value, "pink" | "white-pink") || value == app.settings.color_theme {
+                if !matches!(value, "pink" | "white-pink" | "white")
+                    || value == app.settings.color_theme
+                {
                     return false;
                 }
                 ("set_color_theme", json!({"colorTheme":value}))
@@ -65,7 +70,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "page"
             if matches!(
                 value,
-                "games" | "collections" | "patches" | "settings" | "about"
+                "home" | "games" | "collections" | "patches" | "settings" | "about"
             ) =>
         {
             library::clear_selection(&mut app.library);

@@ -2994,6 +2994,16 @@
     "ja-JP": "空欄で月幕の公開クライアントを使用できます。独自の認証情報も設定できます。",
     "en-US": "Leave blank to use the YMGal public client, or enter your own client credentials."
   },
+  "sources.nextmoe_help": {
+    "zh-CN": "汇集多平台作品资料。可留空使用公开接口，或填写自己的 API Key 提高请求额度。",
+    "ja-JP": "複数のサイトの作品情報をまとめて取得します。空欄で公開APIを利用でき、自分のAPI Keyを設定すると利用枠が増えます。",
+    "en-US": "Unified work metadata from multiple platforms. Leave blank for public access, or enter your own API Key for a higher request quota."
+  },
+  "sources.api_docs": {
+    "zh-CN": "API 文档",
+    "ja-JP": "APIドキュメント",
+    "en-US": "API documentation"
+  },
   "sources.default": {
     "zh-CN": "默认资料来源",
     "ja-JP": "既定のデータソース",
@@ -3180,9 +3190,9 @@
     "en-US": "AI summary file operation failed: {detail}"
   },
   "summary.tools_missing": {
-    "zh-CN": "缺少Galskill提取工具，请安装随应用分发的skills资源。",
-    "ja-JP": "Galskill抽出ツールがありません。アプリ付属のskillsリソースをインストールしてください。",
-    "en-US": "Galskill extraction tools are missing. Install the skills resources shipped with the app."
+    "zh-CN": "AI功能不可用：请在软件目录中安装AI宿主和Galgear-GalgameReverse-Skill资源包，安装后重启软件。",
+    "ja-JP": "AI機能は利用できません。アプリのフォルダーにAIホストとGalgear-GalgameReverse-Skillを配置し、再起動してください。",
+    "en-US": "AI is unavailable. Install the AI host and Galgear-GalgameReverse-Skill package in the application directory, then restart the app."
   },
   "summary.decode_failed": {
     "zh-CN": "游戏资源或存档解码失败，当前引擎格式需要进一步适配。",
@@ -3479,9 +3489,89 @@
     "ja-JP": "クラウドストレージの操作が失敗しました：{detail}",
     "en-US": "Cloud storage operation failed: {detail}"
   },
+  "background.title": {
+    "zh-CN": "自选背景图片",
+    "ja-JP": "カスタム背景画像",
+    "en-US": "Custom background image"
+  },
+  "background.help": {
+    "zh-CN": "选择图片作为应用背景，自动铺满窗口。图片副本保存在本机，支持 JPG、PNG、WebP、BMP，最大 32 MiB。",
+    "ja-JP": "画像を選ぶとウィンドウ全体の背景に適用します。コピーをこの PC に保存します。JPG、PNG、WebP、BMP、最大 32 MiB に対応。",
+    "en-US": "Choose an image to fill the app window. A copy is saved on this PC. Supports JPG, PNG, WebP and BMP up to 32 MiB."
+  },
+  "background.select": {
+    "zh-CN": "选择图片",
+    "ja-JP": "画像を選択",
+    "en-US": "Choose image"
+  },
+  "background.change": {
+    "zh-CN": "更换图片",
+    "ja-JP": "画像を変更",
+    "en-US": "Change image"
+  },
+  "background.reset": {
+    "zh-CN": "恢复默认",
+    "ja-JP": "既定に戻す",
+    "en-US": "Restore default"
+  },
+  "background.none": {
+    "zh-CN": "尚未选择背景图片",
+    "ja-JP": "背景画像は未選択です",
+    "en-US": "No background image selected"
+  },
+  "background.invalid": {
+    "zh-CN": "无法读取此图片，请选择有效的 JPG、PNG、WebP 或 BMP 文件。",
+    "ja-JP": "画像を読み込めません。有効な JPG、PNG、WebP または BMP ファイルを選択してください。",
+    "en-US": "Could not read this image. Choose a valid JPG, PNG, WebP or BMP file."
+  },
+  "background.too_large": {
+    "zh-CN": "图片文件过大或分辨率超出限制，请选择不超过 32 MiB 的图片。",
+    "ja-JP": "ファイルサイズまたは解像度が上限を超えています。32 MiB 以下の画像を選択してください。",
+    "en-US": "The image file or resolution exceeds the limit. Choose an image no larger than 32 MiB."
+  },
   "summary.incomplete_response": {
     "zh-CN": "AI未返回完整结果（{reason}），请重试或更换对话模型。",
     "ja-JP": "AIの応答が完了しませんでした（{reason}）。再試行するかモデルを変更してください。",
     "en-US": "AI did not return a complete result ({reason}). Retry or choose another chat model."
+  },
+  "nav.home": {
+    "zh-CN": "首页",
+    "ja-JP": "ホーム",
+    "en-US": "Home"
+  },
+  "theme.white": {
+    "zh-CN": "白色",
+    "ja-JP": "ホワイト",
+    "en-US": "White"
+  },
+  "home.library": {
+    "zh-CN": "查看游戏库",
+    "ja-JP": "ライブラリを見る",
+    "en-US": "View library"
+  },
+  "home.recent": {
+    "zh-CN": "最近游玩的游戏",
+    "ja-JP": "最近プレイしたゲーム",
+    "en-US": "Recently played games"
+  },
+  "home.continue": {
+    "zh-CN": "继续你的故事",
+    "ja-JP": "物語の続きを",
+    "en-US": "Continue your story"
+  },
+  "home.ready": {
+    "zh-CN": "下一段故事，从这里开始",
+    "ja-JP": "次の物語を始めよう",
+    "en-US": "Your next story starts here"
+  },
+  "home.controller": {
+    "zh-CN": "方向键 / 左摇杆 移动　 A 确认　 B 返回　 LB / RB 切换焦点　右摇杆 滚动",
+    "ja-JP": "方向キー / 左スティック 移動　 A 決定　 B 戻る　 LB / RB フォーカス　右スティック スクロール",
+    "en-US": "D-pad / left stick Move · A Select · B Back · LB / RB Focus · Right stick Scroll"
+  },
+  "backup.auto_short": {
+    "zh-CN": "自动备份",
+    "ja-JP": "自動バックアップ",
+    "en-US": "Auto backup"
   }
 }

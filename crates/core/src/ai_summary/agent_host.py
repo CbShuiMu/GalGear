@@ -3393,7 +3393,7 @@ def probe_config(config_path, game_id, save_dir, game_folder=None):
     finally:
         dll.CredFree(pointer)
     root = pathlib.Path(__file__).resolve().parents[4]
-    return {'provider': 'deepseek', 'model': settings.get('ai_models', {}).get('deepseek') or 'deepseek-flash', 'token': token, 'title': game['title'], 'language': settings.get('language', 'zh-CN'), 'game': game['folder'], 'save': save_dir, 'skill': str(root / 'skills/GalgameResourceExtract'), 'work': str(pathlib.Path(game['folder']) / '.galgear-ai-summary' / 'deepseek-agent-probe'), 'max_turns': MAX_TURNS}
+    return {'provider': 'deepseek', 'model': settings.get('ai_models', {}).get('deepseek') or 'deepseek-flash', 'token': token, 'title': game['title'], 'language': settings.get('language', 'zh-CN'), 'game': game['folder'], 'save': save_dir, 'skill': str(root / 'Galgear-GalgameReverse-Skill/GalgameResourceExtract'), 'work': str(pathlib.Path(game['folder']) / '.galgear-ai-summary' / 'deepseek-agent-probe'), 'max_turns': MAX_TURNS}
 
 
 if __name__ == '__main__':

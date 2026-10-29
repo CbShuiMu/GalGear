@@ -16,6 +16,8 @@ mod events;
 mod features;
 mod game_setup;
 mod icons;
+mod home;
+mod game_actions;
 mod library;
 mod local_patches;
 mod models;
@@ -29,6 +31,7 @@ mod view;
 mod widgets;
 
 pub use events::{
+    cover_enhanced,
     backup_completed, choice_key, dispatch, download_progress, enrichment_progress,
     expire_download_notice, expire_toast, fan_status_updated, game_context, game_enriched,
     input_changed, library_drag_ids, library_drop, library_marquee, playtime_updated,

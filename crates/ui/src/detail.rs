@@ -21,6 +21,7 @@ pub(crate) struct State {
     pub(crate) metadata_warnings: BTreeMap<String, Message>,
     pub(crate) editor: Option<Editor>,
     pub(crate) editing: bool,
+    pub(crate) editing_configuration: bool,
 }
 
 impl Default for State {
@@ -38,6 +39,7 @@ impl Default for State {
             metadata_warnings: BTreeMap::new(),
             editor: None,
             editing: false,
+            editing_configuration: false,
         }
     }
 }
@@ -157,8 +159,8 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         .get(&game.id)
         .map(String::as_str)
         .unwrap_or("unknown");
-    write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing{"editing"}else{""},esc(&game.id),icon("arrow"),t(app,"detail.back")).unwrap();
-    if app.detail.editing {
+    write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing && !app.detail.editing_configuration{"editing"}else{""},esc(&game.id),icon("arrow"),t(app,"detail.back")).unwrap();
+    if app.detail.editing && !app.detail.editing_configuration {
         html.push_str(&button(
             "detail-cancel",
             "",
@@ -175,7 +177,10 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             t(app, "summary.title"),
             "sparkle",
             "secondary ai-summary-button",
-            app.busy() || !game.available || crate::ai_summary::busy(app, &game.id),
+            app.busy()
+                || !app.ai_available
+                || !game.available
+                || crate::ai_summary::busy(app, &game.id),
         ));
         html.push_str(&button(
             "route-map-open",
@@ -190,11 +195,14 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             ),
             "open_in_new",
             "secondary ai-route-map-button",
-            app.busy() || !game.available || crate::ai_summary::busy(app, &game.id),
+            app.busy()
+                || !app.ai_available
+                || !game.available
+                || crate::ai_summary::busy(app, &game.id),
         ));
     }
     html.push_str(&button(
-        if app.detail.editing {
+        if app.detail.editing && !app.detail.editing_configuration {
             "detail-save"
         } else {
             "detail-edit"
@@ -202,13 +210,17 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         &game.id,
         t(
             app,
-            if app.detail.editing {
+            if app.detail.editing && !app.detail.editing_configuration {
                 "common.save"
             } else {
                 "detail.edit_configuration"
             },
         ),
-        if app.detail.editing { "check" } else { "edit" },
+        if app.detail.editing && !app.detail.editing_configuration {
+            "check"
+        } else {
+            "edit"
+        },
         "primary detail-edit-toggle",
         app.busy(),
     ));
@@ -226,21 +238,9 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         )
         .unwrap();
     }
-    let finished = game.play_status == "finished";
-    write!(
-        html,
-        r#"<span class="game-completion-tag {}">{}</span>"#,
-        if finished { "finished" } else { "unfinished" },
-        t(
-            app,
-            if finished {
-                "detail.completed"
-            } else {
-                "detail.not_completed"
-            }
-        )
-    )
-    .unwrap();
+    html.push_str("<div class=\"detail-state-actions\">");
+    crate::game_actions::render(html, app, game);
+    html.push_str("</div>");
     if !game.play_status.is_empty() && !matches!(game.play_status.as_str(), "unmarked" | "finished")
     {
         write!(
@@ -251,7 +251,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         )
         .unwrap();
     }
-    if app.detail.editing {
+    if app.detail.editing && !app.detail.editing_configuration {
         html.push_str("<div id=\"detail-title\">");
         form_field(html, app, "draft-title", "edit.name", false);
         html.push_str("</div>");
@@ -293,7 +293,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             &game.id,
             t(app, "detail.launch"),
             "play",
-            "primary",
+            "primary game-launch-button",
             app.busy() || !game.available || runtime == "running",
         ));
     }
@@ -302,10 +302,10 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         html,
         "</div><section class=\"hero-tags\" aria-label=\"{}\"><div class=\"utility-heading\"><h3>{}</h3>{}</div><div class=\"game-tags\">",
         t(app, "detail.tags"), t(app,"detail.tags"),
-        button("tags-association", "", t(app, "detail.change_tag_source"), "database", "quiet tag-source-button", app.detail.editing || app.busy())
+        button("tags-association", "", t(app, "detail.change_tag_source"), "database", "quiet tag-source-button", (app.detail.editing && !app.detail.editing_configuration) || app.busy())
     )
     .unwrap();
-    if app.detail.editing {
+    if app.detail.editing && !app.detail.editing_configuration {
         form_field(html, app, "draft-tags", "edit.tags", false);
         html.push_str(&button(
             "detail-tags-reset",
@@ -359,9 +359,8 @@ fn reading(html: &mut String, app: &App, game: &Game) {
         let (source, name) = preferences::source_for_url(&meta.url);
         write!(
             html,
-            r#"<img src="assets/{}.{}" alt=""/><span>{}</span>"#,
-            source,
-            if source == "2dfan" { "png" } else { "ico" },
+            r#"<img src="{}" alt=""/><span>{}</span>"#,
+            preferences::source_icon(source),
             name
         )
         .unwrap();
@@ -382,7 +381,7 @@ fn reading(html: &mut String, app: &App, game: &Game) {
         .map(|meta| meta.description.as_str())
         .filter(|text| !text.trim().is_empty())
         .unwrap_or(t(app, "metadata.no_story"));
-    if app.detail.editing {
+    if app.detail.editing && !app.detail.editing_configuration {
         form_field(html, app, "draft-meta-description", "metadata.story", true);
     } else {
         for paragraph in story.split("\n\n").filter(|text| !text.trim().is_empty()) {
@@ -395,7 +394,7 @@ fn reading(html: &mut String, app: &App, game: &Game) {
         t(app, "detail.credits")
     )
     .unwrap();
-    if app.detail.editing {
+    if app.detail.editing && !app.detail.editing_configuration {
         for (field, label) in features::METADATA_FIELDS
             .iter()
             .filter(|(field, _)| *field != "description")
@@ -463,7 +462,7 @@ fn metadata_actions(html: &mut String, app: &App, game: &Game) {
         t(app, "detail.change_association"),
         "database",
         "quiet",
-        app.detail.editing || app.busy(),
+        (app.detail.editing && !app.detail.editing_configuration) || app.busy(),
     ));
 }
 
@@ -647,13 +646,18 @@ fn tools_dialog(html: &mut String, app: &App, game: &Game) {
             edit.launch_mode == "locale",
         ),
         ("toggle-upscale", "tools.upscale", edit.upscale),
+        ("toggle-auto-backup", "backup.auto_short", edit.auto_backup),
         ("toggle-ai-summary", "summary.option", edit.ai_summary),
     ] {
-        let disabled =
-            app.busy() || action == "toggle-ai-summary" && crate::ai_summary::busy(app, &game.id);
+        let disabled = app.busy()
+            || action == "toggle-ai-summary"
+                && ((!app.ai_available && !checked) || crate::ai_summary::busy(app, &game.id));
         write!(html,r#"<button class="game-tool-option" role="checkbox" aria-checked="{}" data-action="{}" {}><span class="tool-check">{}</span><span>{}</span></button>"#,checked,action,if disabled{"disabled"}else{""},if checked{icon("check")}else{String::new()},t(app,key)).unwrap();
     }
     html.push_str("</div>");
+    if !app.ai_available {
+        write!(html, "<p class=\"detail-note\">{}</p>", t(app, "summary.tools_missing")).unwrap();
+    }
     if crate::ai_summary::busy(app, &game.id) {
         write!(
             html,

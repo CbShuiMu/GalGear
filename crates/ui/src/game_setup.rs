@@ -107,7 +107,7 @@ pub(crate) fn sync(app: &mut App) {
                 .filter(|source| !source.is_empty())
                 .unwrap_or_else(|| {
                     if url.is_empty() {
-                        String::new()
+                        crate::models::default_source()
                     } else {
                         preferences::source_for_url(&url).0.into()
                     }
@@ -553,6 +553,36 @@ mod tests {
             }
         })
         .to_string()
+    }
+    #[test]
+    fn unmatched_games_can_search_2dfan_without_selecting_a_source() {
+        let mut app = app();
+        assert_eq!(choice_current(&app, "setup-source:new"), "2dfan");
+        dispatch(&mut app, "setup-search", "new");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "search_metadata");
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(payload, json!({"query":"new", "source":"2dfan"}));
+        assert!(!app.setup.rows[0].can_save());
+        assert_eq!(app.setup.rows[1].source, "bangumi");
+    }
+    #[test]
+    fn pending_games_keep_their_existing_metadata_source() {
+        let mut app = app();
+        app.settings.game_edits.insert(
+            "cached".into(),
+            GameEdit {
+                setup_pending: true,
+                ..Default::default()
+            },
+        );
+        sync(&mut app);
+        assert_eq!(choice_current(&app, "setup-source:cached"), "vndb");
+        assert_eq!(
+            choice_current(&app, "setup-candidate:cached"),
+            "https://vndb.org/v1"
+        );
     }
     #[test]
     fn all_pending_games_render_as_independent_rows() {

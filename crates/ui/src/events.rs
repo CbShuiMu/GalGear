@@ -20,6 +20,22 @@ pub fn start() {
 }
 
 #[wasm_bindgen]
+pub fn cover_enhanced(payload: &str) {
+    #[derive(Deserialize)]
+    struct Update { id: String, previous_cover: String, cover: String, cover_artwork: crate::models::CoverArtwork }
+    let Ok(update) = serde_json::from_str::<Update>(payload) else { return; };
+    APP.with(|state| {
+        let mut app = state.borrow_mut();
+        if let Some(game) = app.catalog.games.iter_mut().find(|g| g.id == update.id)
+            && game.cover.as_deref() == Some(update.previous_cover.as_str()) {
+            game.cover = Some(update.cover);
+            game.cover_artwork = Some(update.cover_artwork);
+            paint(&app);
+        }
+    });
+}
+
+#[wasm_bindgen]
 pub fn runtime_updated(payload: &str) {
     APP.with(|state| {
         let mut app = state.borrow_mut();

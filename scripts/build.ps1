@@ -1,5 +1,6 @@
 ﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
+& (Join-Path $PSScriptRoot 'setup-waifu2x.ps1')
 & (Join-Path $PSScriptRoot 'build-frontend.ps1') -Release
 & (Join-Path $PSScriptRoot 'build-ai-agent.ps1')
 Push-Location (Split-Path -Parent $PSScriptRoot)
@@ -8,8 +9,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw '桌面应用编译失败。' }
     New-Item -ItemType Directory -Path artifacts -Force | Out-Null
     Copy-Item -LiteralPath target\release\galgear.exe -Destination artifacts\GalGear.exe -Force
-    $skillSource = (Resolve-Path -LiteralPath (Join-Path $taskRoot 'skills\GalgameResourceExtract')).Path
-    $skillRoot = Join-Path $taskRoot 'artifacts\skills\GalgameResourceExtract'
+    $skillSource = (Resolve-Path -LiteralPath (Join-Path $taskRoot 'Galgear-GalgameReverse-Skill\GalgameResourceExtract')).Path
+    $skillRoot = Join-Path $taskRoot 'artifacts\Galgear-GalgameReverse-Skill\GalgameResourceExtract'
     Get-ChildItem -LiteralPath $skillSource -Force -Recurse -File |
         Where-Object { $_.FullName -notmatch '[\\/](__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache)[\\/]' -and $_.Extension -notin '.pyc','.pyo' } |
         ForEach-Object {
@@ -21,5 +22,6 @@ try {
     $agentOutput = Join-Path $taskRoot 'artifacts\tools'
     New-Item -ItemType Directory -Path $agentOutput -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\ai-agent') -Destination $agentOutput -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\waifu2x') -Destination $agentOutput -Recurse -Force
     Write-Host '已生成 artifacts\GalGear.exe'
 } finally { Pop-Location }

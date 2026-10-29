@@ -326,7 +326,7 @@ class PreparationReliabilityTests(unittest.TestCase):
     def test_project_memory_is_local_even_when_shared_history_has_the_same_project(self):
         scripts = self.skill / 'scripts'
         scripts.mkdir()
-        memory_source = pathlib.Path(__file__).resolve().parents[4] / 'skills/GalgameResourceExtract/scripts/memory.py'
+        memory_source = pathlib.Path(__file__).resolve().parents[4] / 'Galgear-GalgameReverse-Skill/GalgameResourceExtract/scripts/memory.py'
         (scripts / 'memory.py').write_bytes(memory_source.read_bytes())
         shared = self.root / 'shared-memory'
         shared.mkdir()

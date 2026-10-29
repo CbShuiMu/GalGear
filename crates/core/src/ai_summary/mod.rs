@@ -872,7 +872,7 @@ pub fn prepare(
             "provider":source,"model":model,"token":token,"title":game.title,
             "language":settings.language.code(),"game":crate::config::display_path(&root),
             "save":save_inputs.save,
-            "skill":crate::config::display_path(&home.join("skills/GalgameResourceExtract")),
+            "skill":crate::config::display_path(&home.join("Galgear-GalgameReverse-Skill/GalgameResourceExtract")),
             "work":crate::config::display_path(&work),"max_turns":150,
             "runtime_limit_seconds":agent::PREPARATION_TIMEOUT_SECONDS,
             "save_samples":1,"inventory":inventory,

@@ -1,8 +1,8 @@
 //! Desktop startup, protocols, tray and command registration.
 use crate::{
-    accounts, accounts::start_fan_status_scheduler, ai, ai_summary, cloud_commands, collections,
-    covers, data_sources, downloads, game_details, game_setup, library, local_patches, metadata,
-    patch_commands, preferences, save_commands, state::AppState, state::snapshot, tools,
+    accounts, accounts::start_fan_status_scheduler, ai, ai_summary, background, cloud_commands,
+    collections, covers, data_sources, downloads, game_details, game_setup, library, local_patches,
+    metadata, patch_commands, preferences, save_commands, state::AppState, state::snapshot, tools,
 };
 use galgear_i18n::{Message, tr};
 use tauri::Manager;
@@ -61,8 +61,27 @@ pub(crate) fn run() {
                 .status(if bytes.is_some() { 200 } else { 404 })
                 .header("Content-Type", "image/jpeg")
                 .header("Access-Control-Allow-Origin", "*")
+                .header("Cache-Control", "private, max-age=31536000, immutable")
                 .body(bytes.unwrap_or_default())
                 .expect("Static image response")
+        })
+        .register_uri_scheme_protocol("galgear-background", |context, request| {
+            let id = request.uri().path().trim_start_matches('/');
+            let cache = context
+                .app_handle()
+                .state::<AppState>()
+                .store
+                .path
+                .with_file_name("backgrounds");
+            let bytes = galgear_core::background::cache_path(&cache, id)
+                .and_then(|path| std::fs::read(path).ok());
+            tauri::http::Response::builder()
+                .status(if bytes.is_some() { 200 } else { 404 })
+                .header("Content-Type", "image/jpeg")
+                .header("Access-Control-Allow-Origin", "*")
+                .header("Cache-Control", "private, max-age=31536000, immutable")
+                .body(bytes.unwrap_or_default())
+                .expect("Static background response")
         })
         .setup(|app| {
             let exe_dir = std::env::current_exe()?
@@ -92,6 +111,7 @@ pub(crate) fn run() {
             )?;
             start_fan_status_scheduler(app.handle().clone());
             tools::scheduler(app.handle().clone());
+            crate::cover_art::scheduler(app.handle().clone());
             let quit = tauri::menu::MenuItem::with_id(
                 app,
                 "quit",
@@ -219,6 +239,8 @@ pub(crate) fn run() {
             preferences::set_theme,
             preferences::set_color_theme,
             preferences::set_display,
+            background::choose_background_image,
+            background::clear_background_image,
             game_details::edit_title,
             game_details::save_game_details,
             game_details::set_play_status,

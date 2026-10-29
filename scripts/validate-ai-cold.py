@@ -134,7 +134,7 @@ def prepare_plan(inputs_path, settings_path, output, timeout, turns):
     selection = data['save_inputs']
     saves = Path(selection['save']).resolve()
     host = REPO / 'crates/core/src/ai_summary/agent_host.py'
-    skill = REPO / 'skills/GalgameResourceExtract'
+    skill = REPO / 'Galgear-GalgameReverse-Skill/GalgameResourceExtract'
     output = Path(output).resolve()
     if output.exists():
         raise ValueError('Output directory already exists; every test requires a new directory')

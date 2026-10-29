@@ -10,7 +10,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tauri::{Manager, State};
+use tauri::State;
 
 #[derive(Default)]
 pub(crate) struct Jobs(Arc<Mutex<BTreeSet<String>>>);
@@ -35,33 +35,11 @@ impl Jobs {
         Ok(Guard(self.0.clone(), id.into()))
     }
 }
-fn home(app: &tauri::AppHandle) -> Result<PathBuf, Message> {
-    let bundled = app
-        .path()
-        .resource_dir()
-        .map_err(|_| Message::new("summary.tools_missing"))?;
-    if bundled
-        .join("skills/GalgameResourceExtract/tools/GARbro-cli/GARbro.Console.exe")
-        .is_file()
-    {
-        return Ok(bundled);
-    }
-    let exe = std::env::current_exe().map_err(|_| Message::new("summary.tools_missing"))?;
-    if let Some(parent) = exe.parent()
-        && parent.join("skills").is_dir()
-    {
-        return Ok(parent.into());
-    }
-    #[cfg(debug_assertions)]
-    {
-        Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        // Cached reports and completed setup do not need extraction tools.
-        // The decoder reports missing tools only when it actually needs them.
-        Ok(bundled)
-    }
+fn runtime_home() -> Result<PathBuf, Message> {
+    let home = galgear_core::ai::runtime::home()
+        .filter(|home| galgear_core::ai::runtime::available(home))
+        .ok_or_else(|| Message::new("summary.tools_missing"))?;
+    Ok(home)
 }
 
 #[tauri::command]
@@ -69,14 +47,13 @@ pub async fn set_ai_summary(
     id: String,
     enabled: bool,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
 ) -> Result<Settings, Message> {
     let game = find_game(&state, &id)?;
     let guard = state.summaries.begin(&id)?;
     if enabled {
         let settings = snapshot(&state)?;
         let config = state.store.path.clone();
-        let home = home(&app)?;
+        let home = runtime_home()?;
         tauri::async_runtime::spawn_blocking(move || {
             let _guard = guard;
             ai_summary::prepare(&game, &settings, &config, &home)
@@ -94,12 +71,11 @@ pub async fn set_ai_summary(
 pub async fn summarize_game(
     id: String,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
 ) -> Result<ai_summary::Summary, Message> {
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
     let config = state.store.path.clone();
-    let home = home(&app)?;
+    let home = runtime_home()?;
     let guard = state.summaries.begin(&id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
@@ -110,6 +86,7 @@ pub async fn summarize_game(
 }
 
 async fn generate_route_map(id: String, state: State<'_, AppState>) -> Result<PathBuf, Message> {
+    runtime_home()?;
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
     if !settings
