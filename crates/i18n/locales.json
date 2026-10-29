@@ -329,10 +329,25 @@
     "ja-JP": "名前順",
     "en-US": "Name"
   },
+  "games.sort_ascending": {
+    "zh-CN": "升序（点击切换为降序）",
+    "ja-JP": "昇順（クリックで降順に切り替え）",
+    "en-US": "Ascending (click to switch to descending)"
+  },
+  "games.sort_descending": {
+    "zh-CN": "降序（点击切换为升序）",
+    "ja-JP": "降順（クリックで昇順に切り替え）",
+    "en-US": "Descending (click to switch to ascending)"
+  },
   "games.sort_recent": {
-    "zh-CN": "最近更新",
-    "ja-JP": "更新日時順",
-    "en-US": "Recently updated"
+    "zh-CN": "入库排序",
+    "ja-JP": "ライブラリ追加順",
+    "en-US": "Library order"
+  },
+  "games.sort_release": {
+    "zh-CN": "发行排序",
+    "ja-JP": "発売日順",
+    "en-US": "Release date"
   },
   "games.warnings": {
     "zh-CN": "需要检查的文件夹：{count}",
@@ -2160,9 +2175,9 @@
     "en-US": "Running state unknown"
   },
   "tools.title": {
-    "zh-CN": "存档备份与外部工具",
-    "ja-JP": "バックアップと外部ツール",
-    "en-US": "Save backups and external tools"
+    "zh-CN": "存档备份与内置工具",
+    "ja-JP": "バックアップと内蔵ツール",
+    "en-US": "Save backups and bundled tools"
   },
   "tools.locale": {
     "zh-CN": "Locale Emulator：LEProc.exe 路径",
@@ -2180,9 +2195,9 @@
     "en-US": "Current Magpie scaling hotkey"
   },
   "tools.help": {
-    "zh-CN": "填写后请点击本区域右上角的“保存”，保存成功后才会用于启动游戏。转区默认选择日文管理员配置 Run in Japanese (Admin)；区域、参数在 Locale Emulator 中配置。Magpie 的算法、倍率和快捷键在其自身配置后填写。",
-    "ja-JP": "入力後、この欄の右上の「保存」を押してください。保存が完了するとゲーム起動に反映されます。既定は管理者権限の日本語プロファイル Run in Japanese (Admin) です。地域・引数は Locale Emulator で設定してください。Magpie のアルゴリズム・倍率・キーは Magpie で設定します。",
-    "en-US": "After entering these values, click Save at the top right of this section. They apply to game launches once saved. Locale launch defaults to the Japanese administrator profile, Run in Japanese (Admin). Configure regions and profile arguments in Locale Emulator. Configure scaling and hotkeys in Magpie."
+    "zh-CN": "默认使用软件 tools 目录中的内置工具，相对路径以 GalGear.exe 所在目录为准。超分时自动启动 Magpie，并读取其便携配置中的快捷键；算法和倍率可在 Magpie 中调整。转区默认使用 Run in Japanese (Admin)，可指定其他配置。手动修改路径后请保存。",
+    "ja-JP": "既定では GalGear.exe の tools フォルダー内のツールを使います。相対パスは実行ファイルの場所を基準にします。拡大時は Magpie を自動起動し、ポータブル設定からキーを読み取ります。方式と倍率は Magpie で変更できます。ロケールの既定は Run in Japanese (Admin) です。パスを変更したら保存してください。",
+    "en-US": "Tools default to the tools folder beside GalGear.exe. Relative paths resolve from that folder's parent. Upscaling starts Magpie automatically and reads its portable hotkey configuration; adjust algorithms and scale in Magpie. Locale launch defaults to Run in Japanese (Admin). Save after changing paths."
   },
   "tools.locale_launch": {
     "zh-CN": "转区启动",
@@ -2225,9 +2240,9 @@
     "en-US": "Save locale profile"
   },
   "tools.locale_missing": {
-    "zh-CN": "尚未保存 LEProc.exe 路径。请在设置的“存档备份与外部工具”中填写完整路径，并点击右上角的“保存”。",
-    "ja-JP": "LEProc.exe の場所が保存されていません。設定の「バックアップと外部ツール」にフルパスを入力し、右上の「保存」を押してください。",
-    "en-US": "No LEProc.exe path has been saved. Enter its full path under Save backups and external tools in Settings, then click Save at the top right."
+    "zh-CN": "未找到内置转区工具，请保留软件目录中的 tools/locale-emulator，或在设置中指定 LEProc.exe 路径。",
+    "ja-JP": "内蔵ロケールツールが見つかりません。tools/locale-emulator を復元するか、設定で LEProc.exe を指定してください。",
+    "en-US": "Bundled locale tool not found. Keep tools/locale-emulator beside the app, or set the LEProc.exe path in Settings."
   },
   "tools.path_invalid": {
     "zh-CN": "工具程序文件不存在或无法访问：{path}。请在设置中填写完整的程序文件路径，并点击“保存”。",
@@ -2240,14 +2255,44 @@
     "en-US": "No matching locale profile. The default requires the Japanese administrator profile, Run in Japanese (Admin). You can also enter an existing profile GUID."
   },
   "tools.magpie_missing": {
-    "zh-CN": "请在设置中指定已安装的 Magpie.exe。",
-    "ja-JP": "設定でインストール済み Magpie.exe を指定してください。",
-    "en-US": "Set the installed Magpie.exe path in Settings."
+    "zh-CN": "未找到内置 Magpie，请保留软件目录中的 tools/magpie，或在设置中指定 Magpie.exe 路径。",
+    "ja-JP": "内蔵 Magpie が見つかりません。tools/magpie を復元するか、設定で Magpie.exe を指定してください。",
+    "en-US": "Bundled Magpie not found. Keep tools/magpie beside the app, or set its executable path in Settings."
   },
   "tools.magpie_start": {
-    "zh-CN": "请先在 Magpie 中配置缩放方案并启动工具。",
-    "ja-JP": "Magpie で拡大設定を選び、ツールを起動してください。",
-    "en-US": "Configure a scaling profile and start Magpie first."
+    "zh-CN": "Magpie 未能就绪。如果已运行其他目录下的 Magpie，请先退出该实例再重试；也可检查内置 Magpie 的配置和日志。",
+    "ja-JP": "Magpie を準備できませんでした。別の場所の Magpie を終了して再試行するか、内蔵ツールの設定とログを確認してください。",
+    "en-US": "Magpie did not become ready. Close any instance running from another folder and retry, or check the bundled tool's configuration and logs."
+  },
+  "tools.magpie_hotkey_invalid": {
+    "zh-CN": "Magpie 缩放快捷键无效。请在内置 Magpie 中设置 Ctrl、Alt 或 Shift 与字母或数字的组合。",
+    "ja-JP": "Magpie の拡大キーが無効です。Ctrl、Alt、Shift と英数字を組み合わせて設定してください。",
+    "en-US": "Invalid Magpie scaling shortcut. Set a combination of Ctrl, Alt or Shift and a letter or digit in bundled Magpie."
+  },
+  "tags.game_status": {
+    "zh-CN": "游戏状态",
+    "ja-JP": "ゲームの状態",
+    "en-US": "Game status"
+  },
+  "tags.favorited": {
+    "zh-CN": "已收藏",
+    "ja-JP": "お気に入り登録済み",
+    "en-US": "Favorited"
+  },
+  "tags.not_favorited": {
+    "zh-CN": "未收藏",
+    "ja-JP": "お気に入り未登録",
+    "en-US": "Not favorited"
+  },
+  "tags.finished": {
+    "zh-CN": "已通关",
+    "ja-JP": "クリア済み",
+    "en-US": "Completed"
+  },
+  "tags.not_finished": {
+    "zh-CN": "未通关",
+    "ja-JP": "未クリア",
+    "en-US": "Not completed"
   },
   "tools.game_stopped": {
     "zh-CN": "请先启动游戏，再选择超分。",
@@ -2313,6 +2358,11 @@
     "zh-CN": "暗色",
     "ja-JP": "ダーク",
     "en-US": "Dark"
+  },
+  "detail.back_home": {
+    "zh-CN": "返回首页",
+    "ja-JP": "ホームに戻る",
+    "en-US": "Back to home"
   },
   "detail.back": {
     "zh-CN": "返回游戏库",

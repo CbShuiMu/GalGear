@@ -118,7 +118,13 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                 app.busy(),
             ));
         }
-        Dialog::Tags { selected } => {
+        Dialog::Tags { selected, status } => {
+            write!(html, r#"<fieldset class="tag-status-filter"><legend>{}</legend><div>"#, t(app, "tags.game_status")).unwrap();
+            for (value, key, active) in status.options() {
+                write!(html, r#"<button type="button" class="button secondary {}" data-action="tag-status" data-value="{}" aria-pressed="{}">{}</button>"#,
+                    if active { "active" } else { "" }, value, active, t(app, key)).unwrap();
+            }
+            html.push_str("</div></fieldset>");
             let query = features::form(app, "tag-query");
             write!(html, r#"<div class="tag-search"><label class="edit-field"><span>{}</span><input id="tag-query" data-input="tag-query" type="search" value="{}" placeholder="{}" autocomplete="off" aria-controls="tag-search-results"/></label>"#, t(app, "common.search"), esc(&query), t(app, "tags.search_placeholder")).unwrap();
             if !query.trim().is_empty() {

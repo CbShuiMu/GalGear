@@ -33,12 +33,13 @@ fn open_edit(app: &mut App, id: Option<String>, parent: Option<String>) {
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     match action {
         "tag-clear" => {
-            app.library.tag_filter.clear();
+            app.library.clear_filters();
             clear_selection(&mut app.library);
         }
         "tag-filter-open" => {
             app.library.dialog = Some(Dialog::Tags {
                 selected: app.library.tag_filter.clone(),
+                status: app.library.status_filter,
             });
             app.form.insert("tag-query".into(), String::new());
             app.choices.open = None;
@@ -51,7 +52,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 .flat_map(|game| &game.tags)
                 .find(|tag| galgear_tags::key(tag) == galgear_tags::key(value))
                 .cloned();
-            if let (Some(Dialog::Tags { selected }), Some(tag)) = (&mut app.library.dialog, tag) {
+            if let (Some(Dialog::Tags { selected, .. }), Some(tag)) = (&mut app.library.dialog, tag) {
                 if !selected
                     .iter()
                     .any(|name| galgear_tags::key(name) == galgear_tags::key(&tag))
@@ -62,13 +63,19 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "tag-filter-remove" => {
-            if let Some(Dialog::Tags { selected }) = &mut app.library.dialog {
+            if let Some(Dialog::Tags { selected, .. }) = &mut app.library.dialog {
                 selected.retain(|tag| galgear_tags::key(tag) != galgear_tags::key(value));
             }
         }
+        "tag-status" => {
+            if let Some(Dialog::Tags { status, .. }) = &mut app.library.dialog {
+                status.toggle(value);
+            }
+        }
         "tag-filter-apply" => {
-            if let Some(Dialog::Tags { selected }) = app.library.dialog.take() {
+            if let Some(Dialog::Tags { selected, status }) = app.library.dialog.take() {
                 app.library.tag_filter = selected;
+                app.library.status_filter = status;
                 clear_selection(&mut app.library);
                 #[cfg(target_arch = "wasm32")]
                 reset_scroll();
@@ -85,6 +92,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.library.dialog = None;
             app.choices.open = None;
             app.library.tag_filter = vec![value.into()];
+            app.library.status_filter = Default::default();
             app.library.search.clear();
             #[cfg(target_arch = "wasm32")]
             reset_scroll();
@@ -107,7 +115,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.detail.selected = None;
             app.choices.open = None;
             app.library.search.clear();
-            app.library.tag_filter.clear();
+            app.library.clear_filters();
             reset_scroll();
         }
         "folder-new" => open_edit(app, None, (!value.is_empty()).then(|| value.into())),

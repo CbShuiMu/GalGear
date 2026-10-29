@@ -159,7 +159,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         .get(&game.id)
         .map(String::as_str)
         .unwrap_or("unknown");
-    write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing && !app.detail.editing_configuration{"editing"}else{""},esc(&game.id),icon("arrow"),t(app,"detail.back")).unwrap();
+    write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}" data-detail-origin="{}" data-detail-game="{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing && !app.detail.editing_configuration{"editing"}else{""},esc(&game.id),esc(&app.page),esc(&game.id),icon("arrow"),t(app,if app.page == "home" { "detail.back_home" } else { "detail.back" })).unwrap();
     if app.detail.editing && !app.detail.editing_configuration {
         html.push_str(&button(
             "detail-cancel",

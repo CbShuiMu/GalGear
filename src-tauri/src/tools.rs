@@ -11,6 +11,7 @@ use tauri::{Emitter, Manager, State};
 #[derive(Default)]
 pub(crate) struct RuntimeState {
     running: Mutex<BTreeMap<String, std::process::Child>>,
+    magpie: Mutex<Option<std::process::Child>>,
 }
 
 fn normalize_tool_path(path: &str) -> &str {
@@ -21,15 +22,52 @@ fn normalize_tool_path(path: &str) -> &str {
         .trim()
 }
 
-fn tool_path<'a>(path: &'a str, missing_key: &str) -> Result<&'a str, Message> {
+fn tool_path(path: &str, missing_key: &str) -> Result<PathBuf, Message> {
     let path = normalize_tool_path(path);
     if path.is_empty() {
         return Err(Message::new(missing_key));
     }
-    if !Path::new(path).is_file() {
+    let executable = std::env::current_exe().map_err(|e| Message::detail("tools.error", e))?;
+    let resolved = crate::bundled_tools::resolve(executable.parent().unwrap_or(Path::new(".")), path);
+    if !resolved.is_file() {
         return Err(Message::new("tools.path_invalid").arg("path", path));
     }
-    Ok(path)
+    Ok(resolved)
+}
+
+fn ensure_magpie(state: &AppState, settings: &Settings) -> Result<String, Message> {
+    let executable = tool_path(&settings.magpie, "tools.magpie_missing")?;
+    let hotkey = crate::bundled_tools::magpie_hotkey(&executable, &settings.magpie_hotkey)?;
+    let mut owned = state.tools.magpie.lock().map_err(|_| Message::new("error.operation"))?;
+    if runtime::detect(executable.to_str()) == Status::Running {
+        return Ok(hotkey);
+    }
+    if let Some(child) = owned.as_mut() {
+        let _ = child.try_wait();
+    }
+    let mut command = std::process::Command::new(&executable);
+    command.arg("-t").current_dir(executable.parent().unwrap_or(Path::new(".")));
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW; Magpie's -t also hides its main window.
+    }
+    let mut child = command.spawn().map_err(|e| Message::detail("tools.error", e))?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        // Wait for the GUI message loop, after Magpie has registered its scaling hotkeys.
+        let ready = unsafe { windows_sys::Win32::System::Threading::WaitForInputIdle(child.as_raw_handle(), 8000) };
+        if ready != 0 || child.try_wait().map_err(|e| Message::detail("tools.error", e))?.is_some() {
+            *owned = Some(child);
+            return Err(Message::new("tools.magpie_start"));
+        }
+    }
+    *owned = Some(child);
+    if runtime::detect(executable.to_str()) != Status::Running {
+        return Err(Message::new("tools.magpie_start"));
+    }
+    Ok(hotkey)
 }
 
 fn select_locale_profile<'a>(
@@ -86,12 +124,7 @@ pub(crate) fn launch_game(
     }
     let settings = snapshot(&state)?;
     let edit = settings.game_edits.get(&id).cloned().unwrap_or_default();
-    if edit.upscale {
-        let magpie = tool_path(&settings.magpie, "tools.magpie_missing")?;
-        if runtime::detect(Some(magpie)) != runtime::Status::Running {
-            return Err(Message::new("tools.magpie_start"));
-        }
-    }
+    let upscale_hotkey = if edit.upscale { Some(ensure_magpie(&state, &settings)?) } else { None };
     let mut running = state
         .tools
         .running
@@ -108,8 +141,8 @@ pub(crate) fn launch_game(
     let locale = mode.as_deref().unwrap_or(&edit.launch_mode) == "locale";
     let mut command = if locale {
         let locale_emulator = tool_path(&settings.locale_emulator, "tools.locale_missing")?;
-        let mut command = std::process::Command::new(locale_emulator);
-        let profiles = runtime::locale_profiles(Path::new(locale_emulator))
+        let mut command = std::process::Command::new(&locale_emulator);
+        let profiles = runtime::locale_profiles(&locale_emulator)
             .map_err(|e| Message::detail("tools.error", e))?;
         let profile = select_locale_profile(&profiles, &edit.locale_profile)?;
         command.args(["-runas", &profile.guid, &executable]);
@@ -126,11 +159,11 @@ pub(crate) fn launch_game(
         .spawn()
         .map_err(|e| Message::detail("error.launch", e))?;
     running.insert(id, child);
-    if edit.upscale {
+    if let Some(hotkey) = upscale_hotkey {
         schedule_upscale(
             app.clone(),
             executable,
-            settings.magpie_hotkey.clone(),
+            hotkey,
             settings.launch_behavior == "exit",
         );
     }
@@ -210,18 +243,14 @@ pub(crate) fn game_runtime(id: String, state: State<'_, AppState>) -> Result<Sta
 pub(crate) fn upscale_game(id: String, state: State<'_, AppState>) -> Result<(), Message> {
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
-    let magpie = tool_path(&settings.magpie, "tools.magpie_missing")?;
-    // An existing Magpie instance with a user-selected scaling profile is required.
-    if runtime::detect(Some(magpie)) != Status::Running {
-        return Err(Message::new("tools.magpie_start"));
-    }
     if runtime::detect(game.executable.as_deref()) != Status::Running {
         return Err(Message::new("tools.game_stopped"));
     }
     let executable = game
         .executable
         .ok_or_else(|| Message::new("error.exe_missing"))?;
-    runtime::trigger_magpie(Path::new(&executable), &settings.magpie_hotkey)
+    let hotkey = ensure_magpie(&state, &settings)?;
+    runtime::trigger_magpie(Path::new(&executable), &hotkey)
         .map_err(|e| Message::detail("tools.error", e))
 }
 
@@ -463,7 +492,7 @@ mod tests {
 
         assert_eq!(
             tool_path(&copied, "tools.locale_missing").unwrap(),
-            executable.to_str().unwrap()
+            executable
         );
     }
 
@@ -498,5 +527,25 @@ mod tests {
                 .key,
             "tools.locale_missing"
         );
+    }
+
+    #[test]
+    #[ignore = "Starts the bundled Magpie; set GALGEAR_BUNDLED_SMOKE_ROOT to the app folder"]
+    fn bundled_magpie_starts_with_its_portable_configuration() {
+        let root = PathBuf::from(std::env::var("GALGEAR_BUNDLED_SMOKE_ROOT").unwrap());
+        let executable = root.join(crate::bundled_tools::MAGPIE);
+        assert_eq!(runtime::detect(executable.to_str()), Status::Stopped);
+        let data = tempfile::tempdir().unwrap();
+        let state = AppState::load(data.path().to_owned()).unwrap();
+        let settings = Settings { magpie: executable.to_string_lossy().into_owned(), ..Default::default() };
+        let result = ensure_magpie(&state, &settings);
+        let running = runtime::detect(executable.to_str());
+        // Only stop the child started by this test, never a pre-existing instance.
+        if let Some(mut child) = state.tools.magpie.lock().unwrap().take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        assert_eq!(result.unwrap(), "Alt+Shift+A");
+        assert_eq!(running, Status::Running);
     }
 }

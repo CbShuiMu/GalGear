@@ -30,7 +30,9 @@
     "resources": {
       "../Galgear-GalgameReverse-Skill/GalgameResourceExtract/": "Galgear-GalgameReverse-Skill/GalgameResourceExtract/",
       "../tools/ai-agent/": "tools/ai-agent/",
-      "../tools/waifu2x/": "tools/waifu2x/"
+      "../tools/waifu2x/": "tools/waifu2x/",
+      "../tools/magpie/": "tools/magpie/",
+      "../tools/locale-emulator/": "tools/locale-emulator/"
     },
     "active": true,
     "targets": [

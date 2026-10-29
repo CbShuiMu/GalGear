@@ -1,0 +1,32 @@
+GalGear 内置工具
+
+请将整个 artifacts 目录一起移动，保留 GalGear.exe 旁的 tools 文件夹。
+工具路径以 GalGear.exe 所在目录为基准，不依赖启动时的工作目录。
+
+超分：tools/magpie/Magpie.exe（本机 Magpie 0.13.0）
+配置：tools/magpie/config/config.json
+已带入本机的缩放方案，当前全屏缩放快捷键为 Alt+Shift+A。
+在游戏配置中勾选“超分”后启动游戏，GalGear 会自动在托盘启动 Magpie，
+等待游戏窗口后触发缩放。算法和倍率可直接打开内置 Magpie 调整。
+GalGear 每次调用都会读取便携配置中的快捷键。
+如另一个目录的 Magpie 已在运行，请先退出它，以便使用内置版本及配置。
+
+转区：tools/locale-emulator/LEProc.exe（本机 Locale Emulator 2.5.0.1）
+配置：tools/locale-emulator/LEConfig.xml
+在游戏配置中勾选“转区启动”。默认使用 Run in Japanese (Admin)，
+Windows 可能显示管理员确认；指定其他配置 GUID 时遵从所选配置。
+无需为了 GalGear 调用而安装 Locale Emulator 的右键菜单扩展。
+
+标签筛选
+“已收藏／未收藏”和“已通关／未通关”位于标签筛选弹窗的“游戏状态”区域。
+收藏指游戏已加入任意收藏夹；通关指奖杯按钮的通关状态。
+同组二选一，再次点击已选条件可取消；两组条件与普通标签同时生效。
+点击“确认”应用，关闭弹窗取消修改，清除筛选会同时清除状态和标签。
+
+上游项目及源代码
+Magpie：https://github.com/Blinue/Magpie/tree/v0.13.0
+Locale Emulator：https://github.com/xupefei/Locale-Emulator
+各工具目录保留其许可证；effects 中的算法保留原文件及声明。
+
+程序默认仍使用 %APPDATA%/com.galgear.desktop 保存游戏库和偏好。
+内置工具的配置随 tools 目录携带。现有工具路径为空或失效时会自动补全。

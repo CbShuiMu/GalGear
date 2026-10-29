@@ -117,11 +117,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.library.visible_count += 120
         }
         "game-detail" => {
-            if app.page != "games" || app.library.collection.is_some() {
+            // Home owns its detail overlay; keep its shelf and the library's filters intact.
+            if app.page != "home" && (app.page != "games" || app.library.collection.is_some()) {
                 app.page = "games".into();
                 app.library.collection = None;
                 app.library.search.clear();
-                app.library.tag_filter.clear();
+                app.library.clear_filters();
                 app.library.visible_count = 120;
                 reset_scroll();
             }
@@ -324,13 +325,21 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             "remove_library_folder",
             json!({"path": value}),
         ),
-        "sort" => {
+        "sort" | "sort-direction" => {
             let size = app.settings.card_size;
+            let descending = app.settings.sort_descending();
+            let (sort_by, descending) = if action == "sort-direction" {
+                (app.settings.sort_by.as_str(), !descending)
+            } else {
+                (value, descending)
+            };
+            let payload = json!({"cardSize":size,"sortBy":sort_by,"sortDescending":descending});
+            app.choices.open = None;
             issue(
                 app,
                 Pending::Preferences,
                 "save_preferences",
-                json!({"cardSize":size,"sortBy":value}),
+                payload,
             );
         }
         "language" if Language::from_code(value).is_some() => issue(
@@ -350,6 +359,37 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn home_details_return_to_the_same_shelf_without_resetting_library_filters() {
+        let mut app = App {
+            home_selected: Some("game".into()),
+            ..Default::default()
+        };
+        app.library.search = "saved search".into();
+        app.library.collection = Some("favorites".into());
+        dispatch(&mut app, "game-detail", "game");
+        assert_eq!(app.page, "home");
+        assert_eq!(app.detail.selected.as_deref(), Some("game"));
+        dispatch(&mut app, "close-detail", "");
+        assert_eq!(app.page, "home");
+        assert!(app.detail.selected.is_none());
+        assert_eq!(app.home_selected.as_deref(), Some("game"));
+        assert_eq!(app.library.search, "saved search");
+        assert_eq!(app.library.collection.as_deref(), Some("favorites"));
+    }
+
+    #[test]
+    fn library_details_still_return_to_the_library() {
+        let mut app = App {
+            page: "games".into(),
+            ..Default::default()
+        };
+        dispatch(&mut app, "game-detail", "game");
+        dispatch(&mut app, "close-detail", "");
+        assert_eq!(app.page, "games");
+        assert!(app.detail.selected.is_none());
+    }
 
     #[test]
     fn opening_game_details_preserves_patch_search_and_settings_drafts() {

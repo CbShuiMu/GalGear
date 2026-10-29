@@ -22,6 +22,8 @@ pub(crate) struct Settings {
     pub(crate) card_size: u32,
     pub(crate) sort_by: String,
     #[serde(default)]
+    pub(crate) sort_descending: Option<bool>,
+    #[serde(default)]
     pub(crate) language: Language,
     #[serde(default)]
     pub(crate) game_edits: BTreeMap<String, GameEdit>,
@@ -57,6 +59,13 @@ pub(crate) struct Settings {
     pub(crate) metadata_provider: String,
     #[serde(default = "default_ai_provider")]
     pub(crate) ai_provider: String,
+}
+
+impl Settings {
+    pub(crate) fn sort_descending(&self) -> bool {
+        // Older settings sorted names ascending and update times descending.
+        self.sort_descending.unwrap_or(self.sort_by == "recent")
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]

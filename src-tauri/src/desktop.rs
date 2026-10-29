@@ -94,6 +94,12 @@ pub(crate) fn run() {
                 app.path().app_config_dir()?
             };
             let state = AppState::load(data_dir).map_err(std::io::Error::other)?;
+            {
+                let mut settings = state.settings.lock().map_err(|_| std::io::Error::other("Settings lock"))?;
+                if crate::bundled_tools::apply_defaults(&mut settings, &exe_dir) {
+                    state.store.save(&settings).map_err(std::io::Error::other)?;
+                }
+            }
             let settings = snapshot(&state).map_err(std::io::Error::other)?;
             let language = settings.language;
             app.set_theme(Some(if settings.theme == "dark" {

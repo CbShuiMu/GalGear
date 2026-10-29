@@ -49,6 +49,7 @@ pub fn options(app: &App, field: &str) -> Vec<OptionItem> {
         "sort" => vec![
             item("title", t(app, "games.sort_title")),
             item("recent", t(app, "games.sort_recent")),
+            item("release", t(app, "games.sort_release")),
         ],
         "fan-mode" => vec![
             item("csrf", "authenticity_token / CSRF"),

@@ -8,6 +8,7 @@ pub(crate) use crate::models::Collection;
 pub(crate) use actions::dispatch;
 pub(crate) use dialogs::dialog;
 pub(crate) use state::State;
+pub(crate) use state::StatusFilter;
 pub(crate) use view::page;
 
 use crate::{models::Catalog, models::Game, models::Settings};
@@ -24,7 +25,7 @@ pub(crate) enum Dialog {
     Warnings,
     Failures,
     Restore,
-    Tags { selected: Vec<String> },
+    Tags { selected: Vec<String>, status: StatusFilter },
     AddGames,
     DeleteFolders { ids: Vec<String> },
 }
@@ -51,6 +52,23 @@ pub(crate) fn clear_selection(state: &mut State) {
     state.visible_count = 120;
 }
 
+fn release_date_key(value: &str) -> Option<i32> {
+    let mut parts = value.trim().split(['-', '/', '.', '年', '月', '日', 'T', ' ']);
+    let year = parts.next()?;
+    if year.len() != 4 {
+        return None;
+    }
+    let year = year.parse().ok().filter(|year| *year > 0)?;
+    // Partial dates sort at the beginning of their known year or month.
+    let component = |value| match value {
+        None | Some("" | "??") => Some(1),
+        Some(value) => value.parse::<u8>().ok(),
+    };
+    let month = time::Month::try_from(component(parts.next())?).ok()?;
+    let day = component(parts.next())?;
+    time::Date::from_calendar_date(year, month, day).ok().map(time::Date::to_julian_day)
+}
+
 pub(crate) fn matching<'a>(
     catalog: &'a Catalog,
     settings: &Settings,
@@ -70,6 +88,10 @@ pub(crate) fn matching<'a>(
         .iter()
         .filter(|g| {
             (state.collection.is_none() || folder.is_some_and(|f| f.games.contains(&g.id)))
+                && state.status_filter.finished.is_none_or(|finished| (g.play_status == "finished") == finished)
+                && state.status_filter.favorite.is_none_or(|favorite| {
+                    settings.collections.iter().any(|folder| folder.games.contains(&g.id)) == favorite
+                })
                 && (g.title.to_lowercase().contains(&query)
                     || g.tags.iter().any(|tag| tag.to_lowercase().contains(&query)))
                 && state.tag_filter.iter().all(|tag| {
@@ -79,10 +101,23 @@ pub(crate) fn matching<'a>(
                 })
         })
         .collect();
-    if settings.sort_by == "recent" {
-        games.sort_by_key(|g| std::cmp::Reverse(g.modified));
+    if settings.sort_by == "release" {
+        let descending = settings.sort_descending();
+        games.sort_by_cached_key(|game| {
+            let release = settings.game_edits.get(&game.id)
+                .and_then(|edit| edit.summary_release_date.as_deref())
+                .or_else(|| game.metadata.as_ref().map(|meta| meta.release_date.as_str()))
+                .and_then(release_date_key);
+            let date = release.unwrap_or_default();
+            (release.is_none(), if descending { -date } else { date }, game.title.to_lowercase())
+        });
+    } else if settings.sort_by == "recent" {
+        games.sort_by_key(|g| g.modified);
     } else {
         games.sort_by_cached_key(|g| g.title.to_lowercase());
+    }
+    if settings.sort_by != "release" && settings.sort_descending() {
+        games.reverse();
     }
     games
 }
@@ -370,6 +405,49 @@ mod tests {
         serde_json::from_value(json!({"id":id.to_string(),"title":format!("Game {id}"),"folder":"X:/games","library":"X:/","executable":"X:/games/game.exe","media_path":null,"engine":"unknown","status":"installed","cover":null,"modified":id,"cg_unlock_status":"unsupported","tags":if id.is_multiple_of(2) {vec!["ADV"]}else{vec!["Other"]},"available":true})).unwrap()
     }
     #[test]
+    fn status_filters_combine_with_tags_and_follow_current_button_state() {
+        let mut app = App { page: "games".into(), ..Default::default() };
+        app.catalog.games = (0..4).map(game).collect();
+        app.catalog.games[0].play_status = "finished".into();
+        app.catalog.games[1].play_status = "finished".into();
+        app.settings.collections.push(Collection {
+            id: "folder".into(), games: ["0".into(), "2".into()].into(), ..Default::default()
+        });
+        for (favorite, finished, expected) in [(true, true, "0"), (false, true, "1"), (true, false, "2"), (false, false, "3")] {
+            app.library.status_filter = StatusFilter { favorite: Some(favorite), finished: Some(finished) };
+            assert_eq!(matching(&app.catalog, &app.settings, &app.library, &app.page).iter().map(|g| g.id.as_str()).collect::<Vec<_>>(), [expected]);
+        }
+        app.library.status_filter = StatusFilter { favorite: Some(true), finished: Some(false) };
+        app.library.tag_filter = vec!["ADV".into()];
+        assert_eq!(matching(&app.catalog, &app.settings, &app.library, &app.page)[0].id, "2");
+        app.catalog.games[2].play_status = "finished".into();
+        assert!(matching(&app.catalog, &app.settings, &app.library, &app.page).is_empty());
+        app.catalog.games[2].play_status.clear();
+        app.settings.collections[0].games.remove("2");
+        assert!(matching(&app.catalog, &app.settings, &app.library, &app.page).is_empty());
+    }
+
+    #[test]
+    fn status_choices_are_exclusive_drafts_and_clear_with_tags() {
+        let mut app = App::default();
+        dispatch(&mut app, "tag-filter-open", "");
+        dispatch(&mut app, "tag-status", "favorite");
+        dispatch(&mut app, "tag-status", "not-favorite");
+        dispatch(&mut app, "tag-status", "finished");
+        assert!(app.library.status_filter.is_empty());
+        dispatch(&mut app, "tag-filter-apply", "");
+        assert_eq!(app.library.status_filter, StatusFilter { favorite: Some(false), finished: Some(true) });
+        let mut html = String::new();
+        page(&mut html, &app);
+        assert!(html.contains("未收藏、已通关"));
+        dispatch(&mut app, "tag-filter-open", "");
+        dispatch(&mut app, "tag-status", "finished");
+        dispatch(&mut app, "library-close", "");
+        assert_eq!(app.library.status_filter.finished, Some(true));
+        dispatch(&mut app, "tag-clear", "");
+        assert!(!app.library.has_filters());
+    }
+    #[test]
     fn all_matching_entries_are_selected_beyond_the_render_limit() {
         let mut app = App::default();
         app.catalog.games = (0..300).map(game).collect();
@@ -407,6 +485,72 @@ mod tests {
         assert_eq!(app.library.checked.len(), 20);
     }
     #[test]
+    fn release_dates_normalize_provider_formats_and_partial_dates() {
+        let expected = release_date_key("2024-02-09").unwrap();
+        for date in ["2024-2-9", "2024/2/9", "2024.2.9", "2024年2月9日", "2024-02-09T00:00:00Z"] {
+            assert_eq!(release_date_key(date), Some(expected), "{date}");
+        }
+        assert_eq!(release_date_key("2024"), release_date_key("2024-01-01"));
+        assert_eq!(release_date_key("2024-02-??"), release_date_key("2024-02-01"));
+    }
+
+    #[test]
+    fn invalid_release_dates_remain_unknown() {
+        for date in ["", "未定", "TBA", "0000-01-01", "2024-13-01", "2023-02-29", "2024-02-30"] {
+            assert_eq!(release_date_key(date), None, "{date}");
+        }
+        assert!(release_date_key("2024-02-29").is_some());
+    }
+
+    #[test]
+    fn release_sort_uses_detail_overrides_and_keeps_unknown_dates_last_in_both_directions() {
+        let mut app = App::default();
+        app.settings.sort_by = "release".into();
+        app.catalog.games = (1..=10).map(game).collect();
+        for (game, date) in app.catalog.games.iter_mut().zip([
+            "2025-10-1", "1998-12-31", "", "2026-02-30", "2024/2/29",
+            "2024年11月2日", "2020-01-01", "2023", "", "1980-01-01",
+        ]) {
+            if !date.is_empty() {
+                game.metadata = Some(crate::models::Metadata { release_date: date.into(), ..Default::default() });
+            }
+        }
+        for (id, date) in [("7", "2030-01-01"), ("9", "2022-01-01"), ("10", "")] {
+            app.settings.game_edits.entry(id.into()).or_default().summary_release_date = Some(date.into());
+        }
+        for (descending, expected) in [
+            (false, ["2", "9", "8", "5", "6", "1", "7", "10", "3", "4"]),
+            (true, ["7", "1", "6", "5", "8", "9", "2", "10", "3", "4"]),
+        ] {
+            app.settings.sort_descending = Some(descending);
+            let ids: Vec<_> = matching(&app.catalog, &app.settings, &app.library, "games")
+                .iter().map(|game| game.id.as_str()).collect();
+            assert_eq!(ids, expected, "descending={descending}");
+        }
+    }
+
+    #[test]
+    fn sort_direction_applies_to_names_and_update_times() {
+        let mut app = App::default();
+        app.catalog.games = vec![game(1), game(2), game(3)];
+        for (game, title) in app.catalog.games.iter_mut().zip(["Beta", "alpha", "Gamma"]) {
+            game.title = title.into();
+        }
+        for (field, descending, expected) in [
+            ("title", false, ["2", "1", "3"]),
+            ("title", true, ["3", "1", "2"]),
+            ("recent", false, ["1", "2", "3"]),
+            ("recent", true, ["3", "2", "1"]),
+        ] {
+            app.settings.sort_by = field.into();
+            app.settings.sort_descending = Some(descending);
+            let ids: Vec<_> = matching(&app.catalog, &app.settings, &app.library, "games")
+                .iter().map(|game| game.id.as_str()).collect();
+            assert_eq!(ids, expected, "{field}, descending={descending}");
+        }
+    }
+
+    #[test]
     fn sorting_does_not_change_selected_identities_and_exiting_clears_selection() {
         let mut app = App::default();
         app.catalog.games = (0..300).map(game).collect();
@@ -417,6 +561,9 @@ mod tests {
             matching(&app.catalog, &app.settings, &app.library, &app.page)[0].id,
             "299"
         );
+        assert_eq!(app.library.checked, selected);
+        app.settings.sort_descending = Some(false);
+        assert_eq!(matching(&app.catalog, &app.settings, &app.library, &app.page)[0].id, "0");
         assert_eq!(app.library.checked, selected);
         dispatch(&mut app, "batch-toggle", "");
         assert!(app.library.checked.is_empty());

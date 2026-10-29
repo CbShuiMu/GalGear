@@ -3,7 +3,7 @@
 import init, * as ui from './pkg/galgear_ui.js';
 import {syncModalBoundary, topLayer, focusable} from './navigation.js';
 import {startGamepad} from './gamepad.js';
-import {installHomeNavigation, syncHomePresentation} from './home.js';
+import {installHomeNavigation, syncHomePresentation, captureHomeDetailCover, syncHomeDetailTransition, returnHomeDetail, cancelHomeDetailTransition} from './home.js';
 
 let wasmReady = false;
 let previousDialog = false;
@@ -173,20 +173,23 @@ function closeDetail() {
   if (detailReturnAnimation) return;
   const overlay = document.querySelector('.detail-overlay');
   if (!overlay || matchMedia('(prefers-reduced-motion: reduce)').matches || !overlay.animate) {
+    cancelHomeDetailTransition();
     ui.dispatch('close-detail', '');
     return;
   }
   overlay.inert = true;
-  const animation = overlay.animate(
-    [{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }],
-    { duration: 240, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }
-  );
-  detailReturnAnimation = animation;
-  animation.finished.catch(() => {}).then(() => {
-    if (detailReturnAnimation !== animation) return;
+  const gameId = overlay.dataset.detailGame;
+  const finished = overlay.dataset.detailOrigin === 'home' ? returnHomeDetail(overlay)
+    : overlay.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }],
+      { duration: 240, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' }).finished.catch(() => {});
+  detailReturnAnimation = finished;
+  finished.then(() => {
+    if (detailReturnAnimation !== finished) return;
     detailReturnAnimation = null;
     overlay.inert = false;
-    if (document.querySelector('.detail-overlay') === overlay) ui.dispatch('close-detail', '');
+    if (document.querySelector('.detail-overlay') === overlay && overlay.dataset.detailGame === gameId) {
+      ui.dispatch('close-detail', '');
+    }
   });
 }
 
@@ -242,9 +245,14 @@ function renderFrame(html) {
     const detailsScroll = document.querySelector('.detail-scroll')?.scrollTop || 0;
     const openDetails = [...document.querySelectorAll('details[open]')].filter(node => !currentPage?.contains(node)).map(node => node.className);
     const hasDialog = html.includes('class="detail-overlay');
-    if (hasDialog && !previousDialog) dialogReturnFocus = active?.dataset?.value;
+    const openingDetail = hasDialog && !previousDialog;
+    const closingDetail = !hasDialog && previousDialog;
     const template = document.createElement('template');
     template.innerHTML = html;
+    const nextDetail = template.content.querySelector('.detail-overlay');
+    const homeCover = openingDetail && nextDetail?.dataset.detailOrigin === 'home'
+      ? captureHomeDetailCover(nextDetail.dataset.detailGame) : null;
+    if (openingDetail) dialogReturnFocus = nextDetail?.dataset.detailGame;
     reconcileChildren(document.getElementById('app'), template.content);
     const shell = document.querySelector('.app-shell');
     if (shell) {
@@ -274,9 +282,7 @@ function renderFrame(html) {
     const details = document.querySelector('.detail-scroll');
     if (details) details.scrollTop = detailsScroll;
     if (hasDialog && !previousDialog) document.getElementById('close-detail')?.focus({preventScroll:true});
-    else if (!hasDialog && previousDialog) {
-      (document.getElementById(`game-${dialogReturnFocus}`) || document.getElementById(`home-game-${dialogReturnFocus}`))?.focus({ preventScroll: true });
-    } else if (focusId) {
+    else if (!closingDetail && focusId) {
       const next = document.getElementById(focusId);
       // A retained input already owns its caret and IME composition session.
       if (next && next !== active) {
@@ -346,7 +352,13 @@ function renderFrame(html) {
       previousContext=false;contextReturnId=null;
     }
     syncModalBoundary();
+    if (detailReturnAnimation) document.querySelector('.detail-overlay')?.setAttribute('inert', '');
+    // The underlying page must leave inert before its focus can be restored.
+    if (closingDetail) {
+      (document.getElementById(`home-game-${dialogReturnFocus}`) || document.getElementById(`game-${dialogReturnFocus}`))?.focus({ preventScroll: true });
+    }
     syncHomePresentation();
+    syncHomeDetailTransition(homeCover);
     measureLibraryBounds();
     syncSegmentedControls();
     if (pane) { pane.scrollTop = pageTop; pane.scrollLeft = pageLeft; }

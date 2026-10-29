@@ -105,7 +105,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
     } else {
         let count = if app.library.collection.is_some()
             || !app.library.search.is_empty()
-            || !app.library.tag_filter.is_empty()
+            || app.library.has_filters()
         {
             format!("{} / {}", games.len(), app.catalog.games.len())
         } else {
@@ -137,24 +137,28 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             t(app, "common.search")
         );
         html.push_str("<div class=\"tag-filter-control\">");
-        let filter_label = if app.library.tag_filter.is_empty() {
+        let filter_label = if !app.library.has_filters() {
             t(app, "games.tag_filter").to_owned()
         } else {
-            app.library.tag_filter.join("、")
+            app.library.status_filter.options().iter()
+                .filter(|(_, _, active)| *active)
+                .map(|(_, key, _)| t(app, key))
+                .chain(app.library.tag_filter.iter().map(String::as_str))
+                .collect::<Vec<_>>().join("、")
         };
         html.push_str(&button(
             "tag-filter-open",
             "",
             &esc(&filter_label),
             "filter_plus",
-            if app.library.tag_filter.is_empty() {
+            if !app.library.has_filters() {
                 "secondary"
             } else {
                 "secondary active"
             },
             false,
         ));
-        if !app.library.tag_filter.is_empty() {
+        if app.library.has_filters() {
             write!(html,r#"<button type="button" class="icon-button clear-filter" data-action="tag-clear" aria-label="{}" title="{}">{}</button>"#,t(app,"tags.clear_filter"),t(app,"tags.clear_filter"),icon("filter_cancel")).unwrap();
         }
         html.push_str("</div>");
@@ -223,6 +227,14 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             )
         );
         warnings_button(html, app);
+        html.push_str(&button(
+            "sort-direction",
+            "",
+            t(app, if app.settings.sort_descending() { "games.sort_descending" } else { "games.sort_ascending" }),
+            if app.settings.sort_descending() { "arrow_downward" } else { "arrow_upward" },
+            "secondary icon-only",
+            app.busy(),
+        ));
         choices::control(html, app, "sort", t(app, "games.sort_label"), false);
         html.push_str("</div>");
     }
@@ -456,7 +468,7 @@ fn page_content(html: &mut String, app: &App) {
     }
     if games.is_empty() {
         let empty_folder =
-            folder.is_some() && app.library.search.is_empty() && app.library.tag_filter.is_empty();
+            folder.is_some() && app.library.search.is_empty() && !app.library.has_filters();
         let _ = write!(
             html,
             "<div class=\"empty-state\"><span class=\"empty-icon\">{}</span><h3>{}</h3><p>{}</p>{}</div>",

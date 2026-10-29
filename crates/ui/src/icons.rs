@@ -2,6 +2,12 @@
 
 pub(super) fn google(name: &str) -> Option<&'static str> {
     Some(match name {
+        "arrow_upward" => include_str!(
+            "../../../src-tauri/icons/arrow_upward_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "arrow_downward" => include_str!(
+            "../../../src-tauri/icons/arrow_downward_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
         "filter_plus" => include_str!(
             "../../../src-tauri/icons/filter_plus_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
         ),

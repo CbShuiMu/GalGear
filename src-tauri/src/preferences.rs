@@ -90,9 +90,10 @@ pub(crate) fn set_display(
 pub(crate) fn save_preferences(
     card_size: u32,
     sort_by: String,
+    sort_descending: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
-    if !matches!(sort_by.as_str(), "title" | "recent") {
+    if !matches!(sort_by.as_str(), "title" | "recent" | "release") {
         return Err(Message::new("error.sort"));
     }
     let mut settings = state
@@ -102,6 +103,9 @@ pub(crate) fn save_preferences(
     let mut next = settings.clone();
     next.card_size = card_size.clamp(160, 280);
     next.sort_by = sort_by;
+    if let Some(descending) = sort_descending {
+        next.sort_descending = Some(descending);
+    }
     state.store.save(&next)?;
     *settings = next.clone();
     Ok(next)

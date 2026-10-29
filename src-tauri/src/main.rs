@@ -4,6 +4,7 @@ mod accounts;
 mod ai;
 mod ai_summary;
 mod background;
+mod bundled_tools;
 mod cloud_commands;
 mod collections;
 mod covers;
