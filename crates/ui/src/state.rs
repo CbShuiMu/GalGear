@@ -67,7 +67,7 @@ impl Default for App {
             },
             catalog: Catalog::default(),
             config_path: String::new(),
-            version: "0.1.0".into(),
+            version: env!("CARGO_PKG_VERSION").into(),
             initialized: false,
             toast: None,
             toast_generation: 0,
