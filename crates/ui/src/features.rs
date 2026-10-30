@@ -2,7 +2,7 @@
 use crate::{
     ai, cloud, detail, detail_form, library, models::Game, models::Metadata, models::SaveSnapshot,
     preferences, requests::Pending, requests::issue, state::App, state::show_toast, view::t,
-    widgets::button, widgets::bytes, widgets::esc,
+    widgets::button, widgets::bytes, widgets::esc, widgets::icon_button,
 };
 use galgear_i18n::Message;
 use serde_json::json;
@@ -17,12 +17,36 @@ pub(crate) fn setting(app: &App, key: &str, fallback: &str) -> String {
         .cloned()
         .unwrap_or_else(|| fallback.into())
 }
+pub(crate) fn same_hotkey(left: &str, right: &str) -> bool {
+    let tokens = |value: &str| {
+        let mut keys: Vec<_> = value.split('+').map(|key| key.trim().to_ascii_uppercase()).collect();
+        keys.sort_unstable();
+        keys
+    };
+    tokens(left) == tokens(right)
+}
+
+pub(crate) fn clear_saved_tool_drafts(app: &mut App) {
+    for (field, saved) in [
+        ("tool-hotkey", app.settings.magpie_hotkey.clone()),
+        ("tool-magpie", app.settings.magpie.clone()),
+        ("tool-locale", app.settings.locale_emulator.clone()),
+        ("backup-retention", app.settings.backup_retention.to_string()),
+    ] {
+        if app.form.get(field).is_some_and(|draft| {
+            if field == "tool-hotkey" { same_hotkey(draft, &saved) }
+            else { draft.trim().eq_ignore_ascii_case(&saved) }
+        }) { app.form.remove(field); }
+    }
+}
+
 fn request_history(app: &mut App, command: &str, payload: serde_json::Value) {
     if let Some(id) = app.detail.selected.clone() {
         issue(app, Pending::History(id), command, payload);
     }
 }
 fn game_tools(app: &mut App, id: &str, mode: Option<&str>, auto: Option<bool>) {
+    if auto == Some(true) && !can_auto_backup(app, id) { return; }
     let edit = app.settings.game_edits.get(id).cloned().unwrap_or_default();
     let profile = setting(app, "locale-profile", &edit.locale_profile);
     issue(
@@ -38,6 +62,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         app.context_menu = None;
     }
     match action {
+        "ai-find-save" => {
+            if !save_busy(app) && app.catalog.games.iter().any(|game| game.id == value) {
+                show_toast(app, Message::new("save.ai_searching"), false);
+                issue(app, Pending::FindSave(value.into()), "find_save_with_ai", json!({"id":value}));
+            }
+        }
         "game-settings" => app.detail.editor = Some(detail::Editor::Tools),
         "toggle-locale" => {
             if let Some(id) = app.detail.selected.clone() {
@@ -45,7 +75,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     .settings
                     .game_edits
                     .get(&id)
-                    .is_some_and(|edit| edit.launch_mode == "locale");
+                    .is_none_or(|edit| edit.launch_mode == "locale");
                 game_tools(
                     app,
                     &id,
@@ -343,10 +373,11 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         }
         "cancel-action" => app.detail.confirmation = None,
         "save-history" => {
-            app.detail.history_open = true;
+            app.detail.archive_open = true;
             app.detail.restore_preview = None;
             request_history(app, "save_history", json!({"id":value}));
         }
+        "close-archive" => app.detail.archive_open = false,
         "close-history" => {
             app.detail.history_open = false;
             app.detail.restore_preview = None;
@@ -356,7 +387,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             let note = form(app, "backup-note");
             request_history(app, "backup_saves", json!({"id":value,"note":note}));
         }
-        "confirm-save" => {
+        "confirm-save" if !save_busy(app) => {
             if let Some(id) = app.detail.selected.clone() {
                 issue(
                     app,
@@ -440,7 +471,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                         .settings
                         .game_edits
                         .get(value)
-                        .is_some_and(|e| e.launch_mode == "locale"));
+                        .is_none_or(|e| e.launch_mode == "locale"));
             match app.runtime.get(value).map(String::as_str) {
                 Some("running") => show_toast(app, Message::new("error.already_running"), true),
                 Some("stopped") => launch(app, value, locale, false),
@@ -545,10 +576,65 @@ pub(crate) fn meta_value<'a>(meta: &'a Metadata, field: &str) -> &'a str {
     }
 }
 
+pub(crate) fn can_auto_backup(app: &App, id: &str) -> bool {
+    app.detail.saves.get(id).is_some_and(|report| {
+        report.locations.iter().any(|location| location.exists && location.confidence == "confirmed")
+    })
+}
+
+pub(crate) fn refresh_detail_files(app: &mut App) {
+    if app.busy() { return; }
+    let Some(id) = app.detail.selected.clone() else { return };
+    if !app.catalog.games.iter().any(|game| game.id == id && game.available) { return; }
+    crate::local_patches::refresh(app, &id);
+    if !save_busy(app) && !app.requests.values().any(|pending| matches!(pending, Pending::Saves)) {
+        issue(app, Pending::Saves, "detect_saves", json!({"id":id}));
+    }
+}
+
+pub(crate) fn resolve_find_save(app: &mut App, kind: &Pending, success: bool, payload: &str) -> bool {
+    let Pending::FindSave(id) = kind else { return false };
+    let result = if success {
+        (|| {
+            #[derive(serde::Deserialize)]
+            struct Found {
+                id: String,
+                settings: crate::models::Settings,
+                report: crate::models::SaveReport,
+            }
+            let mut found: Found = serde_json::from_str(payload)
+                .map_err(|error| Message::detail("error.read_data", error))?;
+            if &found.id != id { return Err(Message::new("error.operation")); }
+            // Only merge this game's save paths; unrelated settings can change during the search.
+            if let Some(edit) = found.settings.game_edits.remove(id) {
+                let current = app.settings.game_edits.entry(id.clone()).or_default();
+                current.save_path = edit.save_path;
+                current.save_path_auto = edit.save_path_auto;
+                current.save_paths = edit.save_paths;
+            }
+            app.detail.saves.insert(id.clone(), found.report);
+            if app.detail.selected.as_deref() == Some(id) {
+                app.detail.current_snapshot = None;
+                issue(app, Pending::History(id.clone()), "save_history", json!({"id":id}));
+            }
+            Ok(())
+        })()
+    } else { Err(Message::from_error(payload)) };
+    match result {
+        Ok(()) => show_toast(app, Message::new("save.ai_success"), false),
+        Err(error) => {
+            let message = if error.key.starts_with("save.ai_") { error }
+                else { Message::detail("save.ai_failed", error.render(app.settings.language)) };
+            show_toast(app, message, true);
+        }
+    }
+    true
+}
+
 pub(crate) fn save_busy(app: &App) -> bool {
     app.requests
         .values()
-        .any(|p| matches!(p, Pending::History(_) | Pending::RestorePreview))
+        .any(|p| matches!(p, Pending::History(_) | Pending::RestorePreview | Pending::FindSave(_) | Pending::ChooseSave | Pending::ConfirmSave(_)))
 }
 pub(crate) fn snapshot_name(game: &Game, snapshot: &SaveSnapshot) -> String {
     if !snapshot.name.is_empty() && !snapshot.name.starts_with('_') {
@@ -640,14 +726,111 @@ pub(crate) fn history(html: &mut String, app: &App, game: &Game) {
     html.push_str("</div></section></div>");
 }
 
+pub(crate) fn current_snapshot(html: &mut String, app: &App, game: &Game) {
+    if app.detail.history_game.as_deref() == Some(&game.id)
+        && let Some(snapshot) = app.detail.history.iter().find(|snapshot| Some(&snapshot.id) == app.detail.current_snapshot.as_ref())
+    {
+        write!(html, r#"<p class="current-save" role="status">{}{}</p>"#,
+            t(app, "backup.current"), esc(&snapshot_name(game, snapshot))).unwrap();
+    }
+}
+
+pub(crate) fn snapshot_row(html: &mut String, app: &App, game: &Game, snapshot: &SaveSnapshot, with_time: bool) {
+    write!(html, "<li><span title=\"{}\">{}</span>", esc(&snapshot_name(game, snapshot)), esc(&snapshot_name(game, snapshot))).unwrap();
+    if with_time {
+        write!(html, "<time>{}</time>", crate::playtime::date_time(snapshot.created)).unwrap();
+    }
+    write!(html, r#"<div class="snapshot-row-actions"><button class="icon-button" data-action="preview-restore" data-value="{}" title="{}" aria-label="{}" {}>{}</button><button class="icon-button" data-action="snapshot-delete" data-value="{}" title="{}" aria-label="{}" {}>{}</button></div></li>"#,
+        esc(&snapshot.id), t(app,"backup.replace"), t(app,"backup.replace"), if save_busy(app){"disabled"}else{""}, crate::widgets::icon("download"),
+        esc(&snapshot.id), t(app,"tags.delete"), t(app,"tags.delete"), if snapshot.locked || save_busy(app){"disabled"}else{""}, crate::widgets::icon("trash")).unwrap();
+}
+
+pub(crate) fn archive_dialog(html: &mut String, app: &App, game: &Game) {
+    write!(html, r#"<div class="editor-overlay"><section class="editor-dialog archive-dialog" role="dialog" aria-modal="true" aria-labelledby="archive-title"><header><h2 id="archive-title">{}</h2>{}</header><div class="editor-body">"#,
+        t(app,"backup.archive"), button("close-archive","",t(app,"common.close"),"close","quiet",false)).unwrap();
+    current_snapshot(html, app, game);
+    if app.detail.history_game.as_deref() == Some(&game.id) && !app.detail.history.is_empty() {
+        write!(html, r#"<ul class="archive-list" aria-label="{}">"#, t(app,"backup.history")).unwrap();
+        for snapshot in &app.detail.history {
+            snapshot_row(html, app, game, snapshot, true);
+        }
+        html.push_str("</ul>");
+    } else {
+        write!(html, "<p class=\"muted\">{}</p>", t(app, if save_busy(app) {"backup.preview_loading"} else {"backup.empty"})).unwrap();
+    }
+    html.push_str("</div></section></div>");
+}
+
+pub(crate) fn delete_snapshot_dialog(html: &mut String, app: &App, game: &Game) {
+    let Some((action, id)) = &app.detail.confirmation else { return; };
+    if action != "snapshot-delete" { return; }
+    write!(html, r#"<div class="editor-overlay"><section class="editor-dialog snapshot-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-snapshot-title" aria-describedby="delete-snapshot-description"><header><h2 id="delete-snapshot-title">{}</h2>{}</header><div class="editor-body"><p id="delete-snapshot-description">{}</p>"#,
+        t(app,"backup.delete_title"), icon_button("cancel-action","",t(app,"common.close"),"close","quiet close-button",false), t(app,"backup.delete_confirm")).unwrap();
+    if let Some(snapshot) = app.detail.history.iter().find(|snapshot| &snapshot.id == id) {
+        write!(html, "<p class=\"snapshot-delete-name\">{}</p>", esc(&snapshot_name(game, snapshot))).unwrap();
+    }
+    write!(html, "<div class=\"detail-actions\">{}{}</div></div></section></div>",
+        button("confirm-action","",t(app,"common.confirm"),"check","primary",save_busy(app)),
+        button("cancel-action","",t(app,"common.cancel"),"","quiet",false)).unwrap();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
+    fn default_launch_options_are_checked_and_can_be_switched_off() {
+        for persisted in [false, true] {
+            let mut app = App::default();
+            let game: Game = serde_json::from_value(json!({
+                "id":"game", "title":"Game", "folder":"F:/Game",
+                "engine":"unknown", "modified":0
+            })).unwrap();
+            app.detail.selected = Some(game.id.clone());
+            app.detail.editor = Some(detail::Editor::Tools);
+            if persisted {
+                app.settings.game_edits.insert(game.id.clone(), serde_json::from_str("{}").unwrap());
+            }
+            let mut html = String::new();
+            detail::render(&mut html, &app, &game);
+            assert!(html.contains("aria-checked=\"true\" data-action=\"toggle-locale\""));
+            assert!(html.contains("aria-checked=\"true\" data-action=\"toggle-upscale\""));
+            crate::bridge::take_requests();
+            for (action, mode, upscale) in [
+                ("toggle-locale", "normal", true),
+                ("toggle-upscale", "locale", false),
+            ] {
+                dispatch(&mut app, action, "");
+                let requests = crate::bridge::take_requests();
+                assert_eq!(requests.len(), 1);
+                let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+                assert_eq!(payload["launchMode"], mode);
+                assert_eq!(payload["upscale"], upscale);
+                app.requests.complete(requests[0].0);
+            }
+        }
+    }
+
+    #[test]
+    fn saved_tool_drafts_clear_normalized_keys_and_keep_new_edits() {
+        let mut app = App::default();
+        app.settings.magpie_hotkey = "Alt+Shift+B".into();
+        app.form.insert("tool-hotkey".into(), "shift + alt + b".into());
+        clear_saved_tool_drafts(&mut app);
+        assert!(!app.form.contains_key("tool-hotkey"));
+        app.form.insert("tool-hotkey".into(), "Alt+Shift+C".into());
+        clear_saved_tool_drafts(&mut app);
+        assert_eq!(app.form["tool-hotkey"], "Alt+Shift+C");
+    }
+
+    #[test]
     fn auto_backup_toggle_preserves_other_launch_preferences() {
         let mut app = App::default();
         app.detail.selected = Some("game".into());
+        app.detail.saves.insert("game".into(), serde_json::from_value(json!({
+            "locations":[{"path":"F:/Game/save", "source":"manual", "confidence":"confirmed", "exists":true}],
+            "searched":[], "limited":false
+        })).unwrap());
         app.settings.game_edits.insert(
             "game".into(),
             crate::models::GameEdit {
@@ -665,6 +848,45 @@ mod tests {
             payload,
             json!({"id":"game","autoBackup":true,"launchMode":"locale","localeProfile":"profile","upscale":true})
         );
+    }
+
+    #[test]
+    fn auto_backup_cannot_be_enabled_without_an_existing_confirmed_location() {
+        let mut app = App::default();
+        app.detail.selected = Some("game".into());
+        crate::bridge::take_requests();
+        dispatch(&mut app, "toggle-auto-backup", "");
+        assert!(crate::bridge::take_requests().is_empty());
+        for (exists, confidence) in [(false, "confirmed"), (true, "candidate")] {
+            app.detail.saves.insert("game".into(), serde_json::from_value(json!({
+                "locations":[{"path":"F:/Game/save", "source":"manual", "confidence":confidence, "exists":exists}],
+                "searched":[], "limited":false
+            })).unwrap());
+            dispatch(&mut app, "auto-backup", "true");
+            assert!(crate::bridge::take_requests().is_empty());
+        }
+    }
+
+    #[test]
+    fn ai_save_search_blocks_duplicate_actions_and_merges_only_save_configuration() {
+        let mut app = App::default();
+        app.catalog.games.push(serde_json::from_value(json!({"id":"game","title":"Game","folder":"F:/Game","engine":"unknown","modified":0})).unwrap());
+        app.settings.game_edits.entry("game".into()).or_default().upscale = true;
+        crate::bridge::take_requests();
+        dispatch(&mut app, "ai-find-save", "game");
+        dispatch(&mut app, "ai-find-save", "game");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert!(save_busy(&app));
+        assert!(!app.busy());
+        let kind = app.requests.complete(requests[0].0).unwrap();
+        let settings = json!({"library_folders":[], "card_size":200, "sort_by":"title", "game_edits":{"game":{"upscale":false,"save_path":"F:/Game/save","save_paths":["F:/Game/save"]}}});
+        resolve_find_save(&mut app, &kind, true, &json!({"id":"game", "settings":settings, "report":{"locations":[], "searched":[], "limited":false}}).to_string());
+        assert!(app.settings.game_edits["game"].upscale);
+        assert_eq!(app.settings.game_edits["game"].save_path.as_deref(), Some("F:/Game/save"));
+        assert_eq!(app.toast.as_ref().unwrap().0.key, "save.ai_success");
+        resolve_find_save(&mut app, &kind, false, &serde_json::to_string(&Message::new("save.ai_token_required")).unwrap());
+        assert_eq!(app.toast.as_ref().unwrap().0.key, "save.ai_token_required");
     }
 
     #[test]

@@ -31,6 +31,10 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         let Some(kind) = app.requests.complete(id) else {
             return;
         };
+        if crate::updates::resolve(&mut app, &kind, success, payload) {
+            paint(&app);
+            return;
+        }
         if matches!(kind, Pending::Background) {
             resolve_background(&mut app, id, success, payload);
             paint(&app);
@@ -70,6 +74,10 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
             paint(&app);
             return;
         }
+        if features::resolve_find_save(&mut app, &kind, success, payload) {
+            paint(&app);
+            return;
+        }
         if !success {
             if matches!(kind, Pending::RestorePreview) {
                 app.detail.history_open = false;
@@ -93,7 +101,8 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         } else {
             let handled: Result<(), String> = (|| {
                 match kind {
-                    Pending::Background
+                    Pending::FindSave(_)
+                    | Pending::Background
                     | Pending::Ai(_)
                     | Pending::Cloud(_)
                     | Pending::SummarySetup(..)
@@ -106,6 +115,18 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                     | Pending::CoverOptions
                     | Pending::SetupExecutable(_)
                     | Pending::SetupSave(_) => {}
+                    Pending::AiRuntime => {
+                        #[derive(serde::Deserialize)]
+                        struct Status {
+                            available: bool,
+                            error: Option<Message>,
+                        }
+                        let status: Status = serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        app.ai_available = status.available;
+                        if let Some(error) = status.error {
+                            show_toast(&mut app, error, true);
+                        }
+                    }
                     Pending::CollectionSave => {
                         let settings = serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         apply_settings(&mut app, settings, id);
@@ -176,8 +197,13 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         if app.detail.selected.as_deref() != Some(&game_id) {
                             return Ok(());
                         }
-                        app.detail.history =
+                        let history: crate::models::SaveHistory =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        app.detail.history = history.snapshots;
+                        app.detail.current_snapshot = history.current_snapshot;
+                        if let Some(notice) = history.notice {
+                            show_toast(&mut app, notice, false);
+                        }
                         app.detail.history_game = Some(game_id);
                         app.detail.restore_preview = None;
                         app.detail.history_open = false;
@@ -261,6 +287,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             app.downloads.notice_generation =
                                 app.downloads.notice_generation.wrapping_add(1);
                             schedule_download_notice_expiry(app.downloads.notice_generation, 8000);
+                            crate::features::refresh_detail_files(&mut app);
                         }
                         app.downloads.preview = None;
                         issue(&mut app, Pending::Account, "refresh_fan_status", json!({}));
@@ -275,6 +302,8 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         app.ai_available = data.ai_available;
                         app.initialized = true;
                         if matches!(kind, Pending::Bootstrap) {
+                            if data.update_complete { show_toast(&mut app, Message::new("update.complete"), false); }
+                            issue(&mut app, Pending::AiRuntime, "get_ai_runtime", json!({}));
                             issue(
                                 &mut app,
                                 Pending::DataSources(String::new()),
@@ -363,7 +392,11 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             id,
                         );
                         if matches!(kind, Pending::Tools) {
+                            // Do not let a previous preferences request undo a completed save.
+                            app.magpie_observed_through = id.checked_sub(1);
+                            features::clear_saved_tool_drafts(&mut app);
                             show_toast(&mut app, Message::new("notice.saved"), false);
+                            issue(&mut app, Pending::Preferences, "get_preferences", json!({}));
                         }
                     }
                     Pending::Language => {
@@ -403,6 +436,12 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             let game_id = data["id"].as_str().unwrap_or_default().to_owned();
                             let report = serde_json::from_value(data["report"].clone())
                                 .map_err(|e| e.to_string())?;
+                            if app.detail.selected.as_deref() == Some(&game_id)
+                                && (matches!(kind, Pending::ChooseSave) || !app.requests.values().any(|p| matches!(p, Pending::History(id) if id == &game_id)))
+                            {
+                                app.detail.current_snapshot = None;
+                                issue(&mut app, Pending::History(game_id.clone()), "save_history", json!({"id":game_id}));
+                            }
                             app.detail.saves.insert(game_id, report);
                         }
                     }
@@ -465,12 +504,18 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         }
                     }
                     Pending::Exclude(game_id) => {
-                        app.catalog.games.retain(|g| g.id != game_id);
-                        app.library.checked.remove(&game_id);
-                        if !app.settings.excluded_games.contains(&game_id) {
-                            app.settings.excluded_games.push(game_id);
+                        let result: library::BatchResult = serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        apply_settings(&mut app, result.settings, id);
+                        playtime::replace_catalog(&mut app.catalog, result.catalog);
+                        if result.succeeded.contains(&game_id) {
+                            app.library.checked.remove(&game_id);
+                            app.detail.selected = None;
                         }
-                        app.detail.selected = None;
+                        if let Some(failure) = result.failed.first() {
+                            show_toast(&mut app, failure.error.clone(), true);
+                        } else if let Some(warning) = result.cache_warning {
+                            show_toast(&mut app, warning, true);
+                        }
                     }
                     Pending::SearchMetadata(game_id, source) => {
                         let results = serde_json::from_str(payload).map_err(|e| e.to_string())?;
@@ -478,9 +523,10 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             app.detail.candidates.insert(game_id, results);
                         }
                     }
-                    Pending::Resources => {
+                    Pending::Resources(game_id) => {
                         let data: serde_json::Value =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        app.patches.resources_game = game_id;
                         app.patches.resources = serde_json::from_value(data["resources"].clone())
                             .map_err(|e| e.to_string())?;
                         app.patches.resource_warnings =
@@ -506,14 +552,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         }
                     }
                     Pending::Enrich => {}
-                    Pending::Update => {
-                        let data: serde_json::Value =
-                            serde_json::from_str(payload).map_err(|e| e.to_string())?;
-                        app.update = Some((
-                            data["version"].as_str().unwrap_or_default().into(),
-                            data["url"].as_str().unwrap_or_default().into(),
-                        ));
-                    }
+                    Pending::Update | Pending::InstallUpdate => {}
                 }
                 Ok(())
             })();

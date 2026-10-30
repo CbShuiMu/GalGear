@@ -23,10 +23,13 @@ pub mod scanner;
 pub mod snapshots;
 pub mod tags;
 pub mod unlock;
+pub mod updates;
 
 use galgear_i18n::{Language, Message};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+
+pub const RELEASE_PAGE: &str = "https://github.com/CbShuiMu/GalGear/releases";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
@@ -88,7 +91,7 @@ impl Default for Settings {
             manual_games: Vec::new(),
             launch_behavior: "keep".into(),
             close_behavior: "exit".into(),
-            release_page: String::new(),
+            release_page: RELEASE_PAGE.into(),
             download_folder: String::new(),
             fan_domain: "https://2dfmax.top".into(),
             metadata_checks: BTreeMap::new(),
@@ -113,7 +116,7 @@ impl Default for Settings {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct GameEdit {
     pub metadata_provider: String,
@@ -129,6 +132,7 @@ pub struct GameEdit {
     pub working_directory: Option<String>,
     pub launcher: Option<String>,
     pub save_path: Option<String>,
+    pub save_path_auto: bool,
     pub metadata: Option<providers::Metadata>,
     pub description: Option<String>,
     pub metadata_overrides: BTreeMap<String, String>,
@@ -140,6 +144,38 @@ pub struct GameEdit {
     pub upscale: bool,
     pub ai_summary: bool,
     pub play_status: PlayStatus,
+}
+
+impl Default for GameEdit {
+    fn default() -> Self {
+        Self {
+            metadata_provider: String::new(),
+            setup_pending: false,
+            setup_confirmed: false,
+            title: None,
+            tags: Vec::new(),
+            source_tags: None,
+            summary_brand: None,
+            summary_release_date: None,
+            executable: None,
+            arguments: Vec::new(),
+            working_directory: None,
+            launcher: None,
+            save_path: None,
+            save_path_auto: false,
+            metadata: None,
+            description: None,
+            metadata_overrides: BTreeMap::new(),
+            tag_rules: BTreeMap::new(),
+            save_paths: Vec::new(),
+            auto_backup: false,
+            launch_mode: "locale".into(),
+            locale_profile: String::new(),
+            upscale: true,
+            ai_summary: false,
+            play_status: PlayStatus::default(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -199,6 +235,8 @@ pub struct ScanResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Bootstrap {
+    #[serde(default)]
+    pub update_complete: bool,
     #[serde(default)]
     pub ai_available: bool,
     pub settings: Settings,

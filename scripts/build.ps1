@@ -6,6 +6,7 @@ foreach ($relative in @('tools\magpie\Magpie.exe', 'tools\magpie\config\config.j
     }
 }
 & (Join-Path $PSScriptRoot 'setup-waifu2x.ps1')
+& (Join-Path $PSScriptRoot 'setup-7zip.ps1')
 & (Join-Path $PSScriptRoot 'build-frontend.ps1') -Release
 & (Join-Path $PSScriptRoot 'build-ai-agent.ps1')
 Push-Location (Split-Path -Parent $PSScriptRoot)
@@ -14,20 +15,13 @@ try {
     if ($LASTEXITCODE -ne 0) { throw '桌面应用编译失败。' }
     New-Item -ItemType Directory -Path artifacts -Force | Out-Null
     Copy-Item -LiteralPath target\release\galgear.exe -Destination artifacts\GalGear.exe -Force
-    $skillSource = (Resolve-Path -LiteralPath (Join-Path $taskRoot 'Galgear-GalgameReverse-Skill\GalgameResourceExtract')).Path
-    $skillRoot = Join-Path $taskRoot 'artifacts\Galgear-GalgameReverse-Skill\GalgameResourceExtract'
-    Get-ChildItem -LiteralPath $skillSource -Force -Recurse -File |
-        Where-Object { $_.FullName -notmatch '[\\/](__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache)[\\/]' -and $_.Extension -notin '.pyc','.pyo' } |
-        ForEach-Object {
-            $relative = $_.FullName.Substring($skillSource.Length + 1)
-            $destination = Join-Path $skillRoot $relative
-            New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
-            Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
-        }
+    # Keep downloaded skills and their commit marker across executable updates.
+    # The runtime compares commits and downloads only a changed or missing package.
     $agentOutput = Join-Path $taskRoot 'artifacts\tools'
     New-Item -ItemType Directory -Path $agentOutput -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\ai-agent') -Destination $agentOutput -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\waifu2x') -Destination $agentOutput -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\7zip') -Destination $agentOutput -Recurse -Force
     foreach ($name in @('magpie', 'locale-emulator')) {
         $source = (Resolve-Path -LiteralPath (Join-Path $taskRoot "tools\$name")).Path
         Get-ChildItem -LiteralPath $source -Recurse -File | ForEach-Object {

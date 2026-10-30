@@ -148,6 +148,9 @@ pub fn list(folder: &Path) -> Result<Report, Message> {
         if !metadata.is_dir() || is_link(&metadata) {
             continue;
         }
+        if entry.file_name().to_string_lossy().starts_with(".galgear") {
+            continue;
+        }
         let name = entry
             .file_name()
             .into_string()
@@ -243,13 +246,198 @@ pub fn preview(folder: &Path, name: &str, game_id: String) -> Result<Plan, Messa
         preview,
         staging,
         root,
+        reuse_patch_files: true,
     })
+}
+
+pub(super) fn matching_backups(
+    root: &Path,
+    changes: &[Change],
+) -> Result<BTreeMap<usize, String>, Message> {
+    let mut wanted = BTreeMap::<String, Vec<usize>>::new();
+    let mut sizes = BTreeSet::new();
+    for (index, change) in changes.iter().enumerate() {
+        if let Some(hash) = &change.before {
+            wanted.entry(hash.clone()).or_default().push(index);
+            sizes.insert(
+                fs::metadata(target(root, &change.path)?)
+                    .map_err(error)?
+                    .len(),
+            );
+        }
+    }
+    let storage = directory(root)?;
+    let mut matches = BTreeMap::new();
+    for entry in fs::read_dir(&storage).map_err(error)? {
+        if wanted.is_empty() {
+            break;
+        }
+        let entry = entry.map_err(error)?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with(".galgear") {
+            continue;
+        }
+        let Ok(patch) = source(&storage, &name) else {
+            continue;
+        };
+        let Ok(contents) = files(&patch, root) else {
+            continue;
+        };
+        for file in contents {
+            let path = patch.join(file);
+            if !fs::metadata(&path).is_ok_and(|metadata| sizes.contains(&metadata.len())) {
+                continue;
+            }
+            let hash = file_hash(&path)?;
+            if let Some(indices) = wanted.remove(&hash) {
+                let relative = path
+                    .strip_prefix(root)
+                    .map_err(error)?
+                    .to_string_lossy()
+                    .into_owned();
+                for index in indices {
+                    matches.insert(index, relative.clone());
+                }
+            }
+        }
+    }
+    Ok(matches)
+}
+
+/// Keep originals as ordinary patch files, so they can also be switched back from the card.
+pub(super) fn backup_originals(
+    root: &Path,
+    patch_name: &str,
+    changes: &[Change],
+    sources: &mut BTreeMap<usize, String>,
+) -> Result<(), Message> {
+    let missing: Vec<_> = changes.iter().enumerate()
+        .filter(|(index, change)| change.before.is_some() && !sources.contains_key(index))
+        .collect();
+    if missing.is_empty() { return Ok(()); }
+    let name = relative(&format!("{patch_name}_original"))?;
+    if name.components().count() != 1 { return Err(Message::new("local_patches.unsafe")); }
+    let storage = directory(root)?;
+    let staging = tempfile::Builder::new().prefix(".galgear-original-").tempdir_in(&storage).map_err(error)?;
+    for (_, change) in &missing {
+        let destination = staging.path().join(relative(&change.path)?);
+        super::atomic_copy(&destination, &target(root, &change.path)?)?;
+        if Some(file_hash(&destination)?) != change.before {
+            return Err(error("Game files changed while backing up originals"));
+        }
+    }
+    // Keep older backups intact when this patch is installed over different originals later.
+    for suffix in 1..=10000 {
+        let folder = if suffix == 1 { storage.join(&name) } else {
+            storage.join(format!("{}_{}", name.to_string_lossy(), suffix))
+        };
+        if fs::symlink_metadata(&folder).is_ok() { continue; }
+        match fs::rename(staging.path(), &folder) {
+            Ok(()) => {
+                for (index, change) in missing {
+                    sources.insert(index, folder.join(relative(&change.path)?)
+                        .strip_prefix(root).map_err(error)?.to_string_lossy().into_owned());
+                }
+                return Ok(());
+            }
+            Err(_) if fs::symlink_metadata(&folder).is_ok() => continue,
+            Err(failure) => return Err(error(failure)),
+        }
+    }
+    Err(error("Too many original patch backups"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::{install, restore};
     use super::*;
+
+    #[test]
+    fn named_original_folder_keeps_all_names_and_can_be_switched_back() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("game");
+        fs::create_dir_all(root.join("data")).unwrap();
+        let storage = directory(&root).unwrap();
+        fs::create_dir_all(storage.join("汉化补丁/data")).unwrap();
+        fs::write(storage.join("汉化补丁/data/script.chs"), b"translated").unwrap();
+        fs::write(root.join("data/script.dat"), b"original data").unwrap();
+        fs::write(root.join("data/script.idx"), b"original index").unwrap();
+        let records = temp.path().join("records");
+        let installed = install(preview(&root, "汉化补丁", "game".into()).unwrap(), &records).unwrap();
+        for (name, bytes) in [("script.dat", b"original data".as_slice()), ("script.idx", b"original index".as_slice())] {
+            assert_eq!(fs::read(storage.join("汉化补丁_original/data").join(name)).unwrap(), bytes);
+        }
+        assert!(fs::read_dir(records.join(&installed.id)).unwrap().all(|file| file.unwrap().path().extension().is_none_or(|ext| ext != "bak")));
+        assert!(list(&root).unwrap().patches.iter().any(|patch| patch.name == "汉化补丁_original" && patch.replaces_existing && patch.files == 2));
+        install(preview(&root, "汉化补丁_original", "game".into()).unwrap(), &records).unwrap();
+        assert!(!root.join("data/script.chs").exists());
+        assert_eq!(fs::read(root.join("data/script.dat")).unwrap(), b"original data");
+        assert_eq!(fs::read(root.join("data/script.idx")).unwrap(), b"original index");
+    }
+
+    #[test]
+    fn later_switches_preserve_existing_originals_and_reuse_identical_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let storage = directory(root).unwrap();
+        fs::create_dir(storage.join("Patch")).unwrap();
+        fs::write(storage.join("Patch/script.dat"), b"patched").unwrap();
+        fs::write(root.join("script.dat"), b"first original").unwrap();
+        let records = root.join("records");
+        install(preview(root, "Patch", "game".into()).unwrap(), &records).unwrap();
+        fs::write(root.join("script.dat"), b"second original").unwrap();
+        let second = install(preview(root, "Patch", "game".into()).unwrap(), &records).unwrap();
+        assert_eq!(fs::read(storage.join("Patch_original/script.dat")).unwrap(), b"first original");
+        assert_eq!(fs::read(storage.join("Patch_original_2/script.dat")).unwrap(), b"second original");
+        restore(&records, &second.id).unwrap();
+        install(preview(root, "Patch", "game".into()).unwrap(), &records).unwrap();
+        assert!(!storage.join("Patch_original_3").exists());
+    }
+
+    #[test]
+    fn reuses_hash_identical_patch_files_but_backs_up_unique_originals() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let storage = directory(root).unwrap();
+        fs::create_dir(storage.join("Original")).unwrap();
+        fs::create_dir(storage.join("New")).unwrap();
+        fs::write(root.join("a.dat"), b"original a").unwrap();
+        fs::write(root.join("b.dat"), b"original b").unwrap();
+        fs::write(storage.join("Original/different-name.dat"), b"original a").unwrap();
+        fs::write(storage.join("Original/b.dat"), b"different!").unwrap();
+        fs::write(storage.join("New/a.dat"), b"new a").unwrap();
+        fs::write(storage.join("New/b.dat"), b"new b").unwrap();
+        let data = root.join("backups");
+        let installed = install(preview(root, "New", "game".into()).unwrap(), &data).unwrap();
+        assert!(!data.join(&installed.id).join("0.bak").exists());
+        assert_eq!(
+            fs::read(storage.join("New_original/b.dat")).unwrap(),
+            b"original b"
+        );
+        assert_eq!(installed.backup_sources.len(), 2);
+        assert!(!storage.join("New_original/a.dat").exists());
+        assert!(!data.join(&installed.id).join("1.bak").exists());
+        restore(&data, &installed.id).unwrap();
+        assert_eq!(fs::read(root.join("a.dat")).unwrap(), b"original a");
+        assert_eq!(fs::read(root.join("b.dat")).unwrap(), b"original b");
+    }
+
+    #[test]
+    fn changed_reused_backup_stops_restoration_before_any_game_file_is_written() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let storage = directory(root).unwrap();
+        for (name, content) in [("Original", b"old"), ("New", b"new")] {
+            fs::create_dir(storage.join(name)).unwrap();
+            fs::write(storage.join(name).join("script.dat"), content).unwrap();
+        }
+        fs::write(root.join("script.dat"), b"old").unwrap();
+        let data = root.join("backups");
+        let installed = install(preview(root, "New", "game".into()).unwrap(), &data).unwrap();
+        fs::write(storage.join("Original/script.dat"), b"changed").unwrap();
+        assert!(restore(&data, &installed.id).is_err());
+        assert_eq!(fs::read(root.join("script.dat")).unwrap(), b"new");
+    }
 
     #[test]
     fn creates_storage_and_lists_only_patch_directories() {
@@ -341,8 +529,9 @@ mod tests {
         );
         let second = install(preview(&root, "Second", "game".into()).unwrap(), &backups).unwrap();
         assert_eq!(fs::read(root.join("data/script.dat")).unwrap(), b"second");
+        assert!(!backups.join(&second.id).join("0.bak").exists());
         assert_eq!(
-            fs::read(backups.join(&second.id).join("0.bak")).unwrap(),
+            fs::read(root.join(&second.backup_sources[&0])).unwrap(),
             b"first"
         );
         assert_eq!(
@@ -377,7 +566,7 @@ mod tests {
         assert!(!root.join("data/script.noa").exists());
         assert_eq!(fs::read(root.join("data/script.csx")).unwrap(), b"first");
         assert_eq!(
-            fs::read(backups.join(&first.id).join("1.bak")).unwrap(),
+            fs::read(storage.join("First_original/data/script.noa")).unwrap(),
             b"original"
         );
         let second = install(preview(&root, "Second", "game".into()).unwrap(), &backups).unwrap();

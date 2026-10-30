@@ -25,6 +25,7 @@ struct Draft {
     candidates: Vec<Resource>,
     searched: bool,
     search_request: Option<u32>,
+    automatic: bool,
     picking: bool,
     queued: bool,
     saving: bool,
@@ -33,7 +34,7 @@ struct Draft {
 
 impl Draft {
     fn locked(&self) -> bool {
-        self.queued || self.saving || self.picking
+        self.automatic || self.queued || self.saving || self.picking
     }
     fn can_save(&self) -> bool {
         !self.locked()
@@ -52,7 +53,7 @@ impl State {
     fn busy(&self) -> bool {
         self.rows
             .iter()
-            .any(|row| row.queued || row.saving || row.picking)
+            .any(Draft::locked)
     }
     fn queue_ready(&mut self) {
         for row in self.rows.iter_mut().filter(|row| row.can_save()) {
@@ -62,18 +63,16 @@ impl State {
     }
 }
 
+pub(crate) fn visible(settings: &Settings, game: &Game) -> bool {
+    !settings.excluded_games.contains(&game.id)
+        && settings.game_edits.get(&game.id)
+            .is_some_and(|edit| edit.setup_confirmed && !edit.setup_pending)
+}
+
 fn needed(app: &App, game: &Game) -> bool {
     !app.settings.excluded_games.contains(&game.id)
         && !app.setup.deferred.contains(&game.id)
-        && (game
-            .metadata
-            .as_ref()
-            .is_none_or(|meta| meta.url.trim().is_empty())
-            || app
-                .settings
-                .game_edits
-                .get(&game.id)
-                .is_some_and(|edit| edit.setup_pending))
+        && !visible(&app.settings, game)
 }
 
 /// An explicit refresh reopens games deferred earlier in this run.
@@ -122,6 +121,7 @@ pub(crate) fn sync(app: &mut App) {
                 candidates: Vec::new(),
                 searched: false,
                 search_request: None,
+                automatic: false,
                 picking: false,
                 queued: false,
                 saving: false,
@@ -170,8 +170,16 @@ pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
 
 // Each save submits only ready drafts; bound concurrent network work to three games.
 fn pump(app: &mut App) {
-    let slots = 3usize.saturating_sub(app.setup.rows.iter().filter(|row| row.saving).count());
+    // Automatic searches share the same three-request limit as metadata saves.
+    let searches = app.setup.rows.iter().filter(|row| row.automatic && row.search_request.is_some()).count();
+    let slots = 3usize.saturating_sub(searches + app.setup.rows.iter().filter(|row| row.saving).count());
     for _ in 0..slots {
+        if let Some(row) = app.setup.rows.iter_mut().find(|row| row.automatic && row.search_request.is_none()) {
+            row.search_request = Some(app.requests.next_id());
+            let (id, source, query) = (row.id.clone(), row.source.clone(), row.query.clone());
+            issue(app, Pending::SetupSearch(id), "search_metadata", json!({"query":query,"source":source}));
+            continue;
+        }
         let Some(row) = app.setup.rows.iter_mut().find(|row| row.queued) else {
             break;
         };
@@ -203,6 +211,23 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if action == "setup-save" {
         if !app.setup.busy() {
             app.setup.queue_ready();
+            pump(app);
+        }
+        return true;
+    }
+    if action == "setup-auto" {
+        if !app.setup.busy() {
+            for row in &mut app.setup.rows {
+                let Some(game) = app.catalog.games.iter().find(|game| game.id == row.id) else { continue };
+                row.query = game.folder.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(&game.title).into();
+                row.candidates.clear();
+                row.url.clear();
+                row.searched = false;
+                row.search_request = None;
+                row.confirmed = false;
+                row.error = None;
+                row.automatic = true;
+            }
             pump(app);
         }
         return true;
@@ -296,6 +321,8 @@ pub(crate) fn resolve(
     if matches!(kind, Pending::SetupSearch(_)) && row.search_request != Some(request_id) {
         return true;
     }
+    let automatic = row.automatic && matches!(kind, Pending::SetupSearch(_));
+    if automatic { row.automatic = false; }
     match kind {
         Pending::SetupSearch(_) => row.search_request = None,
         Pending::SetupExecutable(_) => row.picking = false,
@@ -311,6 +338,13 @@ pub(crate) fn resolve(
                     row.candidates =
                         serde_json::from_str(payload).map_err(|error| error.to_string())?;
                     row.searched = true;
+                    if automatic && let Some(candidate) = row.candidates.first() {
+                        row.url = candidate.url.clone();
+                        row.confirmed = row.executable.trim().to_ascii_lowercase().ends_with(".exe");
+                        if !row.can_save() {
+                            row.error = Some(Message::new("setup.executable_required"));
+                        }
+                    }
                 }
                 Pending::SetupExecutable(_) => {
                     let path: Option<String> =
@@ -353,7 +387,7 @@ pub(crate) fn resolve(
         }
         _ => {}
     }
-    if matches!(kind, Pending::SetupSave(_)) {
+    if automatic || matches!(kind, Pending::SetupSave(_)) {
         pump(app);
         if app.setup.rows.is_empty() {
             app.setup.open = false;
@@ -437,7 +471,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
     }
     let busy = app.setup.busy();
     let ready = app.setup.rows.iter().filter(|row| row.can_save()).count();
-    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><p class="setup-help">{}</p><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table"><thead><tr>"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),t(app,"setup.batch_help")).unwrap();
+    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help"><span>{}</span>{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table"><thead><tr>"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),t(app,"setup.batch_help"),button("setup-auto","",t(app,"setup.auto"),"search","quiet",busy)).unwrap();
     for key in [
         "setup.game",
         "setup.source",
@@ -535,6 +569,7 @@ mod tests {
                 ..Default::default()
             },
         );
+        app.settings.game_edits.entry("cached".into()).or_default().setup_confirmed = true;
         sync(&mut app);
         app
     }
@@ -554,6 +589,97 @@ mod tests {
         })
         .to_string()
     }
+    #[test]
+    fn only_confirmed_games_appear_on_home_and_in_library_across_defer_refresh_and_restore() {
+        let mut app = app();
+        // Imported metadata alone does not establish player confirmation.
+        let visible_ids = |app: &App| crate::library::matching(&app.catalog, &app.settings, &app.library, "games")
+            .iter().map(|game| game.id.clone()).collect::<Vec<_>>();
+        assert_eq!(visible_ids(&app), vec!["cached"]);
+        let mut html = String::new();
+        crate::home::render(&mut html, &app);
+        assert!(html.contains("home-game-cached"));
+        assert!(!html.contains("home-game-new"));
+        assert!(!html.contains("home-game-imported"));
+        dispatch(&mut app, "setup-defer-all", "");
+        assert_eq!(visible_ids(&app), vec!["cached"]);
+        refreshed(&mut app);
+        sync(&mut app);
+        assert_eq!(app.setup.rows.len(), 2);
+        ready(&mut app, "new");
+        dispatch(&mut app, "setup-save", "");
+        let requests = crate::bridge::take_requests();
+        let id = requests[0].0;
+        let kind = app.requests.complete(id).unwrap();
+        resolve(&mut app, &kind, id, true, &saved_response("new"));
+        assert_eq!(visible_ids(&app), vec!["cached", "new"]);
+        app.settings.excluded_games.push("new".into());
+        refreshed(&mut app);
+        sync(&mut app);
+        assert_eq!(visible_ids(&app), vec!["cached"]);
+        assert!(!app.setup.rows.iter().any(|row| row.id == "new"));
+        app.settings.excluded_games.clear();
+        assert_eq!(visible_ids(&app), vec!["cached", "new"]);
+    }
+
+    #[test]
+    fn automatic_scraping_confirms_first_result_but_waits_for_user_to_save() {
+        let mut app = app();
+        crate::bridge::take_requests();
+        dispatch(&mut app, "setup-auto", "");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 2);
+        for (request_id, command, payload) in &requests {
+            assert_eq!(command, "search_metadata");
+            assert_eq!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["query"], "Test");
+            let kind = app.requests.complete(*request_id).unwrap();
+            resolve(&mut app, &kind, *request_id, true, r#"[{"title":"First","url":"https://vndb.org/v1"},{"title":"Second","url":"https://vndb.org/v2"}]"#);
+        }
+        assert!(crate::bridge::take_requests().is_empty());
+        assert!(app.setup.open);
+        assert!(!app.setup.busy());
+        assert!(app.setup.rows.iter().all(|row| row.confirmed && row.can_save()));
+        assert!(!app.settings.game_edits.get("new").is_some_and(|edit| edit.setup_confirmed));
+        let mut html = String::new();
+        render(&mut html, &app);
+        assert_eq!(html.matches("aria-pressed=\"true\"").count(), 2);
+
+        dispatch(&mut app, "setup-save", "");
+        let saves = crate::bridge::take_requests();
+        assert_eq!(saves.len(), 2);
+        for (_, command, payload) in &saves {
+            assert_eq!(command, "complete_game_setup");
+            let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
+            assert_eq!(payload["url"], "https://vndb.org/v1");
+            assert_eq!(payload["confirmed"], true);
+        }
+    }
+
+    #[test]
+    fn automatic_scraping_retains_empty_failed_and_missing_launcher_rows_for_retry() {
+        let mut app = app();
+        crate::bridge::take_requests();
+        app.setup.rows[0].executable.clear();
+        dispatch(&mut app, "setup-auto", "");
+        let requests = crate::bridge::take_requests();
+        for (index, (request_id, _, _)) in requests.iter().enumerate() {
+            let kind = app.requests.complete(*request_id).unwrap();
+            resolve(&mut app, &kind, *request_id, true, if index == 0 { r#"[{"title":"First","url":"https://vndb.org/v1"}]"# } else { "[]" });
+        }
+        assert!(crate::bridge::take_requests().is_empty());
+        assert!(app.setup.rows[0].error.is_some());
+        assert!(app.setup.rows[1].searched && app.setup.rows[1].candidates.is_empty());
+        assert!(!app.setup.busy());
+        assert!(app.setup.open);
+        dispatch(&mut app, "setup-auto", "");
+        for (request_id, _, _) in crate::bridge::take_requests() {
+            let kind = app.requests.complete(request_id).unwrap();
+            resolve(&mut app, &kind, request_id, false, r#"{"key":"ai.network_error"}"#);
+        }
+        assert!(!app.setup.busy());
+        assert!(app.setup.rows.iter().all(|row| row.error.is_some()));
+    }
+
     #[test]
     fn unmatched_games_can_search_2dfan_without_selecting_a_source() {
         let mut app = app();

@@ -39,11 +39,51 @@ pub fn cover_enhanced(payload: &str) {
 pub fn runtime_updated(payload: &str) {
     APP.with(|state| {
         let mut app = state.borrow_mut();
-        if let Ok(status) = serde_json::from_str(payload) {
+        if let Ok(status) = serde_json::from_str::<BTreeMap<String, String>>(payload) {
+            let stopped = app.detail.selected.as_ref().is_some_and(|id| {
+                app.runtime.get(id).is_some_and(|value| value == "running")
+                    && status.get(id).is_some_and(|value| value == "stopped")
+            });
             app.runtime = status;
+            if stopped { features::refresh_detail_files(&mut app); }
             paint(&app);
         }
     });
+}
+
+#[wasm_bindgen]
+pub fn detail_files_changed() {
+    APP.with(|state| {
+        let mut app = state.borrow_mut();
+        features::refresh_detail_files(&mut app);
+        paint(&app);
+    });
+}
+
+#[wasm_bindgen]
+pub fn magpie_hotkey_updated(payload: &str) {
+    #[derive(Deserialize)]
+    struct Update { magpie: String, hotkey: String }
+    let Ok(update) = serde_json::from_str::<Update>(payload) else { return; };
+    APP.with(|state| {
+        let mut app = state.borrow_mut();
+        if apply_magpie_hotkey(&mut app, &update.magpie, &update.hotkey) {
+            paint(&app);
+        }
+    });
+}
+
+fn apply_magpie_hotkey(app: &mut crate::state::App, magpie: &str, hotkey: &str) -> bool {
+    if app.settings.magpie != magpie || app.requests.values().any(|p| matches!(p, Pending::Tools)) {
+        return false;
+    }
+    // Only clear a clean draft. An unfinished edit remains visible until Save.
+    if app.form.get("tool-hotkey").is_some_and(|draft| features::same_hotkey(draft, &app.settings.magpie_hotkey)) {
+        app.form.remove("tool-hotkey");
+    }
+    app.settings.magpie_hotkey = hotkey.into();
+    app.magpie_observed_through = Some(app.requests.last_id());
+    true
 }
 
 #[derive(Deserialize)]
@@ -89,6 +129,8 @@ pub fn backup_completed(payload: &str) {
                 && let Ok(error) = serde_json::from_value(data["error"].clone())
             {
                 show_toast(&mut app, error, true);
+            } else if let Some(created) = data["created"].as_bool() {
+                show_toast(&mut app, Message::new(if created { "backup.auto_success" } else { "backup.duplicate" }), false);
             }
             if data["id"].as_str() == app.detail.selected.as_deref() {
                 let id = app.detail.selected.clone();
@@ -156,6 +198,7 @@ pub fn dispatch(action: &str, value: &str) {
     APP.with(|state| {
         let mut app = state.borrow_mut();
         let setup_action = action.starts_with("setup-")
+            || matches!(action, "check-update" | "update-confirm" | "update-cancel")
             || matches!(action, "dismiss-toast" | "choice-close")
             || action == "choice-toggle" && game_setup::choice_enabled(&app, value);
         if app.setup.open && !setup_action {
@@ -174,11 +217,13 @@ pub fn dispatch(action: &str, value: &str) {
                     | "toggle-theme"
                     | "set-theme"
                     | "set-color-theme"
+                    | "check-update" | "update-confirm" | "update-cancel" | "settings-section"
             )
         {
             return;
         }
-        if ai::dispatch(&mut app, action, value)
+        if crate::updates::dispatch(&mut app, action)
+            || ai::dispatch(&mut app, action, value)
             || cloud::dispatch(&mut app, action, value)
             || crate::ai_summary::dispatch(&mut app, action, value)
             || game_setup::dispatch(&mut app, action, value)
@@ -224,21 +269,41 @@ pub fn library_marquee(payload: &str, additive: bool) {
         if !app.library.batch || app.busy() {
             return;
         }
-        if let Ok(ids) = serde_json::from_str::<BTreeSet<String>>(payload) {
-            let matching: BTreeSet<_> =
-                library::matching(&app.catalog, &app.settings, &app.library, &app.page)
-                    .iter()
-                    .map(|g| g.id.clone())
-                    .collect();
-            if !additive {
-                app.library.checked.clear();
-            }
-            app.library
-                .checked
-                .extend(ids.intersection(&matching).cloned());
+        if let Ok(selection) = serde_json::from_str::<MarqueeSelection>(payload) {
+            apply_marquee(&mut app, selection, additive);
             paint(&app);
         }
     });
+}
+
+#[derive(Deserialize)]
+struct MarqueeSelection {
+    games: BTreeSet<String>,
+    folders: BTreeSet<String>,
+}
+
+fn apply_marquee(app: &mut crate::state::App, selection: MarqueeSelection, additive: bool) {
+    let matching: BTreeSet<_> =
+        library::matching(&app.catalog, &app.settings, &app.library, &app.page)
+            .iter()
+            .map(|g| g.id.clone())
+            .collect();
+    if !additive {
+        app.library.checked.clear();
+        app.library.checked_folders.clear();
+    }
+    app.library
+        .checked
+        .extend(selection.games.intersection(&matching).cloned());
+    if app.page == "collections" {
+        app.library.checked_folders.extend(
+            app.settings.collections.iter()
+                .filter(|folder| {
+                    folder.parent == app.library.collection && selection.folders.contains(&folder.id)
+                })
+                .map(|folder| folder.id.clone()),
+        );
+    }
 }
 
 #[wasm_bindgen]
@@ -418,6 +483,40 @@ mod input_tests {
     use super::*;
 
     #[test]
+    fn magpie_updates_refresh_clean_fields_and_preserve_unsaved_edits() {
+        let mut app = crate::state::App::default();
+        app.settings.magpie = "tools/magpie/Magpie.exe".into();
+        app.settings.magpie_hotkey = "Alt+Shift+A".into();
+        app.form.insert("tool-hotkey".into(), "Alt+Shift+A".into());
+        let path = app.settings.magpie.clone();
+        assert!(apply_magpie_hotkey(&mut app, &path, "Ctrl+F12"));
+        assert!(!app.form.contains_key("tool-hotkey"));
+        assert_eq!(app.settings.magpie_hotkey, "Ctrl+F12");
+        app.form.insert("tool-hotkey".into(), "Alt+Shift+B".into());
+        assert!(apply_magpie_hotkey(&mut app, &path, "Ctrl+F10"));
+        assert_eq!(app.form["tool-hotkey"], "Alt+Shift+B");
+        assert_eq!(app.settings.magpie_hotkey, "Ctrl+F10");
+        assert!(!apply_magpie_hotkey(&mut app, "other/Magpie.exe", "Ctrl+F11"));
+    }
+
+    #[test]
+    fn old_preferences_cannot_undo_magpie_event_and_pending_save_is_not_interrupted() {
+        let mut app = crate::state::App::default();
+        app.settings.magpie = "tools/magpie/Magpie.exe".into();
+        app.settings.magpie_hotkey = "Alt+Shift+A".into();
+        let path = app.settings.magpie.clone();
+        let old = app.settings.clone();
+        issue(&mut app, Pending::Preferences, "get_preferences", json!({}));
+        let request = app.requests.last_id();
+        apply_magpie_hotkey(&mut app, &path, "Ctrl+F12");
+        crate::state::apply_settings(&mut app, old, request);
+        assert_eq!(app.settings.magpie_hotkey, "Ctrl+F12");
+        issue(&mut app, Pending::Tools, "configure_tools", json!({}));
+        assert!(!apply_magpie_hotkey(&mut app, &path, "Ctrl+F10"));
+        assert_eq!(app.settings.magpie_hotkey, "Ctrl+F12");
+    }
+
+    #[test]
     fn source_credentials_are_kept_in_the_settings_draft() {
         input_changed("source-vndb-token", "Unsaved source token");
         APP.with(|state| {
@@ -537,6 +636,37 @@ pub fn enrichment_progress(payload: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marquee_keeps_games_and_folders_separate_and_rejects_other_collection_items() {
+        let mut app = crate::state::App {
+            page: "collections".into(),
+            ..Default::default()
+        };
+        app.library.collection = Some("parent".into());
+        app.settings.collections = serde_json::from_value(json!([
+            {"id":"parent", "games":["same"]},
+            {"id":"same", "parent":"parent"},
+            {"id":"other", "parent":"elsewhere"}
+        ])).unwrap();
+        app.catalog.games = serde_json::from_value(json!([
+            {"id":"same", "title":"Game", "folder":"X:/Game", "engine":"unknown", "modified":0},
+            {"id":"outside", "title":"Other", "folder":"X:/Other", "engine":"unknown", "modified":0}
+        ])).unwrap();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
+        let selection = serde_json::from_value(json!({"games":["same","outside"], "folders":["same","other"]})).unwrap();
+        apply_marquee(&mut app, selection, false);
+        assert_eq!(app.library.checked, BTreeSet::from(["same".into()]));
+        assert_eq!(app.library.checked_folders, BTreeSet::from(["same".into()]));
+
+        let empty = || MarqueeSelection { games: BTreeSet::new(), folders: BTreeSet::new() };
+        apply_marquee(&mut app, empty(), true);
+        assert_eq!(app.library.checked.len(), 1);
+        assert_eq!(app.library.checked_folders.len(), 1);
+        apply_marquee(&mut app, empty(), false);
+        assert!(app.library.checked.is_empty());
+        assert!(app.library.checked_folders.is_empty());
+    }
 
     #[test]
     fn delayed_playtime_events_cannot_roll_back_the_final_checkpoint() {

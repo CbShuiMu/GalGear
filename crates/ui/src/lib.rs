@@ -29,12 +29,13 @@ mod responses;
 mod state;
 mod view;
 mod widgets;
+mod updates;
 
 pub use events::{
     cover_enhanced,
     backup_completed, choice_key, dispatch, download_progress, enrichment_progress,
     expire_download_notice, expire_toast, fan_status_updated, game_context, game_enriched,
     input_changed, library_drag_ids, library_drop, library_marquee, playtime_updated,
-    runtime_updated, scan_progress, start, tool_failed,
+    runtime_updated, magpie_hotkey_updated, scan_progress, start, tool_failed,
 };
 pub use responses::resolve;

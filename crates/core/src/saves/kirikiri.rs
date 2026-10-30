@@ -28,15 +28,70 @@ pub(super) fn recognizable(path: &Path) -> bool {
 }
 
 fn read_document(path: &Path) -> Option<Value> {
-    let data = fs::File::open(path).ok().and_then(|file| {
+    Parser::new(&read_text(path)?).parse()
+}
+
+fn read_text(path: &Path) -> Option<String> {
+    text_stream(&read_bytes(path)?)
+}
+
+fn read_bytes(path: &Path) -> Option<Vec<u8>> {
+    fs::File::open(path).ok().and_then(|file| {
         if file.metadata().ok()?.len() > MAX_INPUT {
             return None;
         }
         let mut bytes = Vec::new();
         file.take(MAX_INPUT + 1).read_to_end(&mut bytes).ok()?;
         (bytes.len() as u64 <= MAX_INPUT).then_some(bytes)
-    })?;
-    Parser::new(&text_stream(&data)?).parse()
+    })
+}
+
+/// Automatic backup comparison only. Keep every value and array position, but
+/// disregard dictionary serialization order and repeated visits to boot screens.
+/// Unknown files, BMP slots, malformed data and unfamiliar counters stay strict.
+pub(crate) fn backup_identity(path: &Path) -> Option<Value> {
+    if !path.extension()?.eq_ignore_ascii_case("ksd") {
+        return None;
+    }
+    let data = read_bytes(path)?;
+    if data.starts_with(b"BM") {
+        return None;
+    }
+    let text = text_stream(&data)?;
+    let mut parser = Parser::new(&text);
+    parser.lossless = true;
+    let mut value = parser.parse()?;
+    if Parser::new(&text)
+        .parse()
+        .is_none_or(|value| classify_value(&value) != SaveKind::Control)
+    {
+        return value.is_object().then_some(value);
+    }
+    let fields = value.as_object_mut()?;
+    // These KAG labels are startup/title/exit bookkeeping, not story read flags.
+    // Keep zero, new keys, negative values and every other trail counter intact.
+    for key in [
+        "trail_custom_",
+        "trail_custom_logo",
+        "trail_custom_exit_begin",
+        "trail_custom_exit_end",
+        "trail_first_",
+        "trail_first_common_macro",
+        "trail_first_first",
+        "trail_end_exit_begin",
+        "trail_version_",
+    ] {
+        if let Some(counter) = fields.get_mut(key)
+            && counter
+                .as_str()
+                .and_then(|token| token.strip_prefix("number:"))
+                .and_then(|token| token.parse::<u64>().ok())
+                .is_some_and(|count| count > 0)
+        {
+            *counter = Value::String("number:1".into());
+        }
+    }
+    Some(value)
 }
 
 fn text_stream(data: &[u8]) -> Option<String> {
@@ -218,6 +273,7 @@ struct Parser<'a> {
     text: &'a str,
     at: usize,
     nodes: usize,
+    lossless: bool,
 }
 impl<'a> Parser<'a> {
     fn new(text: &'a str) -> Self {
@@ -225,6 +281,7 @@ impl<'a> Parser<'a> {
             text,
             at: 0,
             nodes: 0,
+            lossless: false,
         }
     }
     fn rest(&self) -> &'a str {
@@ -382,10 +439,22 @@ impl<'a> Parser<'a> {
             return None;
         }
         if self.rest().starts_with('"') {
-            return self.string().map(Value::String);
+            return self.string().map(|text| {
+                Value::String(if self.lossless {
+                    format!("string:{text}")
+                } else {
+                    text
+                })
+            });
         }
-        if self.consume("void") || self.consume("null") {
-            return Some(Value::Null);
+        for literal in ["void", "null"] {
+            if self.consume(literal) {
+                return Some(if self.lossless {
+                    Value::String(format!("literal:{literal}"))
+                } else {
+                    Value::Null
+                });
+            }
         }
         let start = self.at;
         while self
@@ -408,7 +477,13 @@ impl<'a> Parser<'a> {
         static NUMBER: std::sync::OnceLock<Option<regex::Regex>> = std::sync::OnceLock::new();
         let expression = NUMBER.get_or_init(|| regex::Regex::new(
             r"^-?(?:0[xX][0-9a-fA-F]+(?:\.[0-9a-fA-F]*)?[pP][+-]?[0-9]+|(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)$").ok()).as_ref()?;
-        expression.is_match(token).then_some(Value::Null)
+        expression.is_match(token).then(|| {
+            if self.lossless {
+                Value::String(format!("number:{token}"))
+            } else {
+                Value::Null
+            }
+        })
     }
     fn parse(mut self) -> Option<Value> {
         let value = self.value(0)?;

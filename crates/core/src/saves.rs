@@ -1,9 +1,11 @@
 //! Read-only, bounded save discovery. A matching name is evidence, not certainty.
 mod kirikiri;
 mod steam;
+pub mod ai_find;
 
 use crate::{Game, GameEdit, config::display_path};
 pub use kirikiri::{SaveKind, classify};
+pub(crate) use kirikiri::backup_identity;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,
@@ -94,10 +96,72 @@ fn key(value: &str) -> String {
         .collect()
 }
 fn save_name(name: &str) -> bool {
+    let normalized = key(name);
     matches!(
-        key(name).as_str(),
+        normalized.as_str(),
         "savedata" | "save" | "saves" | "saved" | "存档" | "セーブデータ"
-    )
+    ) || ["save", "savedata"].iter().any(|prefix| {
+        normalized.strip_prefix(prefix).is_some_and(|suffix| {
+            matches!(suffix, "chs" | "cht" | "cn" | "jp" | "en" | "jpn" | "eng" | "zh" | "zhcn" | "zhtw")
+        })
+    })
+}
+
+/// File activity is more useful than a directory timestamp changed by copying it.
+pub(crate) fn latest_modified(folder: &Path) -> Option<std::time::SystemTime> {
+    let mut pending = vec![(folder.to_path_buf(), 0)];
+    let mut remaining = 2048;
+    let mut latest = None;
+    while let Some((path, depth)) = pending.pop() {
+        let Ok(metadata) = fs::symlink_metadata(&path) else { continue };
+        if metadata.is_symlink() { continue; }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 { continue; }
+        }
+        if metadata.is_file() {
+            latest = latest.max(metadata.modified().ok());
+        } else if metadata.is_dir() && depth < 4 {
+            for entry in fs::read_dir(path).into_iter().flatten().filter_map(Result::ok) {
+                if remaining == 0 { break; }
+                remaining -= 1;
+                pending.push((entry.path(), depth + 1));
+            }
+        }
+    }
+    latest.or_else(|| fs::metadata(folder).ok()?.modified().ok())
+}
+
+fn sort_recent(report: &mut SaveReport) {
+    report.locations.sort_by_cached_key(|location| std::cmp::Reverse((
+        location.exists,
+        location.readable,
+        latest_modified(Path::new(&location.path)),
+    )));
+}
+
+fn select_recent_ai(report: &mut SaveReport, selected: &Path, game: &Game) {
+    add(report, selected.to_path_buf(), "ai", "confirmed");
+    let selected = display_path(selected);
+    let game_root = Path::new(&game.folder).canonicalize().ok();
+    report.locations.retain(|location| location.exists
+        && Path::new(&location.path).canonicalize().ok() != game_root
+        && (location.readable || location.path.eq_ignore_ascii_case(&selected)));
+    // Keep the AI choice on ties, but prefer a more recently written save directory.
+    report.locations.sort_by_key(|location| !location.path.eq_ignore_ascii_case(&selected));
+    report.locations.sort_by_cached_key(|location| std::cmp::Reverse(latest_modified(Path::new(&location.path))));
+    report.locations.truncate(1);
+    if let Some(location) = report.locations.first_mut() {
+        location.source = "ai".into();
+        location.confidence = "confirmed".into();
+    }
+}
+
+pub(crate) fn preferred_ai_path(game: &Game, selected: &Path) -> PathBuf {
+    let mut report = discover(game, None);
+    select_recent_ai(&mut report, selected, game);
+    report.locations.first().map_or_else(|| selected.to_path_buf(), |location| PathBuf::from(&location.path))
 }
 fn save_files(folder: &Path) -> bool {
     fs::read_dir(folder)
@@ -153,6 +217,13 @@ pub fn discover_in(
     edit: Option<&GameEdit>,
     roots: &[(String, PathBuf)],
 ) -> SaveReport {
+    if let Some(edit) = edit.filter(|edit| edit.save_path_auto)
+        && let Some(path) = edit.save_path.as_deref()
+    {
+        let mut report = discover_in(game, None, roots);
+        select_recent_ai(&mut report, Path::new(path), game);
+        return report;
+    }
     let mut report = SaveReport::default();
     if let Some(path) = edit
         .and_then(|e| e.save_path.as_ref())
@@ -332,6 +403,7 @@ pub fn discover_in(
             location.confidence = "confirmed".into();
         }
     }
+    sort_recent(&mut report);
     report
 }
 
@@ -382,6 +454,7 @@ fn search(
                 "crashdumps",
                 ".git",
                 ".galgear-backups",
+                "patch",
             ]
             .contains(&lower.as_str())
             {
@@ -429,7 +502,7 @@ fn search_local_game_folders(
         *visited += 1;
         let name = entry.file_name().to_string_lossy().to_lowercase();
         if name.starts_with(".galgear-")
-            || ["cache", "logs", ".git", "node_modules"].contains(&name.as_str())
+            || ["cache", "logs", ".git", "node_modules", "patch"].contains(&name.as_str())
         {
             continue;
         }
@@ -472,6 +545,42 @@ fn local_save_evidence(folder: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recent_save_files_win_over_bundled_saves_and_directory_copy_times() {
+        let temp = tempfile::tempdir().unwrap();
+        let old = temp.path().join("savedata");
+        let chinese = temp.path().join("save_chs");
+        let patch = temp.path().join("patch/Patch/save_chs");
+        let modified = |path: &Path, seconds| {
+            fs::File::options().write(true).open(path).unwrap()
+                .set_times(fs::FileTimes::new().set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(seconds))).unwrap();
+        };
+        for (folder, time) in [(&old, 1000), (&chinese, 2000), (&patch, 9000)] {
+            fs::create_dir_all(folder).unwrap();
+            fs::write(folder.join("slot.sav"), b"save").unwrap();
+            modified(&folder.join("slot.sav"), time);
+        }
+        let game = crate::catalog::manual_game(&temp.path().join("SiglusEngine_cn.exe"), "Stella".into()).unwrap();
+        let mut report = discover_in(&game, None, &[]);
+        assert_eq!(report.locations.len(), 2);
+        assert_eq!(report.locations[0].path, display_path(&chinese));
+        fs::write(temp.path().join("Gameexe.dat"), b"game resource").unwrap();
+        add(&mut report, temp.path().to_path_buf(), "documents", "matched");
+        select_recent_ai(&mut report, &old, &game);
+        assert_eq!(report.locations[0].path, display_path(&chinese));
+        let mut automatic = GameEdit { save_path: Some(display_path(&old)), save_path_auto: true, ..Default::default() };
+        let report = discover_in(&game, Some(&automatic), &[]);
+        assert_eq!(report.locations.len(), 1);
+        assert_eq!(report.locations[0].path, display_path(&chinese));
+        assert_eq!(report.locations[0].confidence, "confirmed");
+        // Overwriting an existing slot need not change the directory's timestamp.
+        modified(&old.join("slot.sav"), 3000);
+        assert_eq!(discover_in(&game, Some(&automatic), &[]).locations[0].path, display_path(&old));
+        automatic.save_path_auto = false;
+        automatic.save_path = Some(display_path(&chinese));
+        assert_eq!(discover_in(&game, Some(&automatic), &[]).locations[0].path, display_path(&chinese));
+    }
     #[test]
     fn local_normalized_title_directory_is_discovered_without_claiming_archive_assets() {
         let root = tempfile::tempdir().unwrap();

@@ -1,7 +1,7 @@
 //! Section navigation keeps each settings task in its own reading pane.
 use crate::{
     accounts, ai, choices, cloud, downloads, features, models::BackgroundImage, requests::Pending,
-    state::App, view::account_label, view::f, view::t, widgets::button, widgets::esc,
+    state::App, view::account_label, view::t, widgets::button, widgets::esc,
     widgets::icon,
 };
 use galgear_i18n::Language;
@@ -511,7 +511,7 @@ fn paths(html: &mut String, app: &App) {
 }
 fn about(html: &mut String, app: &App) {
     write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>GalGear</h2><span class="version-pill">v{}</span></div>"#,esc(&app.version)).unwrap();
-    write!(html,r#"<label class="edit-field" for="release-page"><span>{}</span><input id="release-page" data-input="release-page" value="{}" placeholder="https://github.com/owner/GalGear/releases"/></label>"#,t(app,"settings.release_page"),esc(&features::setting(app,"release-page",&app.settings.release_page))).unwrap();
+    write!(html,r#"<label class="edit-field" for="release-page"><span>{}</span><input id="release-page" data-input="release-page" value="{}" placeholder="https://github.com/CbShuiMu/GalGear/releases"/></label>"#,t(app,"settings.release_page"),esc(&features::setting(app,"release-page",&app.settings.release_page))).unwrap();
     write!(
         html,
         r#"<div class="detail-actions">{}{}</div>"#,
@@ -529,26 +529,10 @@ fn about(html: &mut String, app: &App) {
             t(app, "settings.check_update"),
             "update",
             "quiet",
-            app.busy()
+            crate::updates::checking(app) || app.update.installing
         )
     )
     .unwrap();
-    if let Some((version, url)) = &app.update {
-        write!(
-            html,
-            "<p>{}</p>{}",
-            f(app, "settings.latest", &[("version", version)]),
-            button(
-                "open-resource",
-                url,
-                t(app, "settings.download"),
-                "arrow",
-                "secondary",
-                app.busy()
-            )
-        )
-        .unwrap();
-    }
     html.push_str("</section>");
 }
 

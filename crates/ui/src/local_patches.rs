@@ -57,6 +57,13 @@ fn pending(app: &App, id: &str) -> bool {
     })
 }
 
+pub(crate) fn refresh(app: &mut App, id: &str) {
+    if !pending(app, id) {
+        issue(app, Pending::LocalPatchList(id.into()), "list_game_patches", json!({"id":id}));
+        app.local_patches.latest.insert(id.into(), app.requests.last_id());
+    }
+}
+
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if !matches!(
         action,
@@ -96,6 +103,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     .get(&id)
                     .is_none_or(|status| status != "running");
             if allowed && let Some(switching) = switching {
+                show_toast(app, Message::new(if switching { "local_patches.switching" } else { "local_patches.installing" }), false);
                 issue(
                     app,
                     Pending::LocalPatchApply(id.clone(), switching),
@@ -145,7 +153,8 @@ pub(crate) fn resolve(
         }
         Err(error) => {
             if applied {
-                show_toast(app, error, true);
+                let detail = error.args.get("detail").cloned().unwrap_or_else(|| error.render(app.settings.language));
+                show_toast(app, Message::detail("local_patches.failed", detail), true);
                 load(app, id);
             } else {
                 app.local_patches.errors.insert(id.clone(), error);
@@ -158,8 +167,8 @@ pub(crate) fn resolve(
 pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     let loading = pending(app, &game.id);
     let disabled = app.busy() || loading || !game.available;
-    write!(html, r#"<section class="detail-card patch-card" data-render-key="local-patches"><div class="utility-heading"><h3>{}</h3><button class="icon-button" data-action="local-patches-refresh" aria-label="{}" title="{}" {}>{}</button></div>"#,
-        t(app,"local_patches.title"), t(app,"local_patches.refresh"), t(app,"local_patches.refresh"), if disabled {"disabled"} else {""}, icon("refresh")).unwrap();
+    write!(html, r#"<section class="detail-card patch-card" data-render-key="local-patches"><div class="utility-heading"><h3>{}</h3><div class="card-heading-actions">{}<button class="icon-button" data-action="local-patches-refresh" aria-label="{}" title="{}" {}>{}</button></div></div>"#,
+        t(app,"local_patches.title"), button("local-patches-open", "", t(app,"local_patches.open"), "folder", "quiet", disabled), t(app,"local_patches.refresh"), t(app,"local_patches.refresh"), if disabled {"disabled"} else {""}, icon("refresh")).unwrap();
     let report = app.local_patches.reports.get(&game.id);
     let folder = report
         .map(|report| report.folder.clone())
@@ -229,19 +238,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         )
         .unwrap();
     }
-    write!(
-        html,
-        r#"<div class="detail-actions">{}</div></section>"#,
-        button(
-            "local-patches-open",
-            "",
-            t(app, "local_patches.open"),
-            "folder",
-            "quiet",
-            disabled
-        )
-    )
-    .unwrap();
+    html.push_str("</section>");
 }
 
 #[cfg(test)]
@@ -320,6 +317,31 @@ mod tests {
     }
 
     #[test]
+    fn returning_to_details_refreshes_install_to_switch_without_duplicate_requests() {
+        let mut app = App::default();
+        let game: Game = serde_json::from_value(json!({"id":"game","title":"Game","folder":"F:/Game","engine":"unknown","modified":0})).unwrap();
+        app.catalog.games.push(game.clone());
+        app.detail.selected = Some(game.id.clone());
+        crate::bridge::take_requests();
+        for replaces in [false, true] {
+            crate::features::refresh_detail_files(&mut app);
+            crate::features::refresh_detail_files(&mut app);
+            let requests = crate::bridge::take_requests();
+            assert_eq!(requests.iter().filter(|(_, command, _)| command == "list_game_patches").count(), 1);
+            assert_eq!(requests.iter().filter(|(_, command, _)| command == "detect_saves").count(), 1);
+            for (id, command, _) in requests {
+                let pending = app.requests.complete(id).unwrap();
+                if command == "list_game_patches" {
+                    resolve(&mut app, &pending, id, true, &json!({"folder":"F:/Game/patch","patches":[{"name":"Patch","files":108,"replaces_existing":replaces,"error":null}]}).to_string());
+                }
+            }
+            let mut html = String::new();
+            render(&mut html, &app, &game);
+            assert!(html.contains(t(&app, if replaces {"local_patches.switch"} else {"local_patches.install"})));
+        }
+    }
+
+    #[test]
     fn successful_apply_shows_the_message_for_the_original_install_or_switch_action() {
         for switching in [false, true] {
             let mut app = App::default();
@@ -344,6 +366,7 @@ mod tests {
                 },
             );
             assert!(dispatch(&mut app, "local-patch-apply", "Patch"));
+            assert_eq!(app.toast.as_ref().unwrap().0.key, if switching {"local_patches.switching"} else {"local_patches.installing"});
             let request_id = app.requests.last_id();
             let request = app.requests.complete(request_id).unwrap();
             assert!(resolve(
@@ -363,7 +386,7 @@ mod tests {
                     "local_patches.applied"
                 }
             );
-            assert_eq!(app.toast_generation, 1);
+            assert_eq!(app.toast_generation, 2);
             for language in [Language::Chinese, Language::Japanese, Language::English] {
                 assert!(!message.render(language).is_empty());
             }
@@ -383,6 +406,6 @@ mod tests {
         ));
         let (message, error) = app.toast.as_ref().unwrap();
         assert!(*error);
-        assert_eq!(message.key, "error.patch");
+        assert_eq!(message.key, "local_patches.failed");
     }
 }

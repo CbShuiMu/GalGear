@@ -10,7 +10,7 @@ use crate::{
 use std::fmt::Write;
 
 fn ordered(app: &App) -> Vec<&Game> {
-    let mut games: Vec<_> = app.catalog.games.iter().collect();
+    let mut games: Vec<_> = app.catalog.games.iter().filter(|game| crate::game_setup::visible(&app.settings, game)).collect();
     games.sort_by(|a, b| {
         b.last_played
             .cmp(&a.last_played)
@@ -130,6 +130,7 @@ mod tests {
         let game = serde_json::json!({"id":"art","title":"Art","folder":"X:/Fixture","engine":"unknown","modified":0,
             "cover":"http://galgear-cover.localhost/cover", "cover_artwork":{"background":"background"}});
         app.catalog.games.push(serde_json::from_value(game).unwrap());
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         let mut html = String::new();
         render(&mut html, &app);
         assert!(html.contains("class=\"home-backdrop-cover\" src=\"http://galgear-cover.localhost/background\""));
@@ -145,6 +146,7 @@ mod tests {
         app.catalog.games = [1,3,2].into_iter().map(|n| serde_json::from_value(serde_json::json!({
             "id":n.to_string(),"title":n.to_string(),"folder":"X:/Fixture","engine":"unknown","modified":0,"last_played":n
         })).unwrap()).collect();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         assert_eq!(
             ordered(&app)
                 .iter()
@@ -160,6 +162,7 @@ mod tests {
             ..Default::default()
         };
         app.catalog.games.push(serde_json::from_value(serde_json::json!({"id":"live","title":"Live","folder":"X:/Fixture","engine":"unknown","modified":0})).unwrap());
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         let mut html = String::new();
         render(&mut html, &app);
         assert!(html.contains("data-value=\"live\"") && !html.contains("removed"));

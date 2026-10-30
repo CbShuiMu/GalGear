@@ -393,6 +393,11 @@ mod tests {
         assert_eq!(migrate(&fixture.legacy, &fixture.data, "game").unwrap(), 1);
         assert_eq!(tree(&fixture.target()).unwrap(), previous);
         assert!(!fixture.old().exists());
+        fs::write(
+            Path::new(&fixture.roots[0]).join("new-slot.sav"),
+            b"new progress",
+        )
+        .unwrap();
         let next = snapshots::create_named_checked(
             &fixture.data,
             ("game", "游戏"),

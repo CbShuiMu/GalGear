@@ -25,6 +25,7 @@ pub(crate) struct App {
     pub(crate) toast_generation: u32,
     pub(crate) theme_request: u32,
     pub(crate) background_request: u32,
+    pub(crate) magpie_observed_through: Option<u32>,
     pub(crate) cover_picker: cover_picker::State,
     pub(crate) settings_section: String,
     pub(crate) context_menu: Option<context_menu::Menu>,
@@ -32,7 +33,7 @@ pub(crate) struct App {
     pub(crate) runtime: BTreeMap<String, String>,
     pub(crate) form: BTreeMap<String, String>,
     pub(crate) local_patches: local_patches::State,
-    pub(crate) update: Option<(String, String)>,
+    pub(crate) update: crate::updates::State,
     pub(crate) game_icons: BTreeMap<String, String>,
     pub(crate) enrichment_progress: Option<Message>,
     pub(crate) requests: RequestQueue,
@@ -73,6 +74,7 @@ impl Default for App {
             toast_generation: 0,
             theme_request: 0,
             background_request: 0,
+            magpie_observed_through: None,
             cover_picker: cover_picker::State::default(),
             settings_section: "account".into(),
             context_menu: None,
@@ -80,7 +82,7 @@ impl Default for App {
             runtime: BTreeMap::new(),
             form: BTreeMap::new(),
             local_patches: local_patches::State::default(),
-            update: None,
+            update: crate::updates::State::default(),
             game_icons: BTreeMap::new(),
             enrichment_progress: None,
             requests: RequestQueue::default(),
@@ -113,6 +115,10 @@ pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: 
             .background_image
             .clone_from(&app.settings.background_image);
     }
+    if app.magpie_observed_through.is_some_and(|through| request_id <= through) {
+        settings.magpie.clone_from(&app.settings.magpie);
+        settings.magpie_hotkey.clone_from(&app.settings.magpie_hotkey);
+    }
     app.settings = settings;
     if app.page == "patches" && !app.settings.show_patches {
         app.page = "games".into();
@@ -121,8 +127,9 @@ pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: 
 
 pub(crate) fn show_toast(app: &mut App, message: Message, error: bool) {
     app.toast_generation = app.toast_generation.wrapping_add(1);
+    let persistent = matches!(message.key.as_str(), "save.ai_searching" | "local_patches.installing" | "local_patches.switching");
     app.toast = Some((message, error));
-    schedule_toast_expiry(app.toast_generation, 4000);
+    if !persistent { schedule_toast_expiry(app.toast_generation, 4000); }
 }
 
 #[cfg(test)]

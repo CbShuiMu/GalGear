@@ -13,6 +13,13 @@ pub(crate) struct SaveState {
     plan: Mutex<Option<snapshots::Preview>>,
 }
 
+#[derive(serde::Serialize)]
+pub(crate) struct SaveHistory {
+    snapshots: Vec<snapshots::Snapshot>,
+    current_snapshot: Option<String>,
+    notice: Option<Message>,
+}
+
 #[tauri::command]
 pub(crate) async fn detect_saves(
     id: String,
@@ -25,6 +32,38 @@ pub(crate) async fn detect_saves(
             .await
             .map_err(|e| Message::detail("error.operation", e))?;
     Ok(serde_json::json!({ "id": id, "report": report }))
+}
+
+#[tauri::command]
+pub(crate) async fn find_save_with_ai(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, Message> {
+    let game = find_game(&state, &id)?;
+    let original_folder = game.folder.clone();
+    let settings = snapshot(&state)?;
+    let config = state.store.path.clone();
+    let path = tauri::async_runtime::spawn_blocking(move || {
+        saves::ai_find::find(&config, &settings, &game)
+    })
+    .await
+    .map_err(|_| Message::new("error.operation"))??;
+    // Recheck the game and path after the network request before changing its configuration.
+    if find_game(&state, &id)?.folder != original_folder || !path.is_dir() {
+        return Err(Message::new("save.ai_not_found"));
+    }
+    update(&state, |settings| {
+        let edit = settings.game_edits.entry(id.clone()).or_default();
+        let path = galgear_core::config::display_path(&path);
+        edit.save_path = Some(path.clone());
+        edit.save_path_auto = true;
+        if !edit.save_paths.contains(&path) { edit.save_paths.push(path); }
+        Ok(())
+    })?;
+    let mut result = detect_saves(id, state.clone()).await?;
+    result["settings"] = serde_json::to_value(snapshot(&state)?)
+        .map_err(|error| Message::detail("error.operation", error))?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -75,6 +114,7 @@ pub(crate) async fn choose_save_folder(
         let edit = next.game_edits.entry(id.clone()).or_default();
         let path = galgear_core::config::display_path(&path);
         edit.save_path = Some(path.clone());
+        edit.save_path_auto = false;
         if !edit.save_paths.contains(&path) {
             edit.save_paths.push(path);
         }
@@ -135,6 +175,7 @@ pub(crate) fn confirm_save(
     update(&state, |s| {
         let edit = s.game_edits.entry(id).or_default();
         edit.save_path = Some(path.clone());
+        edit.save_path_auto = false;
         if !edit.save_paths.contains(&path) {
             edit.save_paths.push(path);
         }
@@ -207,20 +248,47 @@ pub(crate) fn confirmed_roots(
 pub(crate) async fn save_history(
     id: String,
     state: State<'_, AppState>,
-) -> Result<Vec<snapshots::Snapshot>, Message> {
+) -> Result<SaveHistory, Message> {
     let _guard = begin_write(&state)?;
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
     let config_path = state.store.path.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let data = prepare_backup_data(&config_path, &settings, &game)?;
-        snapshots::list(&data, &id)
+        let history = snapshots::list(&data, &id)?;
+        let roots = saves::discover(&game, settings.game_edits.get(&id))
+            .locations
+            .into_iter()
+            .filter(|location| location.confidence == "confirmed" && location.exists)
+            .map(|location| location.path)
+            .collect::<Vec<_>>();
+        let current_snapshot = snapshots::validate_roots(&roots, Path::new(&game.folder), &data)
+            .and_then(|roots| snapshots::matching_current(&data, &history, &roots))
+            .unwrap_or(None);
+        Ok(SaveHistory {
+            snapshots: history,
+            current_snapshot,
+            notice: None,
+        })
     })
     .await
     .map_err(|e| Message::detail("backup.error", e))?
 }
 
-pub(crate) async fn backup(id: String, note: String, state: &AppState) -> Result<(), Message> {
+pub(crate) async fn backup(id: String, note: String, state: &AppState) -> Result<bool, Message> {
+    backup_with_mode(id, note, state, false).await
+}
+
+pub(crate) async fn automatic_backup(id: String, state: &AppState) -> Result<bool, Message> {
+    backup_with_mode(id, "Automatic backup".into(), state, true).await
+}
+
+async fn backup_with_mode(
+    id: String,
+    note: String,
+    state: &AppState,
+    automatic: bool,
+) -> Result<bool, Message> {
     let _guard = begin_write(state)?;
     let game = find_game(state, &id)?;
     let settings = snapshot(state)?;
@@ -234,7 +302,12 @@ pub(crate) async fn backup(id: String, note: String, state: &AppState) -> Result
             &roots,
             runtime::detect(game.executable.as_deref()),
         )?;
-        snapshots::create_named_checked(
+        let create = if automatic {
+            snapshots::create_automatic_named_checked
+        } else {
+            snapshots::create_unique_named_checked
+        };
+        create(
             &data,
             (&id, &game.title),
             &roots,
@@ -242,7 +315,7 @@ pub(crate) async fn backup(id: String, note: String, state: &AppState) -> Result
             settings.backup_retention,
             || runtime::detect(game.executable.as_deref()),
         )
-        .map(|_| ())
+        .map(|result| result.created)
     })
     .await
     .map_err(|e| Message::detail("backup.error", e))?
@@ -253,9 +326,15 @@ pub(crate) async fn backup_saves(
     id: String,
     note: String,
     state: State<'_, AppState>,
-) -> Result<Vec<snapshots::Snapshot>, Message> {
-    backup(id.clone(), note, &state).await?;
-    save_history(id, state).await
+) -> Result<SaveHistory, Message> {
+    let created = backup(id.clone(), note, &state).await?;
+    let mut history = save_history(id, state).await?;
+    history.notice = Some(Message::new(if created {
+        "backup.success"
+    } else {
+        "backup.duplicate"
+    }));
+    Ok(history)
 }
 
 #[tauri::command]
@@ -294,7 +373,7 @@ pub(crate) async fn restore_saves(
     id: String,
     snapshot_id: String,
     state: State<'_, AppState>,
-) -> Result<Vec<snapshots::Snapshot>, Message> {
+) -> Result<SaveHistory, Message> {
     let _guard = begin_write(&state)?;
     let plan = state
         .saves
@@ -332,7 +411,7 @@ pub(crate) async fn update_snapshot(
     note: String,
     delete: bool,
     state: State<'_, AppState>,
-) -> Result<Vec<snapshots::Snapshot>, Message> {
+) -> Result<SaveHistory, Message> {
     let _guard = begin_write(&state)?;
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
@@ -356,6 +435,47 @@ pub(crate) async fn update_snapshot(
 mod tests {
     use super::*;
     use std::fs;
+
+    #[cfg(windows)]
+    #[test]
+    fn automatic_backup_reuses_matching_manual_history_after_game_stops() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("game");
+        let saves = folder.join("savedata");
+        fs::create_dir_all(&saves).unwrap();
+        let executable = folder.join("galgear-backup-test.exe");
+        fs::write(&executable, []).unwrap();
+        let game = catalog::manual_game(&executable, "Backup test".into()).unwrap();
+        let state = AppState::load(temp.path().join("config")).unwrap();
+        state.catalog.lock().unwrap().games.push(game.clone());
+        state.settings.lock().unwrap().game_edits.insert(
+            game.id.clone(),
+            galgear_core::GameEdit {
+                save_path: Some(galgear_core::config::display_path(&saves)),
+                auto_backup: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(runtime::detect(game.executable.as_deref()), runtime::Status::Stopped);
+        let data = backup_data(&game);
+        tauri::async_runtime::block_on(async {
+            fs::write(saves.join("slot.sav"), b"manual save").unwrap();
+            fs::write(saves.join("system.ksd"), br#"(const) %["trail_custom_exit_end" => 9, "cg_scene" => 1]"#).unwrap();
+            assert!(backup(game.id.clone(), "Manual backup".into(), &state).await.unwrap());
+            let original = snapshots::list(&data, &game.id).unwrap().remove(0);
+            fs::write(saves.join("slot.sav"), b"changed save").unwrap();
+            assert!(automatic_backup(game.id.clone(), &state).await.unwrap());
+            // An older match must be reused even when the latest backup differs.
+            fs::write(saves.join("slot.sav"), b"manual save").unwrap();
+            fs::write(saves.join("system.ksd"), br#"(const) %["cg_scene" => 1, "trail_custom_exit_end" => 10]"#).unwrap();
+            assert!(!automatic_backup(game.id.clone(), &state).await.unwrap());
+            let history = snapshots::list(&data, &game.id).unwrap();
+            assert_eq!(history.len(), 2);
+            assert_eq!(snapshots::matching_current(
+                &data, &history, &[galgear_core::config::display_path(&saves)],
+            ).unwrap(), Some(original.id));
+        });
+    }
 
     fn game_with_legacy_backup(root: &Path, name: &str, legacy: &Path) -> Game {
         let folder = root.join(name);

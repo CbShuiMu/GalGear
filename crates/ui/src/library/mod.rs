@@ -33,7 +33,7 @@ pub(crate) enum Dialog {
 pub(crate) struct Failure {
     pub id: String,
     title: String,
-    error: Message,
+    pub(crate) error: Message,
 }
 #[derive(Deserialize)]
 pub(crate) struct BatchResult {
@@ -50,6 +50,18 @@ pub(crate) fn clear_selection(state: &mut State) {
     state.checked_folders.clear();
     state.batch_failures.clear();
     state.visible_count = 120;
+}
+
+pub(crate) fn parent_allowed(collections: &[Collection], parent: &str, moving: Option<&str>) -> bool {
+    collections.iter().any(|folder| folder.id == parent && folder.parent.is_none())
+        && moving.is_none_or(|id| {
+            id != parent && !collections.iter().any(|folder| folder.parent.as_deref() == Some(id))
+        })
+}
+
+pub(crate) fn accepts_games(collections: &[Collection], id: &str) -> bool {
+    collections.iter().any(|folder| folder.id == id)
+        && !collections.iter().any(|folder| folder.parent.as_deref() == Some(id))
 }
 
 fn release_date_key(value: &str) -> Option<i32> {
@@ -87,7 +99,8 @@ pub(crate) fn matching<'a>(
         .games
         .iter()
         .filter(|g| {
-            (state.collection.is_none() || folder.is_some_and(|f| f.games.contains(&g.id)))
+            crate::game_setup::visible(settings, g)
+                && (state.collection.is_none() || folder.is_some_and(|f| f.games.contains(&g.id)))
                 && state.status_filter.finished.is_none_or(|finished| (g.play_status == "finished") == finished)
                 && state.status_filter.favorite.is_none_or(|favorite| {
                     settings.collections.iter().any(|folder| folder.games.contains(&g.id)) == favorite
@@ -194,6 +207,70 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn child_collections_prevent_empty_state_and_second_level_cannot_create_children() {
+        let mut app = App { page: "collections".into(), ..Default::default() };
+        app.settings.collections = vec![
+            Collection { id: "parent".into(), name: "Parent".into(), ..Default::default() },
+            Collection { id: "child".into(), name: "Child".into(), parent: Some("parent".into()), ..Default::default() },
+            Collection { id: "other".into(), name: "Other".into(), ..Default::default() },
+        ];
+        app.library.collection = Some("parent".into());
+        let mut html = String::new();
+        page(&mut html, &app);
+        assert!(html.contains("data-folder-id=\"child\""));
+        assert!(!html.contains("empty-state"));
+        assert!(html.contains("data-action=\"folder-new\""));
+        assert!(!html.contains("data-action=\"folder-add-games\""));
+        assert!(html.contains("data-drop-folder=\"child\""));
+        app.library.collection = Some("child".into());
+        html.clear();
+        page(&mut html, &app);
+        assert!(html.contains("empty-state"));
+        assert!(!html.contains("data-action=\"folder-new\""));
+        assert!(html.contains("data-action=\"folder-add-games\""));
+        dispatch(&mut app, "folder-new", "child");
+        assert!(app.library.dialog.is_none());
+        dispatch(&mut app, "folder-edit", "parent");
+        assert_eq!(crate::choices::options(&app, "folder-parent").len(), 1);
+        dispatch(&mut app, "folder-edit", "child");
+        let parents: Vec<_> = crate::choices::options(&app, "folder-parent").into_iter().map(|p| p.value).collect();
+        assert_eq!(parents, vec!["", "parent", "other"]);
+    }
+
+    #[test]
+    fn non_leaf_collections_are_not_add_targets_in_pickers_dragging_or_actions() {
+        crate::bridge::take_requests();
+        let mut app = App { page: "collections".into(), ..Default::default() };
+        app.settings.collections = vec![
+            Collection { id: "parent".into(), name: "test".into(), ..Default::default() },
+            Collection { id: "child".into(), name: "123".into(), parent: Some("parent".into()), ..Default::default() },
+        ];
+        let mut html = String::new();
+        page(&mut html, &app);
+        assert!(html.contains("data-folder-id=\"parent\""));
+        assert!(!html.contains("data-drop-folder=\"parent\""));
+        app.library.collection = Some("parent".into());
+        dispatch(&mut app, "folder-add-games", "");
+        assert!(app.library.dialog.is_none());
+        dispatch(&mut app, "collection-picker", "game");
+        html.clear();
+        dialog(&mut html, &app);
+        assert!(!html.contains("data-action=\"collection-pick\" data-value=\"parent\""));
+        assert!(html.contains("data-action=\"collection-pick\" data-value=\"child\""));
+        assert!(html.contains("test / 123"));
+        dispatch(&mut app, "collection-pick", "parent");
+        assert!(crate::bridge::take_requests().is_empty());
+        app.library.picker_games.insert("game".into());
+        dispatch(&mut app, "picker-games-save", "");
+        assert!(crate::bridge::take_requests().is_empty());
+        dispatch(&mut app, "collection-pick", "child");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "batch_games");
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&requests[0].2).unwrap()["collection"], "child");
+    }
+
+    #[test]
     fn toolbar_clear_button_removes_all_tag_filters_and_preserves_search_and_sort() {
         let mut app = App {
             library: State {
@@ -223,6 +300,7 @@ mod tests {
     fn tag_choices_are_drafts_until_confirmation_and_cancel_discards_them() {
         let mut app = App::default();
         app.catalog.games = vec![game(0), game(1)];
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         app.catalog.games[0].tags.push("Alice Smith".into());
         dispatch(&mut app, "tag-filter-open", "");
         let mut html = String::new();
@@ -285,6 +363,7 @@ mod tests {
             ..Default::default()
         };
         app.catalog.games = vec![game(0), game(1)];
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         dispatch(&mut app, "detail-tag", "adv");
         assert_eq!(app.page, "games");
         assert!(
@@ -306,6 +385,7 @@ mod tests {
         };
         let game:Game=serde_json::from_value(json!({"id":"g","title":"Game","folder":"F:/Game","library":"F:/","executable":"F:/Game/game.exe","engine":"unknown","modified":0,"tags":[]})).unwrap();
         app.catalog.games.push(game);
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         let mut html = String::new();
         page(&mut html, &app);
         assert!(!html.contains("data-game-id"));
@@ -347,6 +427,7 @@ mod tests {
             ..Default::default()
         });
         app.catalog.games.push(serde_json::from_value(json!({"id":"g","title":"Game","folder":"F:/Game","library":"F:/","executable":"F:/Game/game.exe","engine":"unknown","modified":0,"tags":[]})).unwrap());
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         dispatch(&mut app, "card-remove-select", "g");
         assert!(app.library.batch && app.library.checked.contains("g"));
         assert!(app.settings.collections[0].games.contains("g"));
@@ -408,6 +489,7 @@ mod tests {
     fn status_filters_combine_with_tags_and_follow_current_button_state() {
         let mut app = App { page: "games".into(), ..Default::default() };
         app.catalog.games = (0..4).map(game).collect();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         app.catalog.games[0].play_status = "finished".into();
         app.catalog.games[1].play_status = "finished".into();
         app.settings.collections.push(Collection {
@@ -451,8 +533,20 @@ mod tests {
     fn all_matching_entries_are_selected_beyond_the_render_limit() {
         let mut app = App::default();
         app.catalog.games = (0..300).map(game).collect();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         dispatch(&mut app, "batch-all", "");
         assert_eq!(app.library.checked.len(), 300);
+    }
+    #[test]
+    fn entering_and_leaving_batch_keeps_the_loaded_cards_for_marquee_scrolling() {
+        let mut app = App::default();
+        app.library.visible_count = 360;
+        dispatch(&mut app, "batch-toggle", "");
+        assert!(app.library.batch);
+        assert_eq!(app.library.visible_count, 360);
+        dispatch(&mut app, "batch-toggle", "");
+        assert!(!app.library.batch);
+        assert_eq!(app.library.visible_count, 360);
     }
     #[test]
     fn toolbar_playtime_includes_matching_games_beyond_the_render_limit() {
@@ -464,6 +558,7 @@ mod tests {
                 game
             })
             .collect();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         app.library.tag_filter = vec!["ADV".into()];
         app.library.visible_count = 10;
         let mut html = String::new();
@@ -474,6 +569,7 @@ mod tests {
     fn selection_respects_direct_collection_membership_and_tag_filter() {
         let mut app = App::default();
         app.catalog.games = (0..300).map(game).collect();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         app.settings.collections.push(Collection {
             id: "folder".into(),
             games: (0..40).map(|n| n.to_string()).collect(),
@@ -507,6 +603,7 @@ mod tests {
         let mut app = App::default();
         app.settings.sort_by = "release".into();
         app.catalog.games = (1..=10).map(game).collect();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         for (game, date) in app.catalog.games.iter_mut().zip([
             "2025-10-1", "1998-12-31", "", "2026-02-30", "2024/2/29",
             "2024年11月2日", "2020-01-01", "2023", "", "1980-01-01",
@@ -533,6 +630,7 @@ mod tests {
     fn sort_direction_applies_to_names_and_update_times() {
         let mut app = App::default();
         app.catalog.games = vec![game(1), game(2), game(3)];
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         for (game, title) in app.catalog.games.iter_mut().zip(["Beta", "alpha", "Gamma"]) {
             game.title = title.into();
         }
@@ -554,6 +652,7 @@ mod tests {
     fn sorting_does_not_change_selected_identities_and_exiting_clears_selection() {
         let mut app = App::default();
         app.catalog.games = (0..300).map(game).collect();
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         dispatch(&mut app, "batch-all", "");
         let selected = app.library.checked.clone();
         app.settings.sort_by = "recent".into();
@@ -572,6 +671,7 @@ mod tests {
     fn rendered_library_omits_type_badges_and_global_tag_management() {
         let mut app = App::default();
         app.catalog.games = vec![game(1)];
+        for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         let mut html = String::new();
         page(&mut html, &app);
         assert!(!html.contains("poster-badge"));

@@ -31,6 +31,23 @@ pub(crate) fn hours(seconds: u64) -> String {
     }
 }
 
+pub(crate) fn date_time(seconds: u64) -> String {
+    #[cfg(target_arch = "wasm32")]
+    {
+        crate::bridge::local_date_time(seconds as f64)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let Some(time) = i64::try_from(seconds)
+            .ok()
+            .and_then(|seconds| time::OffsetDateTime::from_unix_timestamp(seconds).ok())
+        else {
+            return String::new();
+        };
+        format!("{} {:02}:{:02}", date(seconds), time.hour(), time.minute())
+    }
+}
+
 pub(crate) fn date(seconds: u64) -> String {
     #[cfg(target_arch = "wasm32")]
     {

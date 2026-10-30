@@ -1120,9 +1120,9 @@
     "en-US": "Save locations can be detected after installation and first launch."
   },
   "save.none": {
-    "zh-CN": "未发现对应存档。请先运行游戏一次，或手动指定位置。",
-    "ja-JP": "対応するセーブが見つかりません。初回起動または手動設定をしてください。",
-    "en-US": "No matching saves found. Launch the game once or select a folder manually."
+    "zh-CN": "未发现对应存档。请先运行游戏并保存存档一次，或手动指定位置。",
+    "ja-JP": "対応するセーブが見つかりません。ゲームを起動して一度セーブするか、手動で設定してください。",
+    "en-US": "No matching saves found. Run the game and save once, or select a folder manually."
   },
   "save.open": {
     "zh-CN": "打开存档目录",
@@ -1130,9 +1130,9 @@
     "en-US": "Open save folder"
   },
   "save.choose": {
-    "zh-CN": "手动指定存档目录",
-    "ja-JP": "セーブ場所を指定",
-    "en-US": "Choose save folder"
+    "zh-CN": "手动指定",
+    "ja-JP": "手動指定",
+    "en-US": "Set manually"
   },
   "summary.agent_failed": {
     "zh-CN": "AI 编写或验证读取程序未完成：{detail}",
@@ -2074,6 +2074,36 @@
     "ja-JP": "バックアップ履歴",
     "en-US": "Backup history"
   },
+  "backup.archive": {
+    "zh-CN": "历史存档",
+    "ja-JP": "過去のセーブ",
+    "en-US": "Save history"
+  },
+  "backup.current": {
+    "zh-CN": "当前存档：",
+    "ja-JP": "現在のセーブ：",
+    "en-US": "Current save: "
+  },
+  "backup.success": {
+    "zh-CN": "备份成功",
+    "ja-JP": "バックアップしました",
+    "en-US": "Backup successful"
+  },
+  "backup.auto_success": {
+    "zh-CN": "自动备份成功",
+    "ja-JP": "自動バックアップしました",
+    "en-US": "Automatic backup successful"
+  },
+  "backup.duplicate": {
+    "zh-CN": "当前存档已经备份过了",
+    "ja-JP": "現在のセーブはすでにバックアップされています",
+    "en-US": "The current save has already been backed up"
+  },
+  "backup.delete_title": {
+    "zh-CN": "删除备份",
+    "ja-JP": "バックアップを削除",
+    "en-US": "Delete backup"
+  },
   "backup.note": {
     "zh-CN": "备注",
     "ja-JP": "メモ",
@@ -2195,9 +2225,9 @@
     "en-US": "Current Magpie scaling hotkey"
   },
   "tools.help": {
-    "zh-CN": "默认使用软件 tools 目录中的内置工具，相对路径以 GalGear.exe 所在目录为准。超分时自动启动 Magpie，并读取其便携配置中的快捷键；算法和倍率可在 Magpie 中调整。转区默认使用 Run in Japanese (Admin)，可指定其他配置。手动修改路径后请保存。",
-    "ja-JP": "既定では GalGear.exe の tools フォルダー内のツールを使います。相対パスは実行ファイルの場所を基準にします。拡大時は Magpie を自動起動し、ポータブル設定からキーを読み取ります。方式と倍率は Magpie で変更できます。ロケールの既定は Run in Japanese (Admin) です。パスを変更したら保存してください。",
-    "en-US": "Tools default to the tools folder beside GalGear.exe. Relative paths resolve from that folder's parent. Upscaling starts Magpie automatically and reads its portable hotkey configuration; adjust algorithms and scale in Magpie. Locale launch defaults to Run in Japanese (Admin). Save after changing paths."
+    "zh-CN": "默认使用软件 tools 目录中的内置工具，相对路径以 GalGear.exe 所在目录为准。保存缩放快捷键会同步到 Magpie；若 Magpie 已运行，会短暂重启以应用新键，当前缩放会结束。Magpie 中修改的快捷键会自动同步回来，未保存的输入会保留。算法和倍率可在 Magpie 中调整。转区默认使用 Run in Japanese (Admin)，可指定其他配置。",
+    "ja-JP": "既定では GalGear.exe の tools 内のツールを使います。拡大キーを保存すると Magpie に同期し、起動中の場合は再起動して適用するため拡大が終了します。Magpie での変更は自動反映され、未保存の入力は保持されます。方式と倍率は Magpie で変更できます。ロケールの既定は Run in Japanese (Admin) です。",
+    "en-US": "Tools default to the tools folder beside GalGear.exe. Saving the scaling hotkey syncs it to Magpie. A running Magpie restarts briefly to apply it, ending active scaling. Changes in Magpie sync back automatically while unsaved edits are preserved. Adjust algorithms and scale in Magpie. Locale launch defaults to Run in Japanese (Admin)."
   },
   "tools.locale_launch": {
     "zh-CN": "转区启动",
@@ -2259,15 +2289,30 @@
     "ja-JP": "内蔵 Magpie が見つかりません。tools/magpie を復元するか、設定で Magpie.exe を指定してください。",
     "en-US": "Bundled Magpie not found. Keep tools/magpie beside the app, or set its executable path in Settings."
   },
+  "tools.magpie_cancelled": {
+    "zh-CN": "已取消 Magpie 的管理员权限请求，未启动超分。",
+    "ja-JP": "Magpie の管理者権限要求がキャンセルされました。スケーリングは開始されませんでした。",
+    "en-US": "Magpie administrator permission was cancelled. Scaling was not started."
+  },
   "tools.magpie_start": {
-    "zh-CN": "Magpie 未能就绪。如果已运行其他目录下的 Magpie，请先退出该实例再重试；也可检查内置 Magpie 的配置和日志。",
-    "ja-JP": "Magpie を準備できませんでした。別の場所の Magpie を終了して再試行するか、内蔵ツールの設定とログを確認してください。",
-    "en-US": "Magpie did not become ready. Close any instance running from another folder and retry, or check the bundled tool's configuration and logs."
+    "zh-CN": "无法启动 Magpie，请检查工具路径、配置和日志。",
+    "ja-JP": "Magpie を起動できませんでした。ツールのパス、設定、ログを確認してください。",
+    "en-US": "Could not start Magpie. Check the tool path, configuration, and logs."
+  },
+  "tools.magpie_exited": {
+    "zh-CN": "Magpie 在初始化完成前退出，请检查其配置和日志；若另一个目录的 Magpie 已在运行，请先退出该实例。",
+    "ja-JP": "Magpie が初期化完了前に終了しました。設定とログを確認してください。別の場所の Magpie が起動中の場合は終了してください。",
+    "en-US": "Magpie exited before initialization completed. Check its configuration and logs; if a copy from another folder is running, exit that instance first."
+  },
+  "tools.magpie_timeout": {
+    "zh-CN": "等待 Magpie 初始化超时，请检查其窗口中是否有待处理的提示，或查看 Magpie 日志后重试。",
+    "ja-JP": "Magpie の初期化がタイムアウトしました。ウィンドウの確認待ちメッセージやログを確認し、再試行してください。",
+    "en-US": "Timed out waiting for Magpie to initialize. Check for pending prompts in its window or review its logs, then retry."
   },
   "tools.magpie_hotkey_invalid": {
-    "zh-CN": "Magpie 缩放快捷键无效。请在内置 Magpie 中设置 Ctrl、Alt 或 Shift 与字母或数字的组合。",
-    "ja-JP": "Magpie の拡大キーが無効です。Ctrl、Alt、Shift と英数字を組み合わせて設定してください。",
-    "en-US": "Invalid Magpie scaling shortcut. Set a combination of Ctrl, Alt or Shift and a letter or digit in bundled Magpie."
+    "zh-CN": "Magpie 缩放快捷键无效，请使用 Ctrl、Alt、Shift 或 Win 与按键的组合，例如 Alt+Shift+A 或 Ctrl+F12。",
+    "ja-JP": "Magpie の拡大キーが無効です。Alt+Shift+A や Ctrl+F12 のように修飾キーと組み合わせてください。",
+    "en-US": "Invalid Magpie scaling hotkey. Use modifiers and a key, such as Alt+Shift+A or Ctrl+F12."
   },
   "tags.game_status": {
     "zh-CN": "游戏状态",
@@ -2363,6 +2408,21 @@
     "zh-CN": "返回首页",
     "ja-JP": "ホームに戻る",
     "en-US": "Back to home"
+  },
+  "skills.updating": {
+    "zh-CN": "正在检查并更新 Skills",
+    "ja-JP": "Skillsを確認・更新中",
+    "en-US": "Checking and updating skills"
+  },
+  "skills.update_failed": {
+    "zh-CN": "Skills 自动更新失败，已有版本会保留；请检查网络和软件目录写入权限后重启重试：{detail}",
+    "ja-JP": "Skillsの自動更新に失敗しました。既存のバージョンは保持されます。接続とアプリフォルダーの書き込み権限を確認して再起動してください：{detail}",
+    "en-US": "Skills update failed; any existing version is retained. Check your connection and app folder write access, then restart to retry: {detail}"
+  },
+  "detail.back_collections": {
+    "zh-CN": "返回收藏夹",
+    "ja-JP": "コレクションに戻る",
+    "en-US": "Back to collections"
   },
   "detail.back": {
     "zh-CN": "返回游戏库",
@@ -2529,6 +2589,21 @@
     "ja-JP": "自分自身や子コレクションには移動できません。",
     "en-US": "A collection cannot be moved into itself or its descendants."
   },
+  "folders.depth_limit": {
+    "zh-CN": "收藏夹最多支持两层。",
+    "ja-JP": "コレクションは2階層まで作成できます。",
+    "en-US": "Collections support at most two levels."
+  },
+  "folders.leaf_only": {
+    "zh-CN": "只能将游戏添加到没有子收藏夹的收藏夹。",
+    "ja-JP": "ゲームは子コレクションのないコレクションにのみ追加できます。",
+    "en-US": "Games can only be added to collections without subcollections."
+  },
+  "library.restore_required": {
+    "zh-CN": "这个游戏已移除，请到设置－游戏库恢复已移除条目。",
+    "ja-JP": "このゲームは除外されています。設定のライブラリから復元してください。",
+    "en-US": "This game was removed. Restore it in Settings > Library."
+  },
   "folders.missing": {
     "zh-CN": "收藏夹已不存在，请重新选择。",
     "ja-JP": "コレクションが存在しません。選び直してください。",
@@ -2595,9 +2670,9 @@
     "en-US": "Remove from library"
   },
   "bulk.exclude_confirm": {
-    "zh-CN": "从游戏列表移除所选 {count} 款游戏？不会删除游戏文件、存档或补丁备份，可在设置中恢复条目。",
-    "ja-JP": "選択した {count} 件をゲーム一覧から除外しますか？ゲームファイル、セーブ、パッチのバックアップは削除されません。設定から復元できます。",
-    "en-US": "Remove {count} selected games from the library? Game files, saves and patch backups are kept. Restore entries in Settings."
+    "zh-CN": "删除所选 {count} 款游戏的条目？游戏仍在时，条目只能在设置－游戏库中恢复；游戏已不存在时，将彻底清除条目记录，重新放回后可扫描为新游戏。游戏文件、存档和备份不会删除。",
+    "ja-JP": "選択した {count} 件の項目を削除しますか？ゲームが存在する場合は設定のライブラリからのみ復元できます。存在しない場合は登録情報を消去し、再配置後は新規ゲームとして検出します。ゲームファイル、セーブ、バックアップは削除しません。",
+    "en-US": "Remove {count} selected entries? Existing games can only be restored in Settings > Library. Missing games are forgotten and can be scanned as new after being added back. Game files, saves and backups are kept."
   },
   "bulk.failures": {
     "zh-CN": "查看失败项",
@@ -3240,9 +3315,9 @@
     "en-US": "AI summary file operation failed: {detail}"
   },
   "summary.tools_missing": {
-    "zh-CN": "AI功能不可用：请在软件目录中安装AI宿主和Galgear-GalgameReverse-Skill资源包，安装后重启软件。",
-    "ja-JP": "AI機能は利用できません。アプリのフォルダーにAIホストとGalgear-GalgameReverse-Skillを配置し、再起動してください。",
-    "en-US": "AI is unavailable. Install the AI host and Galgear-GalgameReverse-Skill package in the application directory, then restart the app."
+    "zh-CN": "AI功能暂不可用：请保留随程序附带的AI宿主。Galgear-GalgameReverse-Skill资源包会在启动时自动检查并下载，请等待下载完成；失败时请检查网络并重启重试。",
+    "ja-JP": "AI機能は現在利用できません。同梱のAIホストを保持してください。Galgear-GalgameReverse-Skillは起動時に自動確認・ダウンロードされます。完了までお待ちください。失敗した場合は接続を確認し、再起動してください。",
+    "en-US": "AI is temporarily unavailable. Keep the bundled AI host. Galgear-GalgameReverse-Skill is checked and downloaded automatically on launch; wait for it to finish. If it fails, check your connection and restart to retry."
   },
   "summary.decode_failed": {
     "zh-CN": "游戏资源或存档解码失败，当前引擎格式需要进一步适配。",
@@ -3623,5 +3698,145 @@
     "zh-CN": "自动备份",
     "ja-JP": "自動バックアップ",
     "en-US": "Auto backup"
+  },
+  "tools.magpie_hotkey_conflict": {
+    "zh-CN": "该快捷键已分配给 Magpie 的其他操作，请换一个组合。",
+    "ja-JP": "このキーは Magpie の別の操作で使用中です。別の組み合わせを選択してください。",
+    "en-US": "This hotkey is assigned to another Magpie action. Choose a different combination."
+  },
+  "tools.magpie_restart_failed": {
+    "zh-CN": "无法重新加载 Magpie 的快捷键。请退出 Magpie 后再保存；若 Magpie 以管理员身份运行，请使用相同权限运行 GalGear。",
+    "ja-JP": "Magpie のキーを再読み込みできません。Magpie を終了して保存してください。管理者で起動している場合は GalGear も同じ権限で実行してください。",
+    "en-US": "Could not reload the Magpie hotkey. Exit Magpie and save again. If Magpie runs as administrator, run GalGear with the same permissions."
+  },
+  "setup.auto": {
+    "zh-CN": "自动刮削",
+    "ja-JP": "自動取得",
+    "en-US": "Auto scrape"
+  },
+  "save.ai_find": {
+    "zh-CN": "AI寻找",
+    "ja-JP": "AIで検索",
+    "en-US": "Find with AI"
+  },
+  "save.ai_searching": {
+    "zh-CN": "AI寻找中",
+    "ja-JP": "AIで検索中",
+    "en-US": "AI is finding save data"
+  },
+  "save.ai_success": {
+    "zh-CN": "AI搜索存档位置成功",
+    "ja-JP": "AIがセーブ場所を見つけました",
+    "en-US": "AI found the save location"
+  },
+  "save.ai_token_required": {
+    "zh-CN": "请先在设置中填写 AI API Token 并选择模型。",
+    "ja-JP": "設定で AI API Token を入力し、モデルを選択してください。",
+    "en-US": "Enter an AI API token and select a model in Settings first."
+  },
+  "save.ai_model_required": {
+    "zh-CN": "请先在设置中为已配置的 AI 选择模型。",
+    "ja-JP": "設定で構成済み AI のモデルを選択してください。",
+    "en-US": "Select a model for a configured AI provider in Settings first."
+  },
+  "save.ai_not_found": {
+    "zh-CN": "AI 未找到有效的本地存档目录。请先运行游戏并保存存档一次，或手动指定。",
+    "ja-JP": "AI は有効なローカルセーブ場所を見つけられませんでした。一度セーブするか、手動で指定してください。",
+    "en-US": "AI could not find a valid local save folder. Run the game and save once, or set it manually."
+  },
+  "save.ai_failed": {
+    "zh-CN": "AI 搜索存档位置失败：{detail}",
+    "ja-JP": "AI セーブ検索に失敗しました：{detail}",
+    "en-US": "AI save search failed: {detail}"
+  },
+  "download.extracting": {
+    "zh-CN": "正在整理与解压补丁",
+    "ja-JP": "パッチを整理・展開中",
+    "en-US": "Preparing and extracting patch"
+  },
+  "download.extract_failed": {
+    "zh-CN": "补丁整理或解压失败，已保留下载文件：{detail}",
+    "ja-JP": "パッチの整理または展開に失敗しました。ダウンロードしたファイルは保持されます：{detail}",
+    "en-US": "Could not prepare or extract the patch. The downloaded file was kept: {detail}"
+  },
+  "local_patches.installing": {
+    "zh-CN": "补丁安装中…",
+    "ja-JP": "パッチをインストール中…",
+    "en-US": "Installing patch…"
+  },
+  "local_patches.switching": {
+    "zh-CN": "补丁切换中…",
+    "ja-JP": "パッチ切り替え中…",
+    "en-US": "Switching patch…"
+  },
+  "local_patches.failed": {
+    "zh-CN": "补丁操作失败：{detail}",
+    "ja-JP": "パッチ操作に失敗：{detail}",
+    "en-US": "Patch operation failed: {detail}"
+  },
+  "update.failed": {
+    "zh-CN": "更新失败：{detail}",
+    "ja-JP": "更新に失敗：{detail}",
+    "en-US": "Update failed: {detail}"
+  },
+  "update.checksum_failed": {
+    "zh-CN": "更新文件校验失败，原程序已保留",
+    "ja-JP": "更新ファイルの検証に失敗しました。元のアプリは保持されています",
+    "en-US": "Update verification failed; the original application is preserved"
+  },
+  "update.package_invalid": {
+    "zh-CN": "更新包格式不正确，原程序已保留",
+    "ja-JP": "更新パッケージが無効です",
+    "en-US": "Invalid update package; the original application is preserved"
+  },
+  "update.unavailable": {
+    "zh-CN": "此版本没有可用的已校验 Windows 更新包",
+    "ja-JP": "検証可能な Windows 更新パッケージがありません",
+    "en-US": "No verifiable Windows update package is available for this release"
+  },
+  "update.busy": {
+    "zh-CN": "正在更新，请稍候",
+    "ja-JP": "更新中です。お待ちください",
+    "en-US": "Update in progress; please wait"
+  },
+  "update.write_busy": {
+    "zh-CN": "当前文件写入尚未结束，请稍后重试更新",
+    "ja-JP": "ファイルの書き込みが完了していません。後で再試行してください",
+    "en-US": "A file operation has not finished; retry the update shortly"
+  },
+  "update.downloading": {
+    "zh-CN": "正在下载更新…",
+    "ja-JP": "更新をダウンロード中…",
+    "en-US": "Downloading update…"
+  },
+  "update.replacing": {
+    "zh-CN": "正在替换更新文件并重启…",
+    "ja-JP": "更新ファイルを適用して再起動中…",
+    "en-US": "Replacing application files and restarting…"
+  },
+  "update.stopping": {
+    "zh-CN": "正在停止任务并启动更新器…",
+    "ja-JP": "タスクを停止し、更新を開始しています…",
+    "en-US": "Stopping tasks and starting the updater…"
+  },
+  "update.current": {
+    "zh-CN": "当前已是最新版本，无需更新",
+    "ja-JP": "すでに最新バージョンです",
+    "en-US": "You already have the latest version"
+  },
+  "update.confirm": {
+    "zh-CN": "是否立即更新？确认后将停止当前任务，下载并替换程序文件，然后自动重启。",
+    "ja-JP": "今すぐ更新しますか？タスクを停止し、更新を適用して自動的に再起動します。",
+    "en-US": "Update now? Current tasks will stop, application files will be downloaded and replaced, and GalGear will restart."
+  },
+  "update.install": {
+    "zh-CN": "确认更新",
+    "ja-JP": "更新する",
+    "en-US": "Confirm update"
+  },
+  "update.complete": {
+    "zh-CN": "更新完成",
+    "ja-JP": "更新が完了しました",
+    "en-US": "Update complete"
   }
 }

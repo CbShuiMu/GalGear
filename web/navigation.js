@@ -1,7 +1,7 @@
 // Shared focus boundaries for keyboard, controller and modal rendering.
 export const focusSelector = 'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, [tabindex="0"]';
 export function topLayer() {
-  for (const selector of ['.controller-keyboard', '.choice-popup', '.setup-dialog', '.library-dialog', '.ai-summary-dialog', '.restore-dialog', '.editor-dialog', '.game-context-menu', '.detail-panel']) {
+  for (const selector of ['.update-dialog', '.controller-keyboard', '.choice-popup', '.snapshot-delete-dialog', '.setup-dialog', '.library-dialog', '.ai-summary-dialog', '.restore-dialog', '.archive-dialog', '.editor-dialog', '.game-context-menu', '.detail-panel']) {
     const layer = document.querySelector(selector);
     if (layer && !layer.closest('[inert]')) return layer;
   }
@@ -19,7 +19,7 @@ export function focusNode(node) {
   }
 }
 export function syncModalBoundary() {
-  const overlay = document.querySelector('.setup-overlay') || document.querySelector('.library-overlay') ||
+  const overlay = document.querySelector('.update-overlay') || document.querySelector('.snapshot-delete-dialog')?.closest('.editor-overlay') || document.querySelector('.setup-overlay') || document.querySelector('.library-overlay') ||
     document.querySelector('.ai-summary-dialog')?.closest('.editor-overlay') ||
     document.querySelector('.restore-dialog')?.closest('.editor-overlay') || document.querySelector('.editor-overlay');
   document.querySelectorAll('.sidebar,.page-scroll,.detail-overlay,.editor-overlay,.library-overlay').forEach(node => {

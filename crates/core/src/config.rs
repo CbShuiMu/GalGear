@@ -30,6 +30,17 @@ impl ConfigStore {
                     settings.theme = "light".into();
                     settings.color_theme = "white-pink".into();
                 }
+                if settings.release_page.trim().is_empty() {
+                    settings.release_page = crate::RELEASE_PAGE.into();
+                }
+                // An empty launch mode is the old untouched default; explicit
+                // user choices are stored as "normal" or "locale".
+                for edit in settings.game_edits.values_mut() {
+                    if edit.launch_mode.is_empty() {
+                        edit.launch_mode = "locale".into();
+                        edit.upscale = true;
+                    }
+                }
                 Ok(settings)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Settings::default()),
@@ -85,6 +96,49 @@ pub fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launch_defaults_upgrade_untouched_games_and_preserve_saved_opt_outs() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(temp.path().join("settings.json"));
+        fs::write(&store.path, r#"{"version":1,"game_edits":{
+            "legacy":{"launch_mode":"","upscale":false},
+            "missing":{},
+            "custom":{"launch_mode":"normal","upscale":false}
+        }}"#).unwrap();
+        let mut settings = store.load().unwrap();
+        for id in ["legacy", "missing"] {
+            assert_eq!(settings.game_edits[id].launch_mode, "locale");
+            assert!(settings.game_edits[id].upscale);
+        }
+        assert_eq!(settings.game_edits["custom"].launch_mode, "normal");
+        assert!(!settings.game_edits["custom"].upscale);
+        settings.game_edits.insert("new".into(), crate::GameEdit::default());
+        assert_eq!(settings.game_edits["new"].launch_mode, "locale");
+        assert!(settings.game_edits["new"].upscale);
+        let edit = settings.game_edits.get_mut("legacy").unwrap();
+        edit.launch_mode = "normal".into();
+        edit.upscale = false;
+        store.save(&settings).unwrap();
+        assert_eq!(store.load().unwrap(), settings);
+    }
+
+    #[test]
+    fn release_page_defaults_for_new_and_old_settings_and_keeps_custom_urls() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(temp.path().join("settings.json"));
+        assert_eq!(store.load().unwrap().release_page, crate::RELEASE_PAGE);
+        for json in [r#"{"version":1}"#, r#"{"version":1,"release_page":"  "}"#] {
+            fs::write(&store.path, json).unwrap();
+            assert_eq!(store.load().unwrap().release_page, crate::RELEASE_PAGE);
+        }
+        let settings = Settings {
+            release_page: "https://github.com/example/custom/releases".into(),
+            ..Default::default()
+        };
+        store.save(&settings).unwrap();
+        assert_eq!(store.load().unwrap().release_page, settings.release_page);
+    }
 
     #[test]
     fn custom_background_defaults_off_and_survives_reopening() {

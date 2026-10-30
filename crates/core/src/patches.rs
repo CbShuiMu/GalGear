@@ -1,4 +1,5 @@
 //! Previewed patch writes with durable backups and hash-checked reversal.
+pub mod downloads;
 pub mod folders;
 
 use galgear_i18n::Message;
@@ -141,12 +142,15 @@ pub struct Plan {
     pub preview: Preview,
     staging: tempfile::TempDir,
     root: PathBuf,
+    reuse_patch_files: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Installed {
     pub id: String,
     pub preview: Preview,
     pub status: String,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub backup_sources: std::collections::BTreeMap<usize, String>,
 }
 
 pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, Message> {
@@ -174,6 +178,7 @@ pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, M
             preview: info,
             staging,
             root,
+            reuse_patch_files: false,
         });
     }
     let mut total = 0u64;
@@ -202,10 +207,7 @@ pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, M
         });
         Ok(())
     };
-    if archive
-        .extension()
-        .is_some_and(|s| s.eq_ignore_ascii_case("zip"))
-    {
+    if downloads::archive_kind(archive)? == Some("zip") {
         let mut zip =
             zip::ZipArchive::new(fs::File::open(archive).map_err(error)?).map_err(error)?;
         if zip.len() > 10000 {
@@ -232,10 +234,7 @@ pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, M
             }
             append(&name, data)?;
         }
-    } else if archive
-        .extension()
-        .is_some_and(|s| s.eq_ignore_ascii_case("7z") || s.eq_ignore_ascii_case("rar"))
-    {
+    } else if matches!(downloads::archive_kind(archive)?, Some("7z" | "rar")) {
         extract_7z(archive, &mut append)?;
     } else {
         return Err(error("Select ZIP, RAR, 7z or EXE"));
@@ -247,10 +246,20 @@ pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, M
         preview: info,
         staging,
         root,
+        reuse_patch_files: false,
     })
 }
 
 fn seven_zip() -> Result<PathBuf, Message> {
+    // Resolve bundled codecs relative to the executable, never the current game directory.
+    if let Ok(executable) = std::env::current_exe() {
+        for ancestor in executable.ancestors().skip(1).take(4) {
+            let bundled = ancestor.join("tools/7zip/7z.exe");
+            if bundled.is_file() && bundled.with_file_name("7z.dll").is_file() {
+                return Ok(bundled);
+            }
+        }
+    }
     for name in ["7z.exe", "7za.exe"] {
         for dir in std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default()) {
             let path = dir.join(name);
@@ -307,6 +316,26 @@ fn extract_7z(
     archive: &Path,
     append: &mut impl FnMut(&str, Vec<u8>) -> Result<(), Message>,
 ) -> Result<(), Message> {
+    extract_7z_stream(archive, &mut |name, input, size| {
+        if size > 128 * 1024 * 1024 {
+            return Err(error("Patch file exceeds 128 MiB"));
+        }
+        let mut bytes = Vec::new();
+        input
+            .take(size + 1)
+            .read_to_end(&mut bytes)
+            .map_err(error)?;
+        if bytes.len() as u64 != size {
+            return Err(error("Archive file size changed"));
+        }
+        append(name, bytes)
+    })
+}
+
+fn extract_7z_stream(
+    archive: &Path,
+    append: &mut impl FnMut(&str, &mut dyn Read, u64) -> Result<(), Message>,
+) -> Result<(), Message> {
     let exe = seven_zip()?;
     let archive = fs::canonicalize(archive).map_err(error)?;
     let listing = output_bounded(
@@ -325,7 +354,10 @@ fn extract_7z(
             continue;
         };
         relative(name)?;
-        if props.contains_key("Symbolic Link") || props.contains_key("Hard Link") {
+        if ["Symbolic Link", "Hard Link", "Copy Link"]
+            .iter()
+            .any(|key| props.get(key).is_some_and(|value| !value.is_empty()))
+        {
             return Err(error("Archive links are unsupported"));
         }
         if props.get("Attributes").is_some_and(|s| s.contains('D'))
@@ -338,22 +370,31 @@ fn extract_7z(
             .ok_or_else(|| error("Missing archive file size"))?
             .parse()
             .map_err(error)?;
-        if size > 128 * 1024 * 1024 {
-            return Err(error("Patch file exceeds 128 MiB"));
-        }
         // Stream one selected entry to stdout; archive-controlled paths never become extraction paths.
-        let bytes = output_bounded(
-            hidden_command(&exe)
-                .args(["x", "-so", "-y", "-spd"])
-                .arg(&archive)
-                .arg("--")
-                .arg(name),
-            size,
-        )?;
-        if bytes.len() as u64 != size {
-            return Err(error("Archive file size changed"));
+        use std::process::Stdio;
+        let mut child = hidden_command(&exe)
+            .args(["x", "-so", "-y", "-spd"])
+            .arg(&archive)
+            .arg("--")
+            .arg(name)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .stdin(Stdio::null())
+            .spawn()
+            .map_err(error)?;
+        let result = child
+            .stdout
+            .take()
+            .ok_or_else(|| error("Missing pipe"))
+            .and_then(|mut stdout| append(name, &mut stdout, size));
+        if let Err(error) = result {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
         }
-        append(name, bytes)?;
+        if !child.wait().map_err(error)?.success() {
+            return Err(error("7-Zip could not extract the archive"));
+        }
     }
     Ok(())
 }
@@ -389,6 +430,9 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
     }
     // Revalidate every target and staged file before touching the game.
     for (i, file) in plan.preview.files.iter().enumerate() {
+        if matches!(relative(&file.path)?.components().next(), Some(Component::Normal(part)) if part.to_string_lossy().eq_ignore_ascii_case("patch")) {
+            return Err(error("Patch contents cannot overwrite patch storage or original backups"));
+        }
         let path = target(&plan.root, &file.path)?;
         let current = if path.exists() {
             Some(file_hash(&path)?)
@@ -403,6 +447,17 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
             return Err(error("Files changed since preview; select the patch again"));
         }
     }
+    let mut backup_sources = if plan.reuse_patch_files {
+        folders::matching_backups(&plan.root, &plan.preview.files)?
+    } else {
+        Default::default()
+    };
+    let backup_name = if plan.reuse_patch_files {
+        plan.preview.title.clone()
+    } else {
+        Path::new(&plan.preview.title).file_stem().unwrap_or_default().to_string_lossy().into_owned()
+    };
+    folders::backup_originals(&plan.root, &backup_name, &plan.preview.files, &mut backup_sources)?;
     fs::create_dir_all(data).map_err(error)?;
     let id = format!(
         "{:020}-{:08x}",
@@ -418,13 +473,13 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
         id,
         preview: plan.preview.clone(),
         status: "installing".into(),
+        backup_sources,
     };
     for (i, file) in record.preview.files.iter().enumerate() {
-        if file.before.is_some() {
-            atomic_copy(
-                &dir.join(format!("{i}.bak")),
-                &target(&plan.root, &file.path)?,
-            )?;
+        if let Some(before) = &file.before
+            && file_hash(&backup_path(&dir, &record, &plan.root, i)?)? != *before
+        {
+            return Err(error("Backup checksum mismatch"));
         }
     }
     write_record(&dir, &record)?;
@@ -476,7 +531,7 @@ fn rollback(dir: &Path, record: &mut Installed) -> Result<(), Message> {
             )));
         }
         if let Some(before) = &file.before
-            && file_hash(&dir.join(format!("{i}.bak")))? != *before
+            && file_hash(&backup_path(dir, record, &root, i)?)? != *before
         {
             return Err(error("Backup checksum mismatch"));
         }
@@ -486,13 +541,32 @@ fn rollback(dir: &Path, record: &mut Installed) -> Result<(), Message> {
     for (i, file) in record.preview.files.iter().enumerate().rev() {
         let path = target(&root, &file.path)?;
         if file.before.is_some() {
-            atomic_copy(&path, &dir.join(format!("{i}.bak")))?;
+            atomic_copy(&path, &backup_path(dir, record, &root, i)?)?;
         } else if path.exists() {
             fs::remove_file(path).map_err(error)?;
         }
     }
     record.status = "restored".into();
     write_record(dir, record)
+}
+
+fn backup_path(
+    dir: &Path,
+    record: &Installed,
+    root: &Path,
+    index: usize,
+) -> Result<PathBuf, Message> {
+    if let Some(source) = record.backup_sources.get(&index) {
+        let path = relative(source)?;
+        if path.components().count() < 3
+            || path.components().next() != Some(Component::Normal("patch".as_ref()))
+        {
+            return Err(error("Invalid patch backup source"));
+        }
+        target(root, source)
+    } else {
+        Ok(dir.join(format!("{index}.bak")))
+    }
 }
 pub fn restore(data: &Path, id: &str) -> Result<Installed, Message> {
     if id.contains(['/', '\\', ':']) {
@@ -558,6 +632,7 @@ pub fn record_exe(preview: Preview, data: &Path) -> Result<Installed, Message> {
         id: id.clone(),
         preview,
         status: "manual_pending".into(),
+        backup_sources: Default::default(),
     };
     let dir = data.join(id);
     fs::create_dir(&dir).map_err(error)?;
@@ -601,6 +676,23 @@ mod tests {
     }
 
     #[test]
+    fn older_numbered_backups_remain_restorable() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("game");
+        fs::create_dir(&root).unwrap();
+        fs::write(root.join("script.dat"), b"original").unwrap();
+        let zip = temp.path().join("patch.zip");
+        archive(&zip, "script.dat", b"patched");
+        let data = temp.path().join("records");
+        let mut record = install(preview(&zip, &root, "game".into()).unwrap(), &data).unwrap();
+        fs::copy(root.join(&record.backup_sources[&0]), data.join(&record.id).join("0.bak")).unwrap();
+        record.backup_sources.clear();
+        write_record(&data.join(&record.id), &record).unwrap();
+        restore(&data, &record.id).unwrap();
+        assert_eq!(fs::read(root.join("script.dat")).unwrap(), b"original");
+    }
+
+    #[test]
     fn recovers_interrupted_extension_switches_and_keeps_original_backups() {
         for status in ["installing", "restoring"] {
             for original_present in [false, true] {
@@ -626,7 +718,7 @@ mod tests {
                 assert!(!root.join("script.csx").exists());
                 assert_eq!(fs::read(root.join("script.noa")).unwrap(), b"original");
                 assert_eq!(
-                    fs::read(data.join(&record.id).join("1.bak")).unwrap(),
+                    fs::read(root.join("patch/Patch_original/script.noa")).unwrap(),
                     b"original"
                 );
             }
@@ -666,6 +758,10 @@ mod tests {
         fs::write(root.join("new.txt"), b"changed").unwrap();
         assert!(install(plan, &temp.path().join("backups")).is_err());
         assert_eq!(fs::read(root.join("new.txt")).unwrap(), b"changed");
+        archive(&zip, "patch/Other_original/script.dat", b"overwrite backup");
+        let plan = preview(&zip, &root, "id".into()).unwrap();
+        assert!(install(plan, &temp.path().join("backups")).is_err());
+        assert!(!root.join("patch/Other_original/script.dat").exists());
     }
     #[test]
     fn overlapping_patches_require_reverse_order() {
@@ -708,6 +804,7 @@ mod tests {
         assert!(recover(&data).is_empty());
         assert_eq!(fs::read(root.join("a.dat")).unwrap(), b"old-a");
         assert_eq!(fs::read(root.join("b.dat")).unwrap(), b"old-b");
-        assert!(data.join(&record.id).join("0.bak").exists());
+        assert!(root.join("patch/patch_original/a.dat").exists());
+        assert!(!data.join(&record.id).join("0.bak").exists());
     }
 }

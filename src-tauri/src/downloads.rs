@@ -1,5 +1,5 @@
 //! Download plans, purchase confirmation and transfers.
-use crate::{dialogs, state::AppState, state::snapshot};
+use crate::{dialogs, state::AppState, state::find_game, state::snapshot};
 use galgear_core::{
     Settings, credentials, credentials::FanCredentials, fan_account::DownloadPlan,
     fan_account::DownloadPreview, fan_account::Session, fan_account::Transfer,
@@ -14,8 +14,15 @@ use tauri::{Emitter, State};
 pub(crate) struct DownloadState {
     active: AtomicBool,
     cancel: Arc<AtomicBool>,
-    plan: Mutex<Option<(DownloadPlan, FanCredentials)>>,
+    plan: Mutex<Option<BoundDownload>>,
     downloaded: Mutex<Option<String>>,
+    destination: Mutex<Option<PathBuf>>,
+}
+
+struct BoundDownload {
+    plan: DownloadPlan,
+    credentials: FanCredentials,
+    game: Option<(String, String)>,
 }
 
 impl DownloadState {
@@ -71,8 +78,21 @@ pub(crate) async fn choose_download_folder(
 }
 
 #[tauri::command]
-pub(crate) fn open_download_folder(state: State<'_, AppState>) -> Result<(), Message> {
-    let path = download_directory(&state, &snapshot(&state)?);
+pub(crate) fn open_download_folder(
+    last_download: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), Message> {
+    let path = if last_download == Some(true) {
+        state
+            .downloads
+            .destination
+            .lock()
+            .map_err(|_| Message::new("error.catalog_state"))?
+            .clone()
+    } else {
+        None
+    }
+    .unwrap_or(download_directory(&state, &snapshot(&state)?));
     std::fs::create_dir_all(&path).map_err(|_| Message::new("download.write"))?;
     open::that_detached(path).map_err(|_| Message::new("download.write"))
 }
@@ -80,8 +100,18 @@ pub(crate) fn open_download_folder(state: State<'_, AppState>) -> Result<(), Mes
 #[tauri::command]
 pub(crate) async fn inspect_fan_resource(
     url: String,
+    game_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DownloadPreview, Message> {
+    let game = game_id
+        .map(|id| {
+            let game = find_game(&state, &id)?;
+            if !game.available {
+                return Err(Message::new("error.game_folder"));
+            }
+            Ok((id, game.folder))
+        })
+        .transpose()?;
     let domain = snapshot(&state)?.fan_domain;
     let value = credentials::load(&credentials::target(&state.store.path))?;
     let bound = value.clone();
@@ -99,7 +129,11 @@ pub(crate) async fn inspect_fan_resource(
         .downloads
         .plan
         .lock()
-        .map_err(|_| Message::new("error.catalog_state"))? = Some((plan, bound));
+        .map_err(|_| Message::new("error.catalog_state"))? = Some(BoundDownload {
+        plan,
+        credentials: bound,
+        game,
+    });
     Ok(preview)
 }
 
@@ -115,7 +149,11 @@ pub(crate) async fn start_fan_download(
     }
     state.downloads.cancel.store(false, Ordering::SeqCst);
     let result = async {
-        let (plan, bound) = state
+        let BoundDownload {
+            plan,
+            credentials: bound,
+            game,
+        } = state
             .downloads
             .plan
             .lock()
@@ -137,7 +175,20 @@ pub(crate) async fn start_fan_download(
         {
             return Err(Message::new("download.confirm_required"));
         }
-        let directory = download_directory(&state, &settings);
+        let directory = if let Some((id, folder)) = &game {
+            let current = find_game(&state, id)?;
+            if !current.available || current.folder != *folder {
+                return Err(Message::new("download.expired"));
+            }
+            galgear_core::patches::folders::directory(std::path::Path::new(folder))?
+        } else {
+            download_directory(&state, &settings)
+        };
+        *state
+            .downloads
+            .destination
+            .lock()
+            .map_err(|_| Message::new("error.catalog_state"))? = Some(directory.clone());
         let audit_directory = state.store.path.with_file_name("purchases");
         let cancel = state.downloads.cancel.clone();
         tauri::async_runtime::spawn_blocking(move || {
@@ -208,10 +259,31 @@ pub(crate) async fn start_fan_download(
                 fresh = session.acquire_free(&fresh)?;
             }
             let mut final_transfer = Transfer::default();
-            session.download(&fresh, &directory, &cancel, &mut |progress| {
-                final_transfer = progress.clone();
-                let _ = app.emit("fan-download-progress", progress);
+            let downloaded =
+                session.download(&fresh, &directory, &cancel, &mut |mut progress| {
+                    // Completion is reported only after extraction and publication succeed.
+                    if progress.phase == "complete" {
+                        progress.phase = "extracting".into();
+                    }
+                    final_transfer = progress.clone();
+                    let _ = app.emit("fan-download-progress", progress);
+                })?;
+            let ready = galgear_core::patches::downloads::finish(
+                &directory,
+                std::path::Path::new(&downloaded),
+                game.is_some(),
+                &cancel,
+            )
+            .map_err(|error| {
+                if error.key == "download.cancelled" {
+                    error
+                } else {
+                    Message::detail("download.extract_failed", error.render(settings.language))
+                }
             })?;
+            final_transfer.path = Some(galgear_core::config::display_path(&ready));
+            final_transfer.phase = "complete".into();
+            let _ = app.emit("fan-download-progress", &final_transfer);
             Ok(final_transfer)
         })
         .await

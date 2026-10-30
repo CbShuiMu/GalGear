@@ -117,8 +117,8 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.library.visible_count += 120
         }
         "game-detail" => {
-            // Home owns its detail overlay; keep its shelf and the library's filters intact.
-            if app.page != "home" && (app.page != "games" || app.library.collection.is_some()) {
+            // Keep the originating library/collection underneath the detail overlay.
+            if !matches!(app.page.as_str(), "home" | "games" | "collections") {
                 app.page = "games".into();
                 app.library.collection = None;
                 app.library.search.clear();
@@ -126,7 +126,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 app.library.visible_count = 120;
                 reset_scroll();
             }
+            let visible_count = app.library.visible_count;
             library::clear_selection(&mut app.library);
+            app.library.visible_count = visible_count;
             app.library.batch = false;
             app.library.dialog = None;
             app.choices.open = None;
@@ -150,6 +152,8 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.detail.editor = None;
             app.detail.history_open = false;
             app.detail.history_game = None;
+            app.detail.archive_open = false;
+            app.detail.current_snapshot = None;
             app.detail.history.clear();
             app.detail.confirmation = None;
             app.detail.restore_preview = None;
@@ -389,6 +393,30 @@ mod tests {
         dispatch(&mut app, "close-detail", "");
         assert_eq!(app.page, "games");
         assert!(app.detail.selected.is_none());
+    }
+
+    #[test]
+    fn collection_details_keep_the_folder_search_filters_and_loaded_page() {
+        let mut app = App {
+            page: "collections".into(),
+            ..Default::default()
+        };
+        app.library.collection = Some("nested-folder".into());
+        app.library.search = "saved search".into();
+        app.library.tag_filter = vec!["学园".into()];
+        app.library.status_filter.finished = Some(false);
+        app.library.visible_count = 360;
+        app.library.expanded.insert("parent-folder".into());
+        dispatch(&mut app, "game-detail", "game");
+        assert_eq!(app.page, "collections");
+        dispatch(&mut app, "close-detail", "");
+        assert_eq!(app.page, "collections");
+        assert_eq!(app.library.collection.as_deref(), Some("nested-folder"));
+        assert_eq!(app.library.search, "saved search");
+        assert_eq!(app.library.tag_filter, ["学园"]);
+        assert_eq!(app.library.status_filter.finished, Some(false));
+        assert_eq!(app.library.visible_count, 360);
+        assert!(app.library.expanded.contains("parent-folder"));
     }
 
     #[test]

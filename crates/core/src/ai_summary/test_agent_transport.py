@@ -226,6 +226,19 @@ class CompletionTransportTests(unittest.TestCase):
             transport.complete(self.config, self.messages, self.tools)
         self.assertIsInstance(build.call_args.args[0], transport.NoRedirect)
 
+    def test_provider_routing_uses_proxy_only_for_openai(self):
+        proxies = {'https': 'http://127.0.0.1:18765'}
+        for provider in ('deepseek', 'openai'):
+            with self.subTest(provider=provider):
+                opener, _ = self.response()
+                config = dict(self.config, provider=provider)
+                with mock.patch.object(transport.urllib.request, 'getproxies', return_value=proxies), \
+                        mock.patch.object(transport.urllib.request, 'build_opener', return_value=opener) as build:
+                    transport.complete(config, self.messages, self.tools)
+                handlers = build.call_args.args
+                proxy = next(handler for handler in handlers if isinstance(handler, transport.urllib.request.ProxyHandler))
+                self.assertEqual(proxy.proxies, proxies if provider == 'openai' else {})
+
     def test_oversized_body_is_rejected_and_closed(self):
         opener, response = self.response()
         response.read.return_value = b'x' * (transport.MAX_RESPONSE_BYTES + 1)

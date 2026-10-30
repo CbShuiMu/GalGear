@@ -108,6 +108,7 @@ pub(crate) fn run() {
                 tauri::Theme::Light
             }));
             app.manage(state);
+            crate::skill_package::start();
             let show = tauri::menu::MenuItem::with_id(
                 app,
                 "show",
@@ -169,6 +170,7 @@ pub(crate) fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             library::bootstrap,
+            crate::skill_package::get_ai_runtime,
             cloud_commands::cloud_status,
             cloud_commands::save_cloud_settings,
             cloud_commands::clear_cloud_settings,
@@ -203,6 +205,7 @@ pub(crate) fn run() {
             library::cancel_scan,
             save_commands::detect_saves,
             save_commands::choose_save_folder,
+            save_commands::find_save_with_ai,
             save_commands::open_save_folder,
             game_details::edit_game,
             library::add_manual_game,
@@ -211,7 +214,8 @@ pub(crate) fn run() {
             preferences::set_launch_behavior,
             preferences::set_close_behavior,
             preferences::set_release_page,
-            preferences::check_update,
+            crate::updater::check_update,
+            crate::updater::install_update,
             metadata::search_metadata,
             data_sources::get_data_sources,
             data_sources::save_data_source,
@@ -273,8 +277,11 @@ pub(crate) fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("GalGear startup failed")
-        .run(|_, event| {
+        .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                if let Err(error) = tools::shutdown_magpie(&app.state::<AppState>()) {
+                    eprintln!("Magpie shutdown: {error:?}");
+                }
                 galgear_core::ai_summary::shutdown();
             }
         });

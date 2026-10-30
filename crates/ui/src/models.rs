@@ -172,7 +172,7 @@ pub(crate) struct CoverArtwork {
     pub(crate) background: String,
 }
 
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct GameEdit {
     pub(crate) metadata_provider: String,
@@ -188,6 +188,7 @@ pub(crate) struct GameEdit {
     pub(crate) working_directory: Option<String>,
     pub(crate) launcher: Option<String>,
     pub(crate) save_path: Option<String>,
+    pub(crate) save_path_auto: bool,
     pub(crate) metadata: Option<Metadata>,
     pub(crate) description: Option<String>,
     pub(crate) metadata_overrides: BTreeMap<String, String>,
@@ -199,6 +200,38 @@ pub(crate) struct GameEdit {
     pub(crate) upscale: bool,
     pub(crate) ai_summary: bool,
 }
+
+impl Default for GameEdit {
+    fn default() -> Self {
+        Self {
+            metadata_provider: String::new(),
+            setup_pending: false,
+            setup_confirmed: false,
+            title: None,
+            tags: Vec::new(),
+            source_tags: None,
+            summary_brand: None,
+            summary_release_date: None,
+            executable: None,
+            arguments: Vec::new(),
+            working_directory: None,
+            launcher: None,
+            save_path: None,
+            save_path_auto: false,
+            metadata: None,
+            description: None,
+            metadata_overrides: BTreeMap::new(),
+            tag_rules: BTreeMap::new(),
+            save_paths: Vec::new(),
+            auto_backup: false,
+            launch_mode: "locale".into(),
+            locale_profile: String::new(),
+            upscale: true,
+            ai_summary: false,
+        }
+    }
+}
+
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct Metadata {
@@ -239,6 +272,13 @@ pub(crate) struct SaveSnapshot {
     pub(crate) locked: bool,
     pub(crate) files: Vec<SaveFile>,
 }
+#[derive(Deserialize)]
+pub(crate) struct SaveHistory {
+    pub(crate) snapshots: Vec<SaveSnapshot>,
+    pub(crate) current_snapshot: Option<String>,
+    pub(crate) notice: Option<Message>,
+}
+
 #[derive(Clone, Deserialize)]
 pub(crate) struct SaveFile {
     pub(crate) root: usize,
@@ -284,6 +324,7 @@ pub(crate) struct SaveLocation {
 }
 
 #[derive(Clone, Deserialize)]
+#[expect(dead_code, reason = "Retained transport models for legacy patch commands after removing the sidebar")]
 pub(crate) struct PatchPreview {
     pub(crate) title: String,
     pub(crate) game_id: String,
@@ -292,12 +333,14 @@ pub(crate) struct PatchPreview {
     pub(crate) executable: Option<String>,
 }
 #[derive(Clone, Deserialize)]
+#[expect(dead_code, reason = "Retained transport models for legacy patch commands after removing the sidebar")]
 pub(crate) struct PatchChange {
     pub(crate) path: String,
     pub(crate) before: Option<String>,
     pub(crate) size: u64,
 }
 #[derive(Clone, Deserialize)]
+#[expect(dead_code, reason = "Retained transport models for legacy patch commands after removing the sidebar")]
 pub(crate) struct InstalledPatch {
     pub(crate) id: String,
     pub(crate) preview: PatchPreview,
@@ -312,6 +355,8 @@ pub(crate) struct Catalog {
 
 #[derive(Deserialize)]
 pub(crate) struct Bootstrap {
+    #[serde(default)]
+    pub(crate) update_complete: bool,
     #[serde(default)]
     pub(crate) ai_available: bool,
     pub(crate) settings: Settings,

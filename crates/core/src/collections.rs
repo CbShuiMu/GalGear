@@ -72,6 +72,12 @@ pub fn edit(
         if operation == "update" && descendants(settings, id).contains(parent) {
             return Err(Message::new("folders.cycle"));
         }
+        if settings.collections.iter().any(|f| {
+            (f.id == parent && f.parent.is_some())
+                || (operation == "update" && f.parent.as_deref() == Some(id))
+        }) {
+            return Err(Message::new("folders.depth_limit"));
+        }
     }
     if settings.collections.iter().any(|f| {
         (operation == "create" || f.id != id)
@@ -139,6 +145,22 @@ mod tests {
         )
         .unwrap();
         settings
+    }
+    #[test]
+    fn depth_limit_applies_to_creation_and_moving_subtrees() {
+        let mut settings = tree();
+        edit(&mut settings, "create", "", "Other", None).unwrap();
+        let before = settings.clone();
+        for (operation, id, parent) in [
+            ("create", "", "collection-2"),
+            ("update", "collection-1", "collection-3"),
+            ("update", "collection-3", "collection-2"),
+        ] {
+            assert_eq!(edit(&mut settings, operation, id, "Invalid", Some(parent)).unwrap_err().key, "folders.depth_limit");
+            assert_eq!(settings, before);
+        }
+        edit(&mut settings, "update", "collection-2", "Moved child", Some("collection-3")).unwrap();
+        assert_eq!(settings.collections[1].parent.as_deref(), Some("collection-3"));
     }
     #[test]
     fn moving_parent_into_descendant_is_rejected_without_mutation() {

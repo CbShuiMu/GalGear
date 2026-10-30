@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GalGear",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "identifier": "com.galgear.desktop",
   "build": {
     "frontendDist": "../dist"
@@ -28,7 +28,7 @@
   },
   "bundle": {
     "resources": {
-      "../Galgear-GalgameReverse-Skill/GalgameResourceExtract/": "Galgear-GalgameReverse-Skill/GalgameResourceExtract/",
+      "../tools/7zip/": "tools/7zip/",
       "../tools/ai-agent/": "tools/ai-agent/",
       "../tools/waifu2x/": "tools/waifu2x/",
       "../tools/magpie/": "tools/magpie/",

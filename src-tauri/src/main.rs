@@ -23,9 +23,16 @@ mod metadata;
 mod patch_commands;
 mod preferences;
 mod save_commands;
+mod skill_package;
 mod state;
 mod tools;
+mod updater;
 
 fn main() {
+    if updater::run_helper() { return; }
+    #[cfg(windows)]
+    if bundled_tools::run_magpie_guard() {
+        return;
+    }
     desktop::run();
 }

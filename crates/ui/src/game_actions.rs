@@ -16,18 +16,18 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     let finished = game.play_status == "finished";
     for (action, key, symbol, kind, active) in [
         (
+            "collection-picker",
+            "card.favorite",
+            "heart",
+            "favorite",
+            collected,
+        ),
+        (
             "card-finished",
             "card.finished",
             if finished { "trophy-filled" } else { "trophy" },
             "finished",
             finished,
-        ),
-        (
-            "collection-picker",
-            "card.favorite",
-            if collected { "star-filled" } else { "star" },
-            "favorite",
-            collected,
         ),
     ] {
         let _ = write!(

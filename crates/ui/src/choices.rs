@@ -40,7 +40,7 @@ pub fn options(app: &App, field: &str) -> Vec<OptionItem> {
                 library::ordered(&app.settings.collections, &app.library.expanded, false)
             {
                 let path = library::folder_path(&app.settings.collections, &folder.id);
-                if !excluded.contains(&folder.id) {
+                if !excluded.contains(&folder.id) && folder.parent.is_none() && excluded.len() <= 1 {
                     values.push(item(&folder.id, &path));
                 }
             }

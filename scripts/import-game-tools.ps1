@@ -32,5 +32,7 @@ foreach ($pair in @(@($magpieSource, 'magpie'), @($localeSource, 'locale-emulato
 $portableConfig = Join-Path $taskRoot 'tools\magpie\config'
 New-Item -ItemType Directory -Path $portableConfig -Force | Out-Null
 # Magpie 0.13 recognizes config/config.json beside its executable as portable mode.
-Copy-Item -LiteralPath $configSource -Destination (Join-Path $portableConfig 'config.json') -Force
+# Keep the imported scaling modes while making direct Magpie launches elevated too.
+$config | Add-Member -NotePropertyName 'alwaysRunAsAdmin' -NotePropertyValue $true -Force
+$config | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath (Join-Path $portableConfig 'config.json') -Encoding utf8
 Write-Host 'Imported Magpie and Locale Emulator with their local configurations into tools/.'

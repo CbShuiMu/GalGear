@@ -36,6 +36,9 @@ impl Jobs {
     }
 }
 fn runtime_home() -> Result<PathBuf, Message> {
+    if !crate::skill_package::available() {
+        return Err(Message::new("summary.tools_missing"));
+    }
     let home = galgear_core::ai::runtime::home()
         .filter(|home| galgear_core::ai::runtime::available(home))
         .ok_or_else(|| Message::new("summary.tools_missing"))?;

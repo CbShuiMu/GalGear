@@ -9,9 +9,10 @@ const bridge = fs.readFileSync(path.join(__dirname, '../web/bridge.js'), 'utf8')
 const keyboard = bridge.slice(bridge.indexOf("document.addEventListener('keydown', event => {"), bridge.indexOf("window.addEventListener('resize', placeChoice);"));
 const gestures = bridge.slice(bridge.indexOf('function markDropTarget('), bridge.indexOf("document.addEventListener('dragover', event => {"));
 
-function fixture({ batch = false, selected = [] } = {}) {
+function fixture({ batch = false, selected = [], collections = false, selectedFolders = [] } = {}) {
   const listeners = new Map();
   const calls = [];
+  const selection = { rangeCount: 1, removeAllRanges() { this.rangeCount = 0; } };
   const frames = new Map();
   let frameId = 0;
   const classes = values => {
@@ -38,21 +39,34 @@ function fixture({ batch = false, selected = [] } = {}) {
     };
   };
   const pane = element();
-  const grid = element({ top: 100 });
+  const grid = element({ top: collections ? 300 : 100 });
+  const folderGrid = element({ top: 100 });
   const cards = ['a', 'b'].map((id, index) => {
-    const card = element({ left: index * 120, top: 100, right: index * 120 + 100, bottom: 240 });
+    const card = element({ left: index * 120, top: collections ? 300 : 100, right: index * 120 + 100, bottom: collections ? 440 : 240 });
     card.dataset.gameId = id;
     card.classList = classes(selected.includes(id) ? ['is-selected'] : []);
     card.querySelector = selector => selector === '.selection-check' && !batch ? null : element();
-    card.closest = selector => selector === '[data-game-id]' ? card : selector === '.game-grid' ? grid : null;
+    card.closest = selector => selector === '[data-game-id]' ? card : selector === '.game-grid,.folder-grid' ? grid : null;
     card.cloneNode = () => element();
     return card;
   });
+  const folders = collections ? ['a', 'folder-b'].map((id, index) => {
+    const card = element({ left: index * 120, top: 100, right: index * 120 + 100, bottom: 240 });
+    card.dataset.folderId = id;
+    card.classList = classes(selectedFolders.includes(id) ? ['is-selected'] : []);
+    card.querySelector = selector => selector === '.selection-check' && !batch ? null : element();
+    card.closest = selector => selector === '.game-grid,.folder-grid' ? folderGrid : null;
+    return card;
+  }) : [];
+  const scope = { querySelectorAll: () => [...folders, ...cards] };
+  grid.closest = folderGrid.closest = selector => selector === '.library-page' ? scope : null;
   const folder = element();
   folder.dataset.dropFolder = 'folder';
   folder.closest = selector => selector.includes('[data-drop-folder]') ? folder : null;
   const blank = element();
-  blank.closest = selector => selector === '.game-grid' ? grid : null;
+  blank.closest = selector => selector === '.game-grid,.folder-grid' ? grid : null;
+  const folderBlank = element();
+  folderBlank.closest = selector => selector === '.game-grid,.folder-grid' ? folderGrid : null;
   const document = {
     body: { append() {} },
     addEventListener(name, handler) {
@@ -60,6 +74,7 @@ function fixture({ batch = false, selected = [] } = {}) {
       listeners.get(name).push(handler);
     },
     getElementById: id => id === 'page-scroll' ? pane : null,
+    getSelection: () => selection,
     createElement: () => element(),
     elementFromPoint: () => folder,
     querySelector: selector => selector === '.library-bar.selecting' && batch ? element() : null,
@@ -75,16 +90,17 @@ function fixture({ batch = false, selected = [] } = {}) {
       if (action === 'batch-toggle') batch = !batch;
     },
     library_marquee(payload) {
-      const ids = JSON.parse(payload);
-      calls.push(['selection', ids]);
-      cards.forEach(card => card.classList.toggle('is-selected', ids.includes(card.dataset.gameId)));
+      const selection = JSON.parse(payload);
+      calls.push(collections ? ['selection', selection.games, selection.folders] : ['selection', selection.games]);
+      cards.forEach(card => card.classList.toggle('is-selected', selection.games.includes(card.dataset.gameId)));
+      folders.forEach(card => card.classList.toggle('is-selected', selection.folders.includes(card.dataset.folderId)));
     },
     library_drag_ids(id) { calls.push(['drag', id]); return JSON.stringify([id]); },
     library_drop(id, payload) { calls.push(['drop', id, JSON.parse(payload)]); },
   };
   const context = vm.createContext({
     document, ui, Math, JSON, Set, String, performance: { now: () => 100 },
-    window: { GalGearBridge: { render() {} } },
+    window: { addEventListener: document.addEventListener, GalGearBridge: { render() {} } },
     setTimeout: () => 1, clearTimeout() {},
     requestAnimationFrame(callback) { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame(id) { frames.delete(id); },
@@ -107,7 +123,7 @@ function fixture({ batch = false, selected = [] } = {}) {
     return event;
   };
   return {
-    cards, blank, pane, send, calls,
+    cards, folders, blank, folderBlank, pane, send, calls, selection,
     batch: () => batch,
     state: expression => vm.runInContext(expression, context),
     frame() {
@@ -125,6 +141,67 @@ test('a plain click or movement below the threshold keeps normal card behavior',
   assert.equal(app.batch(), false);
   assert.deepEqual(app.calls, []);
   assert.equal(app.state('suppressCardClickUntil'), 0);
+});
+
+test('native text selection is blocked from press through release, including outside the grid', () => {
+  const app = fixture();
+  const outside = { closest: () => null };
+  const down = app.send('pointerdown', { target: app.blank });
+  assert.equal(down.prevented, undefined, 'a press still allows normal focus and click');
+  assert.equal(app.selection.rangeCount, 0, 'clear a stale selection before any batch render');
+  app.send('pointermove', { clientX: 23, clientY: 133 });
+  assert.equal(app.send('selectstart', { target: outside }).prevented, true);
+  app.send('pointermove', { clientX: 180, clientY: 200 });
+  assert.equal(app.send('selectstart', { target: outside }).prevented, true);
+  app.selection.rangeCount = 1;
+  app.send('pointerup');
+  assert.equal(app.selection.rangeCount, 0, 'no native Range survives into a subsequent detail render');
+  assert.equal(app.send('selectstart', { target: outside }).prevented, undefined);
+});
+
+test('selection suppression ends after a click, Escape, pointer cancellation, or loss of window focus', () => {
+  for (const end of ['pointerup', 'keydown', 'pointercancel', 'blur']) {
+    const app = fixture();
+    app.send('pointerdown');
+    assert.equal(app.send('selectstart').prevented, true);
+    app.send(end, { key: 'Escape' });
+    assert.equal(app.state('marqueeDrag'), null, end);
+    assert.equal(app.send('selectstart').prevented, undefined, end);
+  }
+});
+
+test('losing focus cancels an active marquee and releases the pointer and native selection', () => {
+  const app = fixture();
+  app.send('pointerdown');
+  app.send('pointermove', { clientX: 180, clientY: 200 });
+  app.selection.rangeCount = 1;
+  app.send('blur');
+  assert.equal(app.batch(), false);
+  assert.equal(app.pane.hasPointerCapture(1), false);
+  assert.equal(app.selection.rangeCount, 0);
+  assert.equal(app.send('selectstart').prevented, undefined);
+});
+
+test('Alt dragging also prevents native text selection and clears it on release', () => {
+  const app = fixture();
+  app.send('pointerdown', { altKey: true });
+  assert.equal(app.selection.rangeCount, 0);
+  assert.equal(app.send('selectstart').prevented, true);
+  app.send('pointermove', { clientX: 180, clientY: 200 });
+  app.selection.rangeCount = 1;
+  app.send('pointerup');
+  assert.equal(app.selection.rangeCount, 0);
+  assert.equal(app.send('selectstart').prevented, undefined);
+});
+
+test('ordinary detail text and editable fields retain native selection', () => {
+  const app = fixture();
+  const target = { closest: () => null };
+  app.send('pointerdown', { target });
+  assert.equal(app.send('selectstart', { target }).prevented, undefined);
+  assert.equal(app.selection.rangeCount, 1);
+  app.send('pointerup', { target });
+  assert.equal(app.selection.rangeCount, 1);
 });
 
 test('dragging from a card enters batch mode and commits the intersected cards', () => {
@@ -249,4 +326,43 @@ test('touch cancellation rolls back only the pointer that owns the gesture', () 
   app.send('pointercancel', { pointerId: 1 });
   assert.equal(app.batch(), false);
   assert.equal(app.state('marqueeDrag'), null);
+});
+
+test('dragging collection cards enters batch mode without confusing matching game IDs', () => {
+  const app = fixture({ collections: true });
+  app.send('pointerdown', { target: app.folders[0] });
+  app.send('pointermove', { clientX: 180, clientY: 200 });
+  app.send('pointerup');
+  assert.deepEqual(app.calls, [['dispatch', 'batch-toggle'], ['selection', [], ['a', 'folder-b']]]);
+  assert.equal(app.cards[0].classList.contains('is-selected'), false);
+});
+
+test('collection marquee can span folders and games and start in empty folder space', () => {
+  const app = fixture({ collections: true });
+  app.send('pointerdown', { target: app.folderBlank, clientX: 300 });
+  app.send('pointermove', { clientX: 20, clientY: 350 });
+  app.send('pointerup');
+  assert.deepEqual(app.calls, [['dispatch', 'batch-toggle'], ['selection', ['a', 'b'], ['a', 'folder-b']]]);
+});
+
+test('collection modifier selection and Escape preserve both kinds of selection', () => {
+  const app = fixture({ collections: true, batch: true, selected: ['b'], selectedFolders: ['folder-b'] });
+  app.send('pointerdown', { target: app.folders[0], shiftKey: true });
+  app.send('pointermove', { clientX: 70, clientY: 200 });
+  app.send('pointerup');
+  assert.deepEqual(app.calls, [['selection', ['b'], ['folder-b', 'a']]]);
+  app.send('pointerdown', { target: app.folderBlank, clientX: 300, clientY: 500 });
+  app.send('pointermove', { clientX: 350, clientY: 550 });
+  app.send('keydown', { key: 'Escape' });
+  assert.deepEqual(app.calls.at(-1), ['selection', ['b'], ['a', 'folder-b']]);
+  assert.equal(app.batch(), true);
+});
+
+test('empty collection marquee clears folders and games and exits batch mode', () => {
+  const app = fixture({ collections: true, batch: true, selected: ['a'], selectedFolders: ['a'] });
+  app.send('pointerdown', { target: app.folderBlank, clientX: 300, clientY: 500 });
+  app.send('pointermove', { clientX: 350, clientY: 550 });
+  app.send('pointerup');
+  assert.deepEqual(app.calls, [['selection', [], []], ['dispatch', 'batch-toggle']]);
+  assert.equal(app.batch(), false);
 });

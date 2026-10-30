@@ -435,12 +435,72 @@ pub fn create_named_checked(
     retention: usize,
     check: impl Fn() -> Status,
 ) -> Result<Snapshot, Message> {
+    create_unique_named_checked(data, game, roots, note, retention, check)
+        .map(|result| result.snapshot)
+}
+
+pub struct BackupResult {
+    pub snapshot: Snapshot,
+    pub created: bool,
+}
+
+/// Reuse any verified historical snapshot with identical paths and contents.
+/// Duplicate requests do not consume a sequence number or prune history.
+pub fn create_unique_named_checked(
+    data: &Path,
+    game: (&str, &str),
+    roots: &[String],
+    note: &str,
+    retention: usize,
+    check: impl Fn() -> Status,
+) -> Result<BackupResult, Message> {
+    create_compared(data, game, roots, note, retention, check, false)
+}
+
+/// Skip automatic copies when only recognized engine bookkeeping changed.
+/// Manual and restore-safety backups continue to compare the exact bytes.
+pub fn create_automatic_named_checked(
+    data: &Path,
+    game: (&str, &str),
+    roots: &[String],
+    note: &str,
+    retention: usize,
+    check: impl Fn() -> Status,
+) -> Result<BackupResult, Message> {
+    create_compared(data, game, roots, note, retention, check, true)
+}
+
+fn create_compared(
+    data: &Path,
+    game: (&str, &str),
+    roots: &[String],
+    note: &str,
+    retention: usize,
+    check: impl Fn() -> Status,
+    automatic: bool,
+) -> Result<BackupResult, Message> {
     let (game_id, title) = game;
     let status = check();
     require_stopped(status)?;
     let entries = inventory(roots)?;
     if entries.is_empty() {
         return Err(Message::new("backup.no_saves"));
+    }
+    if let Some(snapshot) = matching_entries(
+        data,
+        &list(data, game_id)?,
+        roots.len(),
+        &entries,
+        automatic.then_some(roots),
+    ) {
+        if fingerprints(&inventory(roots)?) != fingerprints(&entries) {
+            return Err(error("Save changed while checking history"));
+        }
+        require_stopped(check())?;
+        return Ok(BackupResult {
+            snapshot: snapshot.clone(),
+            created: false,
+        });
     }
     let parent = directory(data, game_id)?;
     fs::create_dir_all(&parent).map_err(error)?;
@@ -500,8 +560,89 @@ pub fn create_named_checked(
     require_stopped(check())?;
     fs::rename(temporary.path(), parent.join(&snapshot.id)).map_err(error)?;
     prune(data, game_id, retention.max(1))?;
-    Ok(snapshot)
+    Ok(BackupResult {
+        snapshot,
+        created: true,
+    })
 }
+
+/// Identify the current save from content, independently of timestamps and notes.
+pub fn matching_current(
+    data: &Path,
+    history: &[Snapshot],
+    roots: &[String],
+) -> Result<Option<String>, Message> {
+    if history.is_empty() || roots.is_empty() {
+        return Ok(None);
+    }
+    let entries = inventory(roots)?;
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    Ok(matching_entries(data, history, roots.len(), &entries, Some(roots)).map(|snapshot| snapshot.id.clone()))
+}
+
+fn matching_entries<'a>(
+    data: &Path,
+    history: &'a [Snapshot],
+    root_count: usize,
+    entries: &[File],
+    semantic_roots: Option<&[String]>,
+) -> Option<&'a Snapshot> {
+    let current = fingerprints(entries);
+    history.iter().find(|snapshot| {
+        snapshot.roots.len() == root_count
+            && snapshot.files.len() == entries.len()
+            && (fingerprints(&snapshot.files) == current
+                || semantic_roots.is_some_and(|roots| equivalent_entries(data, snapshot, roots, entries)))
+            // A damaged or missing backup must never suppress a new safety copy.
+            && content_directory(data, &snapshot.game_id, &snapshot.id).is_ok_and(|directory| {
+                snapshot.files.iter().all(|file| {
+                    file.root < root_count && relative(&file.path).is_ok_and(|path| {
+                        let path = directory.join(file.root.to_string()).join(path);
+                        fs::metadata(&path).is_ok_and(|meta| meta.len() == file.size)
+                            && hash(&path).is_ok_and(|hash| hash == file.hash)
+                    })
+                })
+            })
+    })
+}
+
+fn equivalent_entries(
+    data: &Path,
+    snapshot: &Snapshot,
+    roots: &[String],
+    entries: &[File],
+) -> bool {
+    let Ok(directory) = content_directory(data, &snapshot.game_id, &snapshot.id) else {
+        return false;
+    };
+    let previous: BTreeMap<_, _> = snapshot
+        .files
+        .iter()
+        .map(|file| ((file.root, &file.path), file))
+        .collect();
+    entries.iter().all(|file| {
+        let Some(saved) = previous.get(&(file.root, &file.path)) else {
+            return false;
+        };
+        if saved.hash == file.hash {
+            return true;
+        }
+        let Ok(path) = relative(&file.path) else {
+            return false;
+        };
+        let Some(root) = roots.get(file.root) else {
+            return false;
+        };
+        let Some(current) = crate::saves::backup_identity(&Path::new(root).join(&path)) else {
+            return false;
+        };
+        crate::saves::backup_identity(&directory.join(file.root.to_string()).join(path))
+            .is_some_and(|previous| previous == current)
+    })
+}
+
 fn fingerprints(files: &[File]) -> BTreeMap<String, String> {
     files
         .iter()
@@ -811,6 +952,232 @@ pub fn restore_checked(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn control_bytes(text: &str) -> Vec<u8> {
+        let raw: Vec<_> = text.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        let mut encoder =
+            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(&raw).unwrap();
+        let packed = encoder.finish().unwrap();
+        let mut bytes = vec![0xfe, 0xfe, 2, 0xff, 0xfe];
+        bytes.extend_from_slice(&(packed.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(&(raw.len() as u64).to_le_bytes());
+        bytes.extend(packed);
+        bytes
+    }
+
+    #[test]
+    fn automatic_backup_ignores_boot_counters_and_dictionary_order_but_manual_is_exact() {
+        let temp = tempfile::tempdir().unwrap();
+        let saves = temp.path().join("saves");
+        fs::create_dir(&saves).unwrap();
+        let roots = vec![display_path(&saves)];
+        let data = temp.path().join("backups");
+        fs::write(saves.join("data_continue.bmp"), b"unchanged story slot").unwrap();
+        fs::write(saves.join("datasc.ksd"), control_bytes(r#"(const) %["voice" => (const) %["a" => 80, "b" => 90], "fullScreen" => 1, "windowWidth" => 1280]"#)).unwrap();
+        fs::write(saves.join("datasu.ksd"), control_bytes(r#"(const) %["trail_custom_exit_end" => 9, "trail_first_first" => 17, "cg_scene" => 1]"#)).unwrap();
+        let first = create(&data, "game", &roots, "manual", 10, Status::Stopped).unwrap();
+        fs::write(saves.join("datasc.ksd"), control_bytes(r#"(const) %["windowWidth" => 1280, "fullScreen" => 1, "voice" => (const) %["b" => 90, "a" => 80]]"#)).unwrap();
+        fs::write(saves.join("datasu.ksd"), control_bytes(r#"(const) %["cg_scene" => 1, "trail_first_first" => 18, "trail_custom_exit_end" => 10]"#)).unwrap();
+        for _ in 0..3 {
+            let result =
+                create_automatic_named_checked(&data, ("game", "Game"), &roots, "auto", 1, || {
+                    Status::Stopped
+                })
+                .unwrap();
+            assert!(!result.created);
+            assert_eq!(result.snapshot.id, first.id);
+        }
+        assert_eq!(list(&data, "game").unwrap().len(), 1);
+        assert_eq!(
+            matching_current(&data, &list(&data, "game").unwrap(), &roots).unwrap(),
+            Some(first.id)
+        );
+        let manual =
+            create_unique_named_checked(&data, ("game", "Game"), &roots, "manual", 10, || {
+                Status::Stopped
+            })
+            .unwrap();
+        assert!(manual.created);
+        assert_eq!(manual.snapshot.sequence, 2);
+    }
+
+    #[test]
+    fn automatic_backup_preserves_real_changes_and_rejects_damaged_history() {
+        let temp = tempfile::tempdir().unwrap();
+        let saves = temp.path().join("saves");
+        fs::create_dir(&saves).unwrap();
+        let roots = vec![display_path(&saves)];
+        let data = temp.path().join("backups");
+        let control = saves.join("system.ksd");
+        let initial = r#"(const) %["fullScreen" => 1, "windowWidth" => 1280, "trail_custom_exit_end" => 9, "cg_scene" => 0, "trail_story" => 1, "values" => (const) [1, 2], "volume" => 0x1.4p3, "optional" => null]"#;
+        fs::write(&control, control_bytes(initial)).unwrap();
+        let first = create(&data, "game", &roots, "", 10, Status::Stopped).unwrap();
+        for (from, to) in [
+            ("1280", "1920"),
+            ("\"cg_scene\" => 0", "\"cg_scene\" => 1"),
+            ("\"trail_story\" => 1", "\"trail_story\" => 2"),
+            ("[1, 2]", "[2, 1]"),
+            ("0x1.4p3", "0x1.5p3"),
+            ("null", "void"),
+            ("1280", "\"number:1280\""),
+            ("=> 9", "=> 0"),
+            ("\"cg_scene\"", "\"cg_new_scene\""),
+        ] {
+            fs::write(&control, control_bytes(&initial.replace(from, to))).unwrap();
+            assert_eq!(
+                matching_current(&data, std::slice::from_ref(&first), &roots).unwrap(),
+                None,
+                "{from} -> {to}"
+            );
+        }
+        fs::write(&control, control_bytes(&initial.replace("=> 9", "=> 10"))).unwrap();
+        fs::write(
+            data.join("game").join(&first.id).join("0/system.ksd"),
+            b"damaged backup",
+        )
+        .unwrap();
+        assert!(
+            create_automatic_named_checked(&data, ("game", "Game"), &roots, "auto", 10, || {
+                Status::Stopped
+            })
+            .unwrap()
+            .created
+        );
+        fs::write(saves.join("slot.sav"), b"new progress").unwrap();
+        assert!(
+            create_automatic_named_checked(&data, ("game", "Game"), &roots, "auto", 10, || {
+                Status::Stopped
+            })
+            .unwrap()
+            .created
+        );
+        fs::write(saves.join("slot.sav"), b"changed progress").unwrap();
+        assert!(
+            create_automatic_named_checked(&data, ("game", "Game"), &roots, "auto", 10, || {
+                Status::Stopped
+            })
+            .unwrap()
+            .created
+        );
+    }
+
+    #[test]
+    fn duplicate_backup_reuses_older_content_without_pruning_or_consuming_sequence() {
+        let temp = tempfile::tempdir().unwrap();
+        let saves = temp.path().join("save");
+        fs::create_dir(&saves).unwrap();
+        let roots = vec![display_path(&saves)];
+        let data = temp.path().join("backups");
+        fs::write(saves.join("slot.sav"), b"first").unwrap();
+        let first = create(&data, "game", &roots, "manual", 10, Status::Stopped).unwrap();
+        fs::write(saves.join("slot.sav"), b"other").unwrap();
+        let second = create(&data, "game", &roots, "manual", 10, Status::Stopped).unwrap();
+        fs::write(saves.join("slot.sav"), b"first").unwrap();
+        let duplicate = create_unique_named_checked(
+            &data,
+            ("game", "Game"),
+            &roots,
+            "Automatic backup",
+            1,
+            || Status::Stopped,
+        )
+        .unwrap();
+        assert!(!duplicate.created);
+        assert_eq!(duplicate.snapshot.id, first.id);
+        let history = list(&data, "game").unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(
+            matching_current(&data, &history, &roots).unwrap(),
+            Some(first.id)
+        );
+        fs::write(saves.join("slot.sav"), b"third").unwrap();
+        assert_eq!(
+            create(&data, "game", &roots, "", 10, Status::Stopped)
+                .unwrap()
+                .sequence,
+            second.sequence + 1
+        );
+    }
+
+    #[test]
+    fn restore_reuses_existing_safety_backup_and_matches_restored_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let saves = temp.path().join("save");
+        fs::create_dir(&saves).unwrap();
+        let roots = vec![display_path(&saves)];
+        let data = temp.path().join("backups");
+        fs::write(saves.join("slot.sav"), b"first").unwrap();
+        let first = create(&data, "game", &roots, "", 10, Status::Stopped).unwrap();
+        fs::write(saves.join("slot.sav"), b"second").unwrap();
+        create(&data, "game", &roots, "", 10, Status::Stopped).unwrap();
+        let plan = preview(&data, "game", &first.id, &roots, Status::Stopped).unwrap();
+        restore(&data, &plan, 10, Status::Stopped).unwrap();
+        let history = list(&data, "game").unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(
+            matching_current(&data, &history, &roots).unwrap(),
+            Some(first.id)
+        );
+    }
+
+    #[test]
+    fn damaged_backup_does_not_suppress_new_backup() {
+        let temp = tempfile::tempdir().unwrap();
+        let saves = temp.path().join("save");
+        fs::create_dir(&saves).unwrap();
+        let roots = vec![display_path(&saves)];
+        let data = temp.path().join("backups");
+        fs::write(saves.join("slot.sav"), b"first").unwrap();
+        let first = create(&data, "game", &roots, "", 10, Status::Stopped).unwrap();
+        fs::write(
+            data.join("game").join(&first.id).join("0/slot.sav"),
+            b"wrong",
+        )
+        .unwrap();
+        assert_eq!(
+            matching_current(&data, &list(&data, "game").unwrap(), &roots).unwrap(),
+            None
+        );
+        assert!(
+            create_unique_named_checked(&data, ("game", "Game"), &roots, "", 10, || {
+                Status::Stopped
+            })
+            .unwrap()
+            .created
+        );
+    }
+
+    #[test]
+    fn duplicate_detection_accounts_for_file_paths_and_all_roots() {
+        let temp = tempfile::tempdir().unwrap();
+        let saves = temp.path().join("save");
+        let extra = temp.path().join("extra");
+        fs::create_dir(&saves).unwrap();
+        fs::create_dir(&extra).unwrap();
+        let roots = vec![display_path(&saves), display_path(&extra)];
+        let data = temp.path().join("backups");
+        fs::write(saves.join("slot.sav"), b"first").unwrap();
+        fs::write(extra.join("system.sav"), b"settings").unwrap();
+        create(&data, "game", &roots, "", 10, Status::Stopped).unwrap();
+        fs::rename(saves.join("slot.sav"), saves.join("other.sav")).unwrap();
+        assert_eq!(
+            matching_current(&data, &list(&data, "game").unwrap(), &roots).unwrap(),
+            None
+        );
+        create(&data, "game", &roots, "", 10, Status::Stopped).unwrap();
+        fs::write(extra.join("system.sav"), b"changed!").unwrap();
+        assert!(
+            create_unique_named_checked(&data, ("game", "Game"), &roots, "", 10, || {
+                Status::Stopped
+            })
+            .unwrap()
+            .created
+        );
+        assert_eq!(
+            matching_current(&data, &list(&data, "game").unwrap(), &roots[..1]).unwrap(),
+            None
+        );
+    }
     #[test]
     fn named_backup_numbers_increase_after_history_is_deleted() {
         let temp = tempfile::tempdir().unwrap();
@@ -848,6 +1215,7 @@ mod tests {
         let migrated = list(&data, "game").unwrap().remove(0);
         assert_eq!(migrated.id, first.id);
         assert!(migrated.sequence > 0);
+        fs::write(saves.join("slot.sav"), b"new save").unwrap();
         let next =
             create_named_checked(&data, ("game", "Game"), &roots, "", 10, || Status::Stopped)
                 .unwrap();
@@ -863,7 +1231,9 @@ mod tests {
         let data = temp.path().join("backups");
         let first = create(&data, "game", &roots, "locked", 1, Status::Stopped).unwrap();
         update(&data, "game", &first.id, true, "locked").unwrap();
+        fs::write(saves.join("slot.sav"), b"two").unwrap();
         create(&data, "game", &roots, "second", 1, Status::Stopped).unwrap();
+        fs::write(saves.join("slot.sav"), b"three").unwrap();
         create(&data, "game", &roots, "third", 1, Status::Stopped).unwrap();
         assert_eq!(list(&data, "game").unwrap().len(), 2);
         fs::remove_file(saves.join("slot.sav")).unwrap();

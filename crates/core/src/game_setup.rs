@@ -3,9 +3,12 @@ use crate::{Game, GameEdit, Settings, config::display_path, data_sources, provid
 use galgear_i18n::Message;
 use std::{collections::BTreeSet, path::Path};
 
-pub fn mark_new(settings: &mut Settings, games: &[Game], known: &BTreeSet<String>) -> bool {
+pub fn mark_new(settings: &mut Settings, games: &[Game], _known: &BTreeSet<String>) -> bool {
     let mut changed = false;
-    for game in games.iter().filter(|game| !known.contains(&game.id)) {
+    for game in games {
+        if crate::catalog::is_excluded(game, settings) {
+            continue;
+        }
         let edit = settings
             .game_edits
             .entry(game.id.clone())
@@ -119,7 +122,7 @@ mod tests {
     }
 
     #[test]
-    fn new_imports_are_pending_but_cached_and_confirmed_games_are_preserved() {
+    fn unconfirmed_cached_games_are_pending_and_confirmed_games_are_preserved() {
         let games: Vec<_> = ["old", "new", "confirmed"]
             .into_iter()
             .map(|id| {
@@ -142,7 +145,7 @@ mod tests {
             &games,
             &BTreeSet::from(["old".into()])
         ));
-        assert!(!settings.game_edits.contains_key("old"));
+        assert!(settings.game_edits["old"].setup_pending);
         assert!(settings.game_edits["new"].setup_pending);
         assert!(!settings.game_edits["confirmed"].setup_pending);
         assert!(!mark_new(

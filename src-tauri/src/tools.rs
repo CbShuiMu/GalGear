@@ -1,6 +1,6 @@
 //! Game launch, runtime observation and external tools.
 use crate::{
-    preferences::update, save_commands::backup, save_commands::backup_data, state, state::AppState,
+    preferences::update, save_commands::automatic_backup, save_commands::backup_data, state, state::AppState,
     state::begin_write, state::find_game, state::snapshot,
 };
 use galgear_core::{Settings, playtime, runtime, runtime::Status, saves, snapshots};
@@ -8,10 +8,39 @@ use galgear_i18n::Message;
 use std::{collections::BTreeMap, path::Path, path::PathBuf, sync::Mutex};
 use tauri::{Emitter, Manager, State};
 
+#[cfg(windows)]
+use crate::bundled_tools::{MagpieProcess, start_magpie};
+#[cfg(not(windows))]
+type MagpieProcess = std::process::Child;
+
 #[derive(Default)]
 pub(crate) struct RuntimeState {
     running: Mutex<BTreeMap<String, std::process::Child>>,
-    magpie: Mutex<Option<std::process::Child>>,
+    magpie: Mutex<Option<MagpieProcess>>,
+    shutting_down: std::sync::atomic::AtomicBool,
+}
+
+pub(crate) fn shutdown_magpie(state: &AppState) -> Result<(), Message> {
+    state.tools.shutting_down.store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut owned = state.tools.magpie.lock().map_err(|_| Message::new("error.operation"))?;
+    if let Some(child) = owned.as_mut() {
+        #[cfg(windows)]
+        child.stop()?;
+        #[cfg(not(windows))]
+        if child.try_wait().map_err(|e| Message::detail("tools.error", e))?.is_none() {
+            child.kill().map_err(|e| Message::detail("tools.error", e))?;
+            child.wait().map_err(|e| Message::detail("tools.error", e))?;
+        }
+    } else {
+        #[cfg(windows)]
+        if let Ok(settings) = snapshot(state)
+            && let Ok(executable) = tool_path(&settings.magpie, "tools.magpie_missing")
+        {
+            crate::bundled_tools::stop_magpie(&executable)?;
+        }
+    }
+    *owned = None;
+    Ok(())
 }
 
 fn normalize_tool_path(path: &str) -> &str {
@@ -39,34 +68,58 @@ fn ensure_magpie(state: &AppState, settings: &Settings) -> Result<String, Messag
     let executable = tool_path(&settings.magpie, "tools.magpie_missing")?;
     let hotkey = crate::bundled_tools::magpie_hotkey(&executable, &settings.magpie_hotkey)?;
     let mut owned = state.tools.magpie.lock().map_err(|_| Message::new("error.operation"))?;
+    if state.tools.shutting_down.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(Message::new("error.operation"));
+    }
     if runtime::detect(executable.to_str()) == Status::Running {
+        #[cfg(windows)]
+        crate::bundled_tools::wait_magpie(&executable)?;
+        if owned.as_mut().is_none_or(|child| child.try_wait().is_ok_and(|status| status.is_some())) {
+            *owned = Some(start_magpie(&executable)?);
+        }
         return Ok(hotkey);
     }
     if let Some(child) = owned.as_mut() {
         let _ = child.try_wait();
     }
-    let mut command = std::process::Command::new(&executable);
+    *owned = Some(start_magpie(&executable)?);
+    Ok(hotkey)
+}
+
+#[cfg(not(windows))]
+fn start_magpie(executable: &Path) -> Result<MagpieProcess, Message> {
+    let mut command = std::process::Command::new(executable);
     command.arg("-t").current_dir(executable.parent().unwrap_or(Path::new(".")));
+    command.spawn().map_err(|e| Message::detail("tools.error", e))
+}
+
+fn save_magpie_hotkey(state: &AppState, executable: &Path, hotkey: &str) -> Result<String, Message> {
+    crate::bundled_tools::validate_magpie_hotkey(executable, hotkey)?;
+    let current = crate::bundled_tools::magpie_hotkey(executable, "")?;
+    // A redundant Save must not interrupt scaling or restart the application.
+    if current == crate::bundled_tools::canonical_magpie_hotkey(hotkey)? { return Ok(current); }
+    let mut owned = state.tools.magpie.lock().map_err(|_| Message::new("error.operation"))?;
+    if state.tools.shutting_down.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err(Message::new("error.operation"));
+    }
     #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW; Magpie's -t also hides its main window.
-    }
-    let mut child = command.spawn().map_err(|e| Message::detail("tools.error", e))?;
-    #[cfg(windows)]
-    {
-        use std::os::windows::io::AsRawHandle;
-        // Wait for the GUI message loop, after Magpie has registered its scaling hotkeys.
-        let ready = unsafe { windows_sys::Win32::System::Threading::WaitForInputIdle(child.as_raw_handle(), 8000) };
-        if ready != 0 || child.try_wait().map_err(|e| Message::detail("tools.error", e))?.is_some() {
-            *owned = Some(child);
-            return Err(Message::new("tools.magpie_start"));
-        }
-    }
-    *owned = Some(child);
-    if runtime::detect(executable.to_str()) != Status::Running {
-        return Err(Message::new("tools.magpie_start"));
-    }
+    let running = if let Some(child) = owned.as_mut() {
+        let running = child.try_wait().map_err(|e| Message::detail("tools.error", e))?.is_none();
+        child.stop()?;
+        *owned = None;
+        crate::bundled_tools::stop_magpie(executable)? || running
+    } else {
+        crate::bundled_tools::stop_magpie(executable)?
+    };
+    #[cfg(not(windows))]
+    let running = false;
+    // Read again after exit to include any pending Magpie settings save.
+    let saved = crate::bundled_tools::write_magpie_hotkey(executable, hotkey);
+    let restarted = if running {
+        start_magpie(executable).map(|child| *owned = Some(child))
+    } else { Ok(()) };
+    let hotkey = saved?;
+    restarted?;
     Ok(hotkey)
 }
 
@@ -179,32 +232,54 @@ pub(crate) fn launch_game(
 }
 
 #[tauri::command]
-pub(crate) fn configure_tools(
+pub(crate) async fn configure_tools(
     locale_emulator: String,
     magpie: String,
     magpie_hotkey: String,
     backup_retention: usize,
-    state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Settings, Message> {
-    runtime::hotkey_keys(&magpie_hotkey).map_err(|e| Message::detail("tools.error", e))?;
-    if !(1..=1000).contains(&backup_retention) {
-        return Err(Message::new("error.operation"));
-    }
-    let locale_emulator = normalize_tool_path(&locale_emulator);
-    let magpie = normalize_tool_path(&magpie);
-    if !locale_emulator.is_empty() {
-        tool_path(locale_emulator, "tools.locale_missing")?;
-    }
-    if !magpie.is_empty() {
-        tool_path(magpie, "tools.magpie_missing")?;
-    }
-    update(&state, |s| {
-        s.locale_emulator = locale_emulator.to_owned();
-        s.magpie = magpie.to_owned();
-        s.magpie_hotkey = magpie_hotkey;
-        s.backup_retention = backup_retention;
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        configure_tools_at(&handle.state::<AppState>(), &locale_emulator, &magpie, &magpie_hotkey, backup_retention)
+    }).await.map_err(|e| Message::detail("tools.error", e))?
+}
+
+fn configure_tools_at(
+    state: &AppState, locale_emulator: &str, magpie: &str, magpie_hotkey: &str, backup_retention: usize,
+) -> Result<Settings, Message> {
+    runtime::hotkey_keys(magpie_hotkey).map_err(|e| Message::detail("tools.error", e))?;
+    if !(1..=1000).contains(&backup_retention) { return Err(Message::new("error.operation")); }
+    let locale_emulator = normalize_tool_path(locale_emulator);
+    let magpie = normalize_tool_path(magpie);
+    if !locale_emulator.is_empty() { tool_path(locale_emulator, "tools.locale_missing")?; }
+    let executable = if magpie.is_empty() { None } else { Some(tool_path(magpie, "tools.magpie_missing")?) };
+    update(state, |settings| {
+        let hotkey = if let Some(executable) = &executable {
+            save_magpie_hotkey(state, executable, magpie_hotkey)?
+        } else { magpie_hotkey.trim().into() };
+        settings.locale_emulator = locale_emulator.into();
+        settings.magpie = magpie.into();
+        settings.magpie_hotkey = hotkey;
+        settings.backup_retention = backup_retention;
         Ok(())
     })
+}
+
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct MagpieHotkey { magpie: String, hotkey: String }
+
+pub(crate) fn sync_magpie_hotkey(state: &AppState) -> Result<Option<MagpieHotkey>, Message> {
+    let mut settings = state.settings.lock().map_err(|_| Message::new("error.config_state"))?;
+    if settings.magpie.is_empty() { return Ok(None); }
+    let executable = tool_path(&settings.magpie, "tools.magpie_missing")?;
+    let hotkey = crate::bundled_tools::magpie_hotkey(&executable, &settings.magpie_hotkey)?;
+    if hotkey == settings.magpie_hotkey { return Ok(None); }
+    let mut next = settings.clone();
+    next.magpie_hotkey = hotkey.clone();
+    state.store.save(&next)?;
+    *settings = next;
+    Ok(Some(MagpieHotkey { magpie: settings.magpie.clone(), hotkey }))
 }
 
 #[tauri::command]
@@ -216,15 +291,17 @@ pub(crate) fn set_game_tools(
     upscale: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
-    find_game(&state, &id)?;
+    let game = find_game(&state, &id)?;
     if !["normal", "locale"].contains(&launch_mode.as_str()) {
         return Err(Message::new("error.operation"));
     }
     update(&state, |s| {
+        let backup_available = !auto_backup || galgear_core::saves::discover(&game, s.game_edits.get(&id))
+            .locations.iter().any(|location| location.exists && location.confidence == "confirmed");
         let edit = s.game_edits.entry(id).or_default();
         edit.launch_mode = launch_mode;
         edit.locale_profile = locale_profile;
-        edit.auto_backup = auto_backup;
+        edit.auto_backup = auto_backup && backup_available;
         if let Some(upscale) = upscale {
             edit.upscale = upscale;
         }
@@ -279,6 +356,18 @@ pub(crate) fn schedule_upscale(
 }
 
 pub(crate) fn scheduler(app: tauri::AppHandle) {
+    let hotkey_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let handle = hotkey_app.clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                if let Ok(Some(update)) = sync_magpie_hotkey(&handle.state::<AppState>()) {
+                    let _ = handle.emit("magpie-hotkey-updated", update);
+                }
+            }).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    });
     tauri::async_runtime::spawn(async move {
         let mut previous = BTreeMap::new();
         let mut sessions = galgear_core::play_sessions::Tracker::default();
@@ -371,10 +460,10 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
                 }
                 for id in sessions.observe(&current) {
                     if settings.game_edits.get(&id).is_some_and(|e| e.auto_backup) {
-                        let result = backup(id.clone(), "Automatic backup".into(), &state).await;
+                        let result = automatic_backup(id.clone(), &state).await;
                         let _ = app.emit(
                             "backup-completed",
-                            serde_json::json!({"id":id,"error":result.err()}),
+                            serde_json::json!({"id":id,"created":result.as_ref().ok(),"error":result.as_ref().err()}),
                         );
                     }
                 }
@@ -442,6 +531,45 @@ mod tests {
                 admin: true,
             },
         ]
+    }
+
+    #[test]
+    fn saving_and_observing_magpie_hotkeys_updates_both_settings_files() {
+        let data = tempfile::tempdir().unwrap();
+        let state = AppState::load(data.path().join("data")).unwrap();
+        let executable = data.path().join("Magpie.exe");
+        std::fs::write(&executable, []).unwrap();
+        std::fs::create_dir(data.path().join("config")).unwrap();
+        let config = data.path().join("config/config.json");
+        std::fs::write(&config, r#"{"shortcuts":{"scale":3137}}"#).unwrap();
+        let path = executable.to_str().unwrap();
+        let settings = configure_tools_at(&state, "", path, "Alt+Shift+B", 10).unwrap();
+        assert_eq!(settings.magpie_hotkey, "Alt+Shift+B");
+        assert_eq!(crate::bundled_tools::magpie_hotkey(&executable, "").unwrap(), settings.magpie_hotkey);
+        assert!(sync_magpie_hotkey(&state).unwrap().is_none());
+        // Simulate Magpie saving its own new shortcut, then a transient partial save.
+        std::fs::write(&config, r#"{"shortcuts":{"scale":629}}"#).unwrap();
+        assert_eq!(sync_magpie_hotkey(&state).unwrap().unwrap().hotkey, "Ctrl+F6");
+        assert_eq!(state.store.load().unwrap().magpie_hotkey, "Ctrl+F6");
+        std::fs::write(&config, "{").unwrap();
+        assert!(sync_magpie_hotkey(&state).is_err());
+        assert_eq!(snapshot(&state).unwrap().magpie_hotkey, "Ctrl+F6");
+        std::fs::write(&config, r#"{"shortcuts":{"scale":3139}}"#).unwrap();
+        assert_eq!(sync_magpie_hotkey(&state).unwrap().unwrap().hotkey, "Alt+Shift+C");
+    }
+
+    #[test]
+    fn failed_hotkey_save_preserves_galgear_preferences() {
+        let data = tempfile::tempdir().unwrap();
+        let state = AppState::load(data.path().join("data")).unwrap();
+        let executable = data.path().join("Magpie.exe");
+        std::fs::write(&executable, []).unwrap();
+        std::fs::create_dir(data.path().join("config")).unwrap();
+        let config = data.path().join("config/config.json");
+        std::fs::write(&config, r#"{"shortcuts":{"scale":3137,"windowedModeScale":3138}}"#).unwrap();
+        let previous = serde_json::to_value(snapshot(&state).unwrap()).unwrap();
+        assert!(configure_tools_at(&state, "", executable.to_str().unwrap(), "Alt+Shift+B", 20).is_err());
+        assert_eq!(serde_json::to_value(snapshot(&state).unwrap()).unwrap(), previous);
     }
 
     #[test]
@@ -530,6 +658,37 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "Starts an isolated Magpie; set GALGEAR_BUNDLED_SMOKE_ROOT to a disposable copy"]
+    fn saving_hotkey_restarts_running_magpie_with_the_new_configuration() {
+        let root = PathBuf::from(std::env::var("GALGEAR_BUNDLED_SMOKE_ROOT").unwrap());
+        let executable = root.join(crate::bundled_tools::MAGPIE);
+        assert_eq!(runtime::detect(executable.to_str()), Status::Stopped);
+        let data = tempfile::tempdir().unwrap();
+        let state = AppState::load(data.path().to_owned()).unwrap();
+        struct Cleanup<'a>(&'a AppState);
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                let _ = shutdown_magpie(self.0);
+            }
+        }
+        let _cleanup = Cleanup(&state);
+        let path = executable.to_str().unwrap();
+        let original = crate::bundled_tools::magpie_hotkey(&executable, "").unwrap();
+        let settings = configure_tools_at(&state, "", path, &original, 10).unwrap();
+        ensure_magpie(&state, &settings).unwrap();
+        let previous = state.tools.magpie.lock().unwrap().as_ref().unwrap().id();
+        let saved = configure_tools_at(&state, "", path, "Alt+Shift+B", 10).unwrap();
+        assert_eq!(saved.magpie_hotkey, "Alt+Shift+B");
+        assert_eq!(runtime::detect(executable.to_str()), Status::Running);
+        let current = state.tools.magpie.lock().unwrap().as_ref().unwrap().id();
+        assert_ne!(current, previous);
+        assert_eq!(crate::bundled_tools::magpie_hotkey(&executable, "").unwrap(), "Alt+Shift+B");
+        // A repeated save leaves the same live process in place.
+        configure_tools_at(&state, "", path, "Shift+Alt+B", 10).unwrap();
+        assert_eq!(state.tools.magpie.lock().unwrap().as_ref().unwrap().id(), current);
+    }
+
+    #[test]
     #[ignore = "Starts the bundled Magpie; set GALGEAR_BUNDLED_SMOKE_ROOT to the app folder"]
     fn bundled_magpie_starts_with_its_portable_configuration() {
         let root = PathBuf::from(std::env::var("GALGEAR_BUNDLED_SMOKE_ROOT").unwrap());
@@ -541,10 +700,7 @@ mod tests {
         let result = ensure_magpie(&state, &settings);
         let running = runtime::detect(executable.to_str());
         // Only stop the child started by this test, never a pre-existing instance.
-        if let Some(mut child) = state.tools.magpie.lock().unwrap().take() {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        shutdown_magpie(&state).unwrap();
         assert_eq!(result.unwrap(), "Alt+Shift+A");
         assert_eq!(running, Status::Running);
     }

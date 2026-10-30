@@ -12,7 +12,7 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $taskRoot 'dist') -Force | Out-Null
     & $bindgen --target web --out-dir (Join-Path $taskRoot 'dist\pkg') --out-name galgear_ui (Join-Path $taskRoot "target\wasm32-unknown-unknown\$profile\galgear_ui.wasm")
     if ($LASTEXITCODE -ne 0) { throw 'WebAssembly 绑定生成失败。' }
-    Copy-Item -LiteralPath (Join-Path $taskRoot 'web\index.html'),(Join-Path $taskRoot 'web\styles.css'),(Join-Path $taskRoot 'web\theme.css'),(Join-Path $taskRoot 'web\detail.css'),(Join-Path $taskRoot 'web\library.css'),(Join-Path $taskRoot 'web\appearance.css'),(Join-Path $taskRoot 'web\bridge.js'),(Join-Path $taskRoot 'web\navigation.js'),(Join-Path $taskRoot 'web\gamepad.js'),(Join-Path $taskRoot 'web\home.css'),(Join-Path $taskRoot 'web\home.js') -Destination (Join-Path $taskRoot 'dist') -Force
+    Copy-Item -LiteralPath (Join-Path $taskRoot 'web\index.html'),(Join-Path $taskRoot 'web\updater.html'),(Join-Path $taskRoot 'web\styles.css'),(Join-Path $taskRoot 'web\theme.css'),(Join-Path $taskRoot 'web\detail.css'),(Join-Path $taskRoot 'web\library.css'),(Join-Path $taskRoot 'web\appearance.css'),(Join-Path $taskRoot 'web\bridge.js'),(Join-Path $taskRoot 'web\navigation.js'),(Join-Path $taskRoot 'web\gamepad.js'),(Join-Path $taskRoot 'web\home.css'),(Join-Path $taskRoot 'web\home.js') -Destination (Join-Path $taskRoot 'dist') -Force
     Copy-Item -LiteralPath (Join-Path $taskRoot 'web\assets') -Destination (Join-Path $taskRoot 'dist') -Recurse -Force
 } finally { Pop-Location }
 

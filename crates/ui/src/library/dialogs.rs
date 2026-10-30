@@ -215,7 +215,7 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
             let query = features::form(app, "folder-query").to_lowercase();
             for (folder, _) in ordered(&app.settings.collections, &app.library.expanded, false) {
                 let path = folder_path(&app.settings.collections, &folder.id);
-                if path.to_lowercase().contains(&query) {
+                if super::accepts_games(&app.settings.collections, &folder.id) && path.to_lowercase().contains(&query) {
                     html.push_str(&button(
                         "collection-pick",
                         &folder.id,

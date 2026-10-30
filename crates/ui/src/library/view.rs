@@ -107,9 +107,9 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             || !app.library.search.is_empty()
             || app.library.has_filters()
         {
-            format!("{} / {}", games.len(), app.catalog.games.len())
+            format!("{} / {}", games.len(), app.catalog.games.iter().filter(|game| crate::game_setup::visible(&app.settings, game)).count())
         } else {
-            app.catalog.games.len().to_string()
+            app.catalog.games.iter().filter(|game| crate::game_setup::visible(&app.settings, game)).count().to_string()
         };
         let _ = write!(
             html,
@@ -172,7 +172,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
         ));
         let _ = write!(
             html,
-            r#"<details class="action-menu add-menu"><summary class="button primary icon-only" aria-label="{}" title="{}">{}</summary><div>{}{}</div></details>"#,
+            r#"<div class="add-menu"><button type="button" class="button primary icon-only add-trigger" aria-label="{}" title="{}" aria-expanded="false" aria-controls="library-add-options">{}</button><div class="add-surface"><div id="library-add-options" class="add-options" inert>{}{}</div></div></div>"#,
             t(app, "common.add"),
             t(app, "common.add"),
             icon("plus"),
@@ -206,7 +206,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
                 "games.scan_progress",
                 &[
                     ("folders", &app.library.scan_folders.to_string()),
-                    ("count", &app.catalog.games.len().to_string())
+                    ("count", &app.catalog.games.iter().filter(|game| crate::game_setup::visible(&app.settings, game)).count().to_string())
                 ]
             )),
             button(
@@ -309,21 +309,23 @@ fn collection_toolbar(html: &mut String, app: &App) {
             app.busy(),
         ));
     } else {
-        html.push_str(&button(
-            "folder-new",
-            app.library.collection.as_deref().unwrap_or(""),
-            t(
-                app,
-                if app.library.collection.is_some() {
-                    "folders.new_child"
-                } else {
-                    "folders.new"
-                },
-            ),
-            "create_new_folder",
-            "primary",
-            app.busy(),
-        ));
+        if app.library.collection.as_deref().is_none_or(|id| super::parent_allowed(&app.settings.collections, id, None)) {
+            html.push_str(&button(
+                "folder-new",
+                app.library.collection.as_deref().unwrap_or(""),
+                t(
+                    app,
+                    if app.library.collection.is_some() {
+                        "folders.new_child"
+                    } else {
+                        "folders.new"
+                    },
+                ),
+                "create_new_folder",
+                "primary",
+                app.busy(),
+            ));
+        }
         if let Some(id) = &app.library.collection {
             html.push_str(&button(
                 "folder-edit",
@@ -343,7 +345,7 @@ fn collection_toolbar(html: &mut String, app: &App) {
             "secondary icon-only",
             app.busy(),
         ));
-        if app.library.collection.is_some() {
+        if app.library.collection.as_deref().is_some_and(|id| super::accepts_games(&app.settings.collections, id)) {
             html.push_str(&button(
                 "folder-add-games",
                 "",
@@ -366,8 +368,11 @@ fn folder_cards(html: &mut String, app: &App) {
         .filter(|f| f.parent == app.library.collection)
     {
         let selected = app.library.checked_folders.contains(&folder.id);
-        write!(html,r#"<article class="folder-card {}" data-folder-id="{}" data-drop-folder="{}"><button class="folder-face" data-action="{}" data-value="{}" {}>{}<strong>{}</strong></button>"#,
-            if selected{"is-selected"}else{""},esc(&folder.id),esc(&folder.id),
+        let drop_target = if super::accepts_games(&app.settings.collections, &folder.id) {
+            format!(r#" data-drop-folder="{}""#, esc(&folder.id))
+        } else { String::new() };
+        write!(html,r#"<article class="folder-card {}" data-folder-id="{}"{}><button class="folder-face" data-action="{}" data-value="{}" {}>{}<strong>{}</strong></button>"#,
+            if selected{"is-selected"}else{""},esc(&folder.id),drop_target,
             if app.library.batch{"folder-select"}else{"folder-open"},esc(&folder.id),
             if app.library.batch {format!("aria-pressed=\"{selected}\"")}else{String::new()},icon("folder"),esc(&folder.name)).unwrap();
         if app.library.batch {
@@ -459,7 +464,8 @@ fn page_content(html: &mut String, app: &App) {
     if app.page == "collections" {
         collection_toolbar(html, app);
         folder_cards(html, app);
-        if app.library.collection.is_none() {
+        if app.library.collection.is_none()
+            || (games.is_empty() && app.settings.collections.iter().any(|f| f.parent == app.library.collection)) {
             html.push_str("</section>");
             return;
         }
@@ -481,7 +487,7 @@ fn page_content(html: &mut String, app: &App) {
                 app,
                 if empty_folder {
                     "folders.empty"
-                } else if app.catalog.games.is_empty() {
+                } else if !app.catalog.games.iter().any(|game| crate::game_setup::visible(&app.settings, game)) {
                     "games.none"
                 } else {
                     "games.no_match"
@@ -491,7 +497,7 @@ fn page_content(html: &mut String, app: &App) {
                 app,
                 if empty_folder {
                     "folders.empty_hint"
-                } else if app.catalog.games.is_empty() {
+                } else if !app.catalog.games.iter().any(|game| crate::game_setup::visible(&app.settings, game)) {
                     "games.none_description"
                 } else {
                     "games.no_match_description"

@@ -272,26 +272,41 @@ pub fn trigger_magpie(_executable: &Path, _hotkey: &str) -> Result<(), String> {
 }
 
 /// Validate a chord before sending any keyboard input.
+// Names shared by Magpie config decoding and synthesized keyboard input.
+const HOTKEY_NAMES: &[(u16, &str)] = &[
+    (0x03, "Break"), (0x08, "Backspace"), (0x09, "Tab"), (0x0d, "Enter"),
+    (0x10, "Shift"), (0x11, "Ctrl"), (0x12, "Alt"), (0x13, "Pause"),
+    (0x20, "Space"), (0x21, "PageUp"), (0x22, "PageDown"), (0x23, "End"),
+    (0x24, "Home"), (0x25, "Left"), (0x26, "Up"), (0x27, "Right"), (0x28, "Down"),
+    (0x2c, "PrintScreen"), (0x2d, "Insert"), (0x2e, "Delete"), (0x5b, "Win"),
+    (0x6a, "Multiply"), (0x6b, "Add"), (0x6d, "Subtract"), (0x6e, "Decimal"), (0x6f, "Divide"),
+    (0xba, "Semicolon"), (0xbb, "Equals"), (0xbc, "Comma"), (0xbd, "Minus"),
+    (0xbe, "Period"), (0xbf, "Slash"), (0xc0, "Backtick"),
+    (0xdb, "LeftBracket"), (0xdc, "Backslash"), (0xdd, "RightBracket"), (0xde, "Quote"),
+];
+
+pub fn hotkey_key_name(key: u16) -> Option<String> {
+    match key {
+        0x30..=0x39 | 0x41..=0x5a => Some(char::from(key as u8).to_string()),
+        0x60..=0x69 => Some(format!("NumPad{}", key - 0x60)),
+        0x70..=0x87 => Some(format!("F{}", key - 0x6f)),
+        _ => HOTKEY_NAMES.iter().find(|(code, _)| *code == key).map(|(_, name)| (*name).into()),
+    }
+}
+
 pub fn hotkey_keys(hotkey: &str) -> Result<Vec<u16>, String> {
     let mut keys = Vec::new();
     for token in hotkey.split('+') {
-        let upper = token.trim().to_ascii_uppercase();
-        let key = match upper.as_str() {
-            "CTRL" => 0x11,
-            "ALT" => 0x12,
-            "SHIFT" => 0x10,
-            s if s.len() == 1 && s.as_bytes()[0].is_ascii_alphanumeric() => {
-                u16::from(s.as_bytes()[0])
-            }
-            _ => return Err("Use a chord such as Ctrl+Alt+A".into()),
-        };
-        if keys.contains(&key) {
-            return Err("Duplicate hotkey key".into());
+        let token = token.trim();
+        let key = (0..=255).find(|key| hotkey_key_name(*key).is_some_and(|name| name.eq_ignore_ascii_case(token)))
+            .ok_or("Use a shortcut such as Alt+Shift+A or Ctrl+F12")?;
+        if keys.contains(&key) || keys.last().is_some_and(|key| !matches!(key, 0x10..=0x12 | 0x5b)) {
+            return Err("Use distinct modifiers followed by one key".into());
         }
         keys.push(key);
     }
-    if !(2..=4).contains(&keys.len()) || keys.last().is_none_or(|k| *k < 0x30) {
-        return Err("A modifier and a letter or digit are required".into());
+    if !(2..=5).contains(&keys.len()) || !matches!(keys[0], 0x10..=0x12 | 0x5b) {
+        return Err("At least one modifier is required".into());
     }
     Ok(keys)
 }

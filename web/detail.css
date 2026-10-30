@@ -124,8 +124,21 @@
 .tool-check{width:20px;height:20px;display:grid;place-items:center;border:1px solid var(--line);border-radius:4px}
 .game-tool-option[aria-checked=true] .tool-check{background:var(--pink-dark);border-color:var(--pink-dark);color:white}
 .tool-check .icon{width:16px;height:16px}
-.save-card-history{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
-.save-card-history h4{font-size:calc(var(--ui-font)*.8);color:var(--muted);font-weight:500;margin-bottom:10px}
+.save-card-history{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.current-save+.save-card-history{margin-top:6px;padding-top:4px;border-top:0}
+.detail-card .current-save,.current-save{margin-top:14px;font-size:calc(var(--ui-font)*.75);color:var(--muted);overflow-wrap:anywhere;line-height:1.6}
+.save-backup-actions{display:inline-flex;align-items:center;gap:8px}
+.archive-dialog{width:min(760px,100%)}
+.archive-dialog .current-save{margin:0 0 14px}
+.archive-list{list-style:none;margin:0;padding:0;max-height:calc(6 * 64px);overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-gutter:stable}
+.archive-list li{height:64px;box-sizing:border-box;display:flex;align-items:center;gap:16px;border-bottom:1px solid var(--line);font-size:calc(var(--ui-font)*.85)}
+.archive-list li>span{flex:1;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.archive-list time{flex-shrink:0;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.snapshot-delete-dialog{width:min(480px,100%)}
+.snapshot-delete-name{overflow-wrap:anywhere;color:var(--muted);margin-top:12px;font-size:calc(var(--ui-font)*.85)}
+.editor-overlay:has(.snapshot-delete-dialog){z-index:100}
+@media(max-width:560px){.archive-list li{gap:8px}.archive-list time{width:6.5em;white-space:normal}}
+.save-card-history h4{font-size:calc(var(--ui-font)*.8);color:var(--muted);font-weight:500;margin:0 0 10px}
 .save-card-history ul{list-style:none;padding:0;margin:0;display:grid;gap:9px}
 .save-card-history li{font-size:calc(var(--ui-font)*.8);line-height:1.6;overflow-wrap:anywhere}
 .metadata-provider-picker{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
@@ -160,3 +173,5 @@
 
 /* Shared card-action glyphs retain the library hover styling. */
 .detail-state-actions{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+
+.reference-detail .card-heading-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}.reference-detail .save-card .utility-heading,.reference-detail .patch-card .utility-heading{flex-wrap:wrap}.reference-detail .official-card[hidden]{display:none}

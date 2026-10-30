@@ -11,6 +11,7 @@ pub(crate) fn network_activities(app: &App) -> Vec<String> {
     let mut activities = Vec::new();
     for pending in app.requests.values() {
         let key = match pending {
+            Pending::AiRuntime => "skills.updating",
             Pending::Cloud(crate::cloud::Request::Upload(_)) => "cloud.upload",
             Pending::Cloud(crate::cloud::Request::Download(_)) => "cloud.download",
             Pending::Cloud(crate::cloud::Request::List(_)) => "cloud.refresh",
@@ -19,7 +20,7 @@ pub(crate) fn network_activities(app: &App) -> Vec<String> {
             Pending::CoverOptions => "cover.loading",
             Pending::Cover => "cover.saving",
             Pending::SelectMetadata => "network.metadata_fetch",
-            Pending::Resources => "network.patches",
+            Pending::Resources(_) => "network.patches",
             Pending::Update => "network.update",
             Pending::Account => "network.account",
             Pending::DownloadPreview => "network.resource",
@@ -138,11 +139,12 @@ pub(crate) fn paint(app: &App) {
     context_menu::render(&mut html, app);
     choices::popup(&mut html, app);
     game_setup::render(&mut html, app);
+    crate::updates::render(&mut html, app);
     html.push_str("</main>");
     if let Some((message, error)) = &app.toast {
-        write!(html, r#"<div class="toast {}" role="{}">{}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
-            if *error { "error" } else { "" }, if *error { "alert" } else { "status" },
-            icon(if *error { "error" } else { "check" }), esc(&message.render(app.settings.language)), t(app,"common.close"), icon("close")).unwrap();
+        write!(html, r#"<div class="toast {} {}" role="{}">{}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
+            if *error { "error" } else { "" }, if message.key.starts_with("save.ai_") || message.key.starts_with("local_patches.") || message.key.starts_with("update.") { "save-ai-toast" } else { "" }, if *error { "alert" } else { "status" },
+            if matches!(message.key.as_str(), "local_patches.installing" | "local_patches.switching") { r#"<span class="network-spinner" aria-hidden="true"></span>"#.into() } else { icon(if *error { "error" } else { "check" }) }, esc(&message.render(app.settings.language)), t(app,"common.close"), icon("close")).unwrap();
     }
     network_popup(&mut html, app);
     download_notice(&mut html, app);
@@ -212,7 +214,7 @@ pub(crate) fn account_label(app: &App) -> &'static str {
 }
 
 pub(crate) fn about_page(html: &mut String, app: &App) {
-    write!(html, r#"<section class="about-hero" aria-label="{}"><span class="about-logo">{}</span><h2>GalGear</h2><p>{}</p><p>Rust + Tauri</p></section>"#, t(app,"about.title"),brand(),t(app,"about.description")).unwrap();
+    write!(html, r#"<section class="about-hero" aria-label="{}"><span class="about-logo">{}</span><h2>GalGear</h2><p>{}</p><p>Rust + Tauri</p><p><a class="button secondary" href="https://github.com/CbShuiMu/GalGear" data-action="open-resource" data-value="https://github.com/CbShuiMu/GalGear">GitHub · CbShuiMu/GalGear</a></p></section>"#, t(app,"about.title"),brand(),t(app,"about.description")).unwrap();
 }
 
 pub(crate) fn detail(html: &mut String, app: &App, game: &Game) {

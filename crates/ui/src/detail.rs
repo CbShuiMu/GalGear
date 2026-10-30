@@ -11,6 +11,8 @@ use std::{collections::BTreeMap, fmt::Write};
 pub(crate) struct State {
     pub(crate) selected: Option<String>,
     pub(crate) history_open: bool,
+    pub(crate) archive_open: bool,
+    pub(crate) current_snapshot: Option<String>,
     pub(crate) history: Vec<SaveSnapshot>,
     pub(crate) history_game: Option<String>,
     pub(crate) restore_preview: Option<RestorePreview>,
@@ -29,6 +31,8 @@ impl Default for State {
         Self {
             selected: None,
             history_open: false,
+            archive_open: false,
+            current_snapshot: None,
             history: Vec::new(),
             history_game: None,
             restore_preview: None,
@@ -159,7 +163,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         .get(&game.id)
         .map(String::as_str)
         .unwrap_or("unknown");
-    write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}" data-detail-origin="{}" data-detail-game="{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing && !app.detail.editing_configuration{"editing"}else{""},esc(&game.id),esc(&app.page),esc(&game.id),icon("arrow"),t(app,if app.page == "home" { "detail.back_home" } else { "detail.back" })).unwrap();
+    write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}" data-detail-origin="{}" data-detail-game="{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing && !app.detail.editing_configuration{"editing"}else{""},esc(&game.id),esc(&app.page),esc(&game.id),icon("arrow"),t(app,match app.page.as_str() { "home" => "detail.back_home", "collections" => "detail.back_collections", _ => "detail.back" })).unwrap();
     if app.detail.editing && !app.detail.editing_configuration {
         html.push_str(&button(
             "detail-cancel",
@@ -343,13 +347,17 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     reading(html, app, game);
     saves_card(html, app, game, &edit);
     local_patches::render(html, app, game);
-    write!(html,"<section class=\"detail-card official-card\"><h3>{}</h3><p>{}</p>{}<small>{}</small></section></aside></div>",t(app,"official.title"),t(app,"official.help"),button("open-resource","https://www.dlsite.com/",t(app,"official.dlsite"),"arrow","secondary",false),t(app,"official.homepage")).unwrap();
+    write!(html,"<section class=\"detail-card official-card\" hidden><h3>{}</h3><p>{}</p>{}<small>{}</small></section></aside></div>",t(app,"official.title"),t(app,"official.help"),button("open-resource","https://www.dlsite.com/",t(app,"official.dlsite"),"arrow","secondary",false),t(app,"official.homepage")).unwrap();
     write!(html,r#"<button class="detail-back-top icon-button" data-action="detail-top" aria-label="{}" title="{}">{}</button>"#,t(app,"detail.back_top"),t(app,"detail.back_top"),icon("top")).unwrap();
     html.push_str("</div></section></div>");
     editor(html, app, game);
+    if app.detail.archive_open {
+        features::archive_dialog(html, app, game);
+    }
     if app.detail.history_open {
         features::history(html, app, game);
     }
+    features::delete_snapshot_dialog(html, app, game);
     crate::ai_summary::render(html, app, game);
 }
 
@@ -534,8 +542,9 @@ fn location(html: &mut String, app: &App, game: &Game) {
 fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
     write!(
         html,
-        "<section class=\"detail-card save-card\"><div class=\"utility-heading\"><h3>{}</h3>{}</div>",
+        "<section class=\"detail-card save-card\"><div class=\"utility-heading\"><h3>{}</h3><div class=\"card-heading-actions\">{}{}</div></div>",
         t(app, "save.title"),
+        button("ai-find-save", &game.id, t(app, "save.ai_find"), "", "quiet", features::save_busy(app)),
         button("choose-save", &game.id, t(app, "save.choose"), "folder", "quiet", features::save_busy(app))
     )
     .unwrap();
@@ -563,7 +572,7 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
         for location in report
             .locations
             .iter()
-            .filter(|location| selected.is_none_or(|path| location.path.eq_ignore_ascii_case(path)))
+            .filter(|location| edit.save_path_auto || selected.is_none_or(|path| location.path.eq_ignore_ascii_case(path)))
         {
             write!(html,"<div class=\"save-entry\"><p class=\"save-status\" title=\"{}\"><span></span>{}</p><p class=\"path-value\">{}</p><div class=\"detail-actions\">",t(app,match location.source.as_str(){"manual"=>"save.manual","config"=>"save.config","roaming"=>"save.roaming","documents"=>"save.documents","saved-games"=>"save.saved_games",_=>"save.game"}),t(app,if !location.exists{"save.uncreated"}else if location.confidence=="confirmed"{"backup.confirmed"}else{"save.candidate"}),esc(&location.path)).unwrap();
             if location.exists {
@@ -576,6 +585,7 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
                     false,
                 ));
                 if location.confidence == "confirmed" {
+                    html.push_str("<span class=\"save-backup-actions\">");
                     html.push_str(&button(
                         "backup-saves",
                         &game.id,
@@ -584,6 +594,11 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
                         "quiet",
                         features::save_busy(app),
                     ));
+                    html.push_str(&button(
+                        "save-history", &game.id, t(app, "backup.archive"), "update", "quiet",
+                        features::save_busy(app),
+                    ));
+                    html.push_str("</span>");
                 } else {
                     html.push_str(&button(
                         "confirm-save",
@@ -602,31 +617,17 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
         }
     }
     if app.detail.history_game.as_deref() == Some(&game.id) && !app.detail.history.is_empty() {
+        features::current_snapshot(html, app, game);
         write!(
             html,
             "<div class=\"save-card-history\"><h4>{}</h4><ul>",
             t(app, "backup.history")
         )
         .unwrap();
-        for snapshot in &app.detail.history {
-            write!(
-                html,
-                r#"<li><span>{}</span><div class="snapshot-row-actions"><button class="icon-button" data-action="preview-restore" data-value="{}" title="{}" aria-label="{}" {}>{}</button><button class="icon-button" data-action="snapshot-delete" data-value="{}" title="{}" aria-label="{}" {}>{}</button></div></li>"#,
-                esc(&features::snapshot_name(game, snapshot)),
-                esc(&snapshot.id),t(app,"backup.replace"),t(app,"backup.replace"),if features::save_busy(app){"disabled"}else{""},icon("download"),
-                esc(&snapshot.id),t(app,"tags.delete"),t(app,"tags.delete"),if snapshot.locked || features::save_busy(app){"disabled"}else{""},icon("trash")
-            )
-            .unwrap();
+        for snapshot in app.detail.history.iter().take(2) {
+            features::snapshot_row(html, app, game, snapshot, false);
         }
         html.push_str("</ul></div>");
-    }
-    if app
-        .detail
-        .confirmation
-        .as_ref()
-        .is_some_and(|(action, _)| action == "snapshot-delete")
-    {
-        features::confirmation(html, app);
     }
     html.push_str("</section>");
 }
@@ -646,10 +647,11 @@ fn tools_dialog(html: &mut String, app: &App, game: &Game) {
             edit.launch_mode == "locale",
         ),
         ("toggle-upscale", "tools.upscale", edit.upscale),
-        ("toggle-auto-backup", "backup.auto_short", edit.auto_backup),
+        ("toggle-auto-backup", "backup.auto_short", edit.auto_backup && features::can_auto_backup(app, &game.id)),
         ("toggle-ai-summary", "summary.option", edit.ai_summary),
     ] {
         let disabled = app.busy()
+            || action == "toggle-auto-backup" && !features::can_auto_backup(app, &game.id)
             || action == "toggle-ai-summary"
                 && ((!app.ai_available && !checked) || crate::ai_summary::busy(app, &game.id));
         write!(html,r#"<button class="game-tool-option" role="checkbox" aria-checked="{}" data-action="{}" {}><span class="tool-check">{}</span><span>{}</span></button>"#,checked,action,if disabled{"disabled"}else{""},if checked{icon("check")}else{String::new()},t(app,key)).unwrap();
@@ -679,6 +681,34 @@ mod tests {
     use galgear_i18n::Language;
     use serde_json::json;
     #[test]
+    fn save_card_limits_history_but_current_save_and_archive_include_older_backups() {
+        let mut app = App::default();
+        let game: Game = serde_json::from_value(json!({"id":"game","title":"Title","folder":"F:/Game","engine":"unknown","modified":0})).unwrap();
+        app.detail.selected = Some(game.id.clone());
+        app.detail.history_game = Some(game.id.clone());
+        app.detail.current_snapshot = Some("backup-1".into());
+        app.detail.history = (1..=8).rev().map(|index| serde_json::from_value(json!({
+            "id":format!("backup-{index}"), "name":format!("Title_1793285352_{index}"), "created":1793285352_u64,
+            "sequence":index,"size":10,"note":"","locked":false,"files":[]
+        })).unwrap()).collect();
+        let mut card = String::new();
+        saves_card(&mut card, &app, &game, &GameEdit::default());
+        assert_eq!(card.matches("data-action=\"preview-restore\"").count(), 2);
+        assert!(card.contains("当前存档：Title_1793285352_1"));
+        let mut archive = String::new();
+        features::archive_dialog(&mut archive, &app, &game);
+        assert_eq!(archive.matches("data-action=\"preview-restore\"").count(), 8);
+        assert_eq!(archive.matches("<time>").count(), 8);
+        app.detail.confirmation = Some(("snapshot-delete".into(), "backup-1".into()));
+        let mut card = String::new();
+        saves_card(&mut card, &app, &game, &GameEdit::default());
+        assert!(!card.contains("删除这份备份快照"));
+        let mut dialog = String::new();
+        features::delete_snapshot_dialog(&mut dialog, &app, &game);
+        assert!(dialog.contains("role=\"alertdialog\""));
+        assert!(dialog.contains("Title_1793285352_1"));
+    }
+    #[test]
     fn selected_save_hides_candidates_while_discovery_refreshes() {
         let mut app = App::default();
         let game:Game=serde_json::from_value(json!({"id":"game","title":"Title","folder":"F:/Games/Title","library":"F:/Games","executable":"F:/Games/Title/game.exe","engine":"unknown","cover":null,"modified":0,"tags":[]})).unwrap();
@@ -696,6 +726,15 @@ mod tests {
         assert!(html.contains("C:/Chosen"));
         assert!(!html.contains("C:/OtherCandidate"));
         assert!(html.contains("data-action=\"choose-save\""));
+        let mut automatic = GameEdit { save_path: Some("C:/Old".into()), save_path_auto: true, ..Default::default() };
+        app.detail.saves.get_mut(&game.id).unwrap().locations.truncate(1);
+        let mut updated = String::new();
+        saves_card(&mut updated, &app, &game, &automatic);
+        assert!(updated.contains("C:/Chosen"));
+        automatic.save_path_auto = false;
+        let mut manual = String::new();
+        saves_card(&mut manual, &app, &game, &automatic);
+        assert!(!manual.contains("C:/Chosen"));
     }
     #[test]
     fn detail_shows_playtime_and_never_played_without_metadata() {

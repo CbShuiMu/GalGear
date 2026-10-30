@@ -12,10 +12,21 @@ use tauri::{Emitter, Manager, State};
 pub(crate) struct ScanState {
     scanning: AtomicBool,
     cancel: Arc<AtomicBool>,
+    forgotten: std::sync::Mutex<std::collections::BTreeSet<String>>,
 }
 
 impl ScanState {
     pub(crate) fn is_scanning(&self) -> bool { self.scanning.load(Ordering::SeqCst) }
+    pub(crate) fn forget(&self, ids: &std::collections::BTreeSet<String>) {
+        if let Ok(mut forgotten) = self.forgotten.lock() {
+            forgotten.extend(ids.iter().cloned());
+        }
+    }
+    pub(crate) fn retain_current(&self, games: &mut Vec<Game>) {
+        if let Ok(forgotten) = self.forgotten.lock() {
+            games.retain(|game| !forgotten.contains(&game.id));
+        }
+    }
 }
 
 struct ScanGuard<'a>(&'a AtomicBool);
@@ -34,6 +45,7 @@ pub(crate) async fn refresh(
         return Err(Message::new("error.scan_running"));
     }
     let _guard = ScanGuard(&state.scan.scanning);
+    state.scan.forgotten.lock().map_err(|_| Message::new("error.catalog_state"))?.clear();
     state.scan.cancel.store(false, Ordering::SeqCst);
     let settings = snapshot(state)?;
     let previous = state
@@ -63,11 +75,13 @@ pub(crate) async fn refresh(
                 let _ = prepare_cover(game, &cache_dir);
             }
             if let Ok(settings) = snapshot(&handle.state::<AppState>()) {
-                batch.retain(|g| !settings.excluded_games.contains(&g.id));
+                batch.retain(|g| !catalog::is_excluded(g, &settings));
                 for game in &mut batch {
                     catalog::apply_edits(game, &settings);
                 }
                 if let Ok(mut current) = handle.state::<AppState>().catalog.lock() {
+                    handle.state::<AppState>().scan.retain_current(&mut current.games);
+                    handle.state::<AppState>().scan.retain_current(&mut batch);
                     for game in &batch {
                         if !current.games.iter().any(|g| g.id == game.id) {
                             current.games.push(game.clone());
@@ -112,20 +126,27 @@ pub(crate) async fn refresh(
             }
         }
     }
-    let mut settings = state
-        .settings
-        .lock()
-        .map_err(|_| Message::new("error.config_state"))?;
-    let mut current = state
-        .catalog
-        .lock()
-        .map_err(|_| Message::new("error.catalog_state"))?;
+    let mut settings = state.settings.lock().map_err(|_| Message::new("error.config_state"))?;
+    // Match the playtime tracker's lock order before taking the catalog lock.
+    let mut records = state.playtime.lock().map_err(|_| Message::new("error.catalog_state"))?;
+    let mut current = state.catalog.lock().map_err(|_| Message::new("error.catalog_state"))?;
     let mut next = settings.clone();
-    if galgear_core::game_setup::mark_new(&mut next, &fresh.games, &known) {
+    state.scan.retain_current(&mut fresh.games);
+    state.scan.retain_current(&mut current.games);
+    let mut retained = current.clone();
+    let mut forgotten = catalog::purge_missing(&mut next, &mut retained);
+    forgotten.extend(catalog::purge_missing(&mut next, &mut fresh));
+    galgear_core::game_setup::mark_new(&mut next, &fresh.games, &known);
+    let catalog = catalog::merge(fresh, &retained, &next);
+    if next != *settings {
         state.store.save(&next)?;
         *settings = next;
     }
-    let catalog = catalog::merge(fresh, &current, &settings);
+    if !forgotten.is_empty() {
+        state.scan.forget(&forgotten);
+        records.retain(|id, _| !forgotten.contains(id));
+        galgear_core::playtime::save(&state.store.path.with_file_name("playtime.json"), &records)?;
+    }
     catalog::save(&state.store.path.with_file_name("catalog.json"), &catalog)?;
     *current = catalog.clone();
     Ok(catalog)
@@ -134,8 +155,8 @@ pub(crate) async fn refresh(
 #[tauri::command]
 pub(crate) async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, Message> {
     Ok(Bootstrap {
-        ai_available: galgear_core::ai::runtime::home()
-            .is_some_and(|home| galgear_core::ai::runtime::available(&home)),
+        update_complete: std::env::args().any(|arg| arg == "--galgear-update-complete"),
+        ai_available: crate::skill_package::available(),
         settings: snapshot(&state)?,
         catalog: state
             .catalog
@@ -275,7 +296,9 @@ pub(crate) async fn add_manual_game(state: State<'_, AppState>) -> Result<Option
             .lock()
             .map_err(|_| Message::new("error.config_state"))?;
         let mut next = settings.clone();
-        next.excluded_games.retain(|id| id != &game.id);
+        if catalog::is_excluded(&game, &next) {
+            return Err(Message::new("library.restore_required"));
+        }
         if !next.manual_games.iter().any(|g| g.id == game.id) {
             next.manual_games.push(game.clone());
         }
@@ -345,24 +368,6 @@ pub(crate) async fn relocate_game(
 }
 
 #[tauri::command]
-pub(crate) fn exclude_game(id: String, state: State<'_, AppState>) -> Result<(), Message> {
-    let game = find_game(&state, &id)?;
-    let mut settings = state
-        .settings
-        .lock()
-        .map_err(|_| Message::new("error.config_state"))?;
-    let mut next = settings.clone();
-    next.excluded_entries.insert(id.clone(), game);
-    if !next.excluded_games.contains(&id) {
-        next.excluded_games.push(id.clone());
-    }
-    state.store.save(&next)?;
-    *settings = next;
-    drop(settings);
-    let mut list = state
-        .catalog
-        .lock()
-        .map_err(|_| Message::new("error.catalog_state"))?;
-    list.games.retain(|g| g.id != id);
-    catalog::save(&state.store.path.with_file_name("catalog.json"), &list)
+pub(crate) fn exclude_game(id: String, state: State<'_, AppState>) -> Result<crate::collections::BatchResult, Message> {
+    crate::collections::change_games(&state, "exclude", vec![id], None)
 }

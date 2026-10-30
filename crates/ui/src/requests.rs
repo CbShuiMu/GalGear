@@ -14,6 +14,7 @@ pub(crate) enum Pending {
     SetupExecutable(String),
     SetupSave(String),
     Bootstrap,
+    AiRuntime,
     Scan,
     Folder,
     Add,
@@ -40,6 +41,7 @@ pub(crate) enum Pending {
     BackgroundScan,
     Saves,
     ChooseSave,
+    FindSave(String),
     Edit,
     DetailSaved,
     PlayStatus,
@@ -48,13 +50,14 @@ pub(crate) enum Pending {
     Exclude(String),
     SearchMetadata(String, String),
     SelectMetadata,
-    Resources,
+    Resources(Option<String>),
     PatchPreview,
     PatchList,
     LocalPatchList(String),
     LocalPatchApply(String, bool),
     Enrich,
     Update,
+    InstallUpdate,
     PatchTarget,
     Credentials,
     CredentialsSaved,
@@ -71,6 +74,7 @@ impl Pending {
         !matches!(
             self,
             Pending::Ai(_)
+                | Pending::AiRuntime
                 | Pending::Cloud(_)
                 | Pending::SummarySetup(..)
                 | Pending::Summary(_)
@@ -78,11 +82,12 @@ impl Pending {
                 | Pending::RouteMap(_)
                 | Pending::Scan
                 | Pending::BackgroundScan
+                | Pending::FindSave(_)
                 | Pending::Saves
                 | Pending::LocalPatchList(_)
                 | Pending::SearchMetadata(..)
                 | Pending::CoverOptions
-                | Pending::Resources
+                | Pending::Resources(_)
                 | Pending::SelectMetadata
                 | Pending::Enrich
                 | Pending::GameIcons
@@ -156,6 +161,11 @@ pub(crate) fn issue(app: &mut App, kind: Pending, command: &str, payload: serde_
     }
     if matches!(kind, Pending::Download) {
         app.downloads.notice = None;
+    }
+    if matches!(kind, Pending::Resources(_)) {
+        app.patches.resources.clear();
+        app.patches.resources_game = None;
+        app.patches.resource_warnings.clear();
     }
     let id = app.requests.enqueue(kind);
     request(id, command, &payload.to_string());

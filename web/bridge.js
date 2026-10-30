@@ -6,6 +6,9 @@ import {startGamepad} from './gamepad.js';
 import {installHomeNavigation, syncHomePresentation, captureHomeDetailCover, syncHomeDetailTransition, returnHomeDetail, cancelHomeDetailTransition} from './home.js';
 
 let wasmReady = false;
+window.addEventListener('focus', () => {
+  if (wasmReady) ui.detail_files_changed();
+});
 let previousDialog = false;
 let dialogReturnFocus = null;
 let toastTimer = null;
@@ -57,11 +60,16 @@ function reconcile(current, next) {
   }
   for (const attribute of [...current.attributes]) {
     if (!next.hasAttribute(attribute.name) && attribute.name !== 'style' &&
-        !(current instanceof HTMLDetailsElement && attribute.name === 'open')) {
+        !(current instanceof HTMLDetailsElement && attribute.name === 'open') &&
+        !(current.matches('.add-menu') && attribute.name === 'data-expanded')) {
       current.removeAttribute(attribute.name);
     }
   }
   for (const attribute of next.attributes) {
+    // Reapplying inert during a render would blur a focused menu item before
+    // the local hover state is synchronized, collapsing the menu mid-animation.
+    if (attribute.name === 'inert' && current.matches('.add-options') &&
+        current.closest('.add-menu')?.dataset.expanded === 'true') continue;
     if (current.getAttribute(attribute.name) !== attribute.value) current.setAttribute(attribute.name, attribute.value);
   }
   if (current instanceof HTMLInputElement) {
@@ -108,17 +116,18 @@ function alignLibraryToolbar() {
     if (grid) libraryGridObserver.observe(grid);
   }
   if (!bar) return;
-  const cards = grid?.querySelectorAll('.game-card');
-  if (!cards?.length) {
+  const card = grid?.querySelector('.game-card');
+  if (!card || bar.classList.contains('collection-bar')) {
     bar.style.removeProperty('width');
     return;
   }
-  const right = Math.max(...[...cards].map(card => card.getBoundingClientRect().right));
   const bounds = grid.getBoundingClientRect();
-  const cardWidth = cards[0].getBoundingClientRect().width;
+  const cardWidth = card.getBoundingClientRect().width;
   const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
-  const minimumRight = bounds.left + Math.min(bounds.width, cardWidth * 4 + gap * 3);
-  const width = Math.max(0, Math.max(right, minimumRight) - bar.getBoundingClientRect().left);
+  // auto-fill keeps empty columns after filtering; size the toolbar to those too.
+  const columns = Math.max(1, Math.floor((bounds.width + gap + .5) / (cardWidth + gap)));
+  const right = bounds.left + Math.min(bounds.width, columns * cardWidth + (columns - 1) * gap);
+  const width = Math.max(0, right - bar.getBoundingClientRect().left);
   const value = `${width}px`;
   if (bar.style.width !== value) bar.style.width = value;
 }
@@ -339,12 +348,6 @@ function renderFrame(html) {
       const box=context.getBoundingClientRect();
       context.style.left=`${Math.max(8,Math.min(Number(context.dataset.contextX),innerWidth-box.width-8))}px`;
       context.style.top=`${Math.max(8,Math.min(Number(context.dataset.contextY),innerHeight-box.height-8))}px`;
-      context.classList.toggle('flip-submenu',context.getBoundingClientRect().right+180>innerWidth);
-      const sub=context.querySelector('.context-submenu');
-      sub.style.visibility='hidden';sub.style.display='block';
-      const state=context.querySelector('.context-state').getBoundingClientRect();
-      sub.style.top=`${Math.min(0,innerHeight-state.top-sub.getBoundingClientRect().height-8)}px`;
-      sub.style.visibility='';sub.style.display='';
       if(!previousContext) {contextReturnId=active?.closest('[data-game-id]')?.dataset.gameId;context.querySelector('button')?.focus({preventScroll:true});}
       previousContext=true;
     } else if(previousContext) {
@@ -352,6 +355,9 @@ function renderFrame(html) {
       previousContext=false;contextReturnId=null;
     }
     syncModalBoundary();
+    document.querySelectorAll('.add-menu').forEach(menu => setAddMenuExpanded(menu, menu.dataset.expanded === 'true'));
+    const saveDialog = document.querySelector('.snapshot-delete-dialog') || document.querySelector('.restore-dialog') || document.querySelector('.archive-dialog');
+    if (saveDialog && !saveDialog.contains(document.activeElement)) saveDialog.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
     if (detailReturnAnimation) document.querySelector('.detail-overlay')?.setAttribute('inert', '');
     // The underlying page must leave inert before its focus can be restored.
     if (closingDetail) {
@@ -378,6 +384,11 @@ function renderFrame(html) {
 }
 
 window.GalGearBridge = {
+  local_date_time(seconds) {
+    const date = new Date(seconds * 1000);
+    if (!Number.isFinite(date.getTime())) return '';
+    return `${this.local_date(seconds)} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  },
   local_date(seconds) {
     const date = new Date(seconds * 1000);
     if (!Number.isFinite(date.getTime())) return '';
@@ -475,7 +486,7 @@ document.addEventListener('click', event => {
   if (!element || element.disabled) return;
   event.preventDefault();
   const addMenu = element.closest('.add-menu');
-  if (addMenu) addMenu.open = false;
+  if (addMenu) setAddMenuExpanded(addMenu, false);
   if (element.dataset.action === 'close-detail') { closeDetail(); return; }
   if (element.dataset.action === 'detail-top') {
     document.querySelector('.detail-scroll')?.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
@@ -486,13 +497,36 @@ document.addEventListener('click', event => {
     document.getElementById('tag-query')?.focus({ preventScroll: true });
   }
 });
+function setAddMenuExpanded(menu, expanded) {
+  menu.dataset.expanded = String(expanded);
+  menu.querySelector('.add-trigger').setAttribute('aria-expanded', String(expanded));
+  menu.querySelector('.add-options').inert = !expanded;
+}
+document.addEventListener('pointerover', event => {
+  const menu = event.target.closest?.('.add-menu');
+  if (menu && event.pointerType !== 'touch' && !menu.contains(event.relatedTarget)) setAddMenuExpanded(menu, true);
+});
 document.addEventListener('pointerout', event => {
-  const menu = event.target.closest?.('.add-menu[open]');
-  if (menu && !menu.contains(event.relatedTarget)) menu.open = false;
+  const menu = event.target.closest?.('.add-menu');
+  if (menu && !menu.contains(event.relatedTarget)) setAddMenuExpanded(menu, false);
+});
+document.addEventListener('click', event => {
+  const trigger = event.target.closest?.('.add-trigger');
+  if (trigger) {
+    const menu = trigger.closest('.add-menu');
+    setAddMenuExpanded(menu, menu.dataset.expanded !== 'true');
+  } else {
+    const menu = document.querySelector('.add-menu[data-expanded=true]');
+    if (menu && !menu.contains(event.target)) setAddMenuExpanded(menu, false);
+  }
+});
+document.addEventListener('focusin', event => {
+  const trigger = event.target.closest?.('.add-trigger');
+  if (trigger?.matches(':focus-visible')) setAddMenuExpanded(trigger.closest('.add-menu'), true);
 });
 document.addEventListener('focusout', event => {
-  const menu = event.target.closest?.('.add-menu[open]');
-  if (menu && !menu.contains(event.relatedTarget)) menu.open = false;
+  const menu = event.target.closest?.('.add-menu');
+  if (menu && !menu.contains(event.relatedTarget)) setAddMenuExpanded(menu, false);
 });
 document.addEventListener('input', event => {
   if (wasmReady && !event.isComposing && event.target.dataset.input) ui.input_changed(event.target.dataset.input, event.target.value);
@@ -504,6 +538,13 @@ document.addEventListener('change', event => {
   if (wasmReady && event.target.dataset.select) ui.dispatch(event.target.dataset.select, event.target.value);
 });
 document.addEventListener('keydown', event => {
+  const addMenu = document.querySelector('.add-menu[data-expanded=true]');
+  if (event.key === 'Escape' && addMenu) {
+    addMenu.querySelector('.add-trigger').focus({preventScroll:true});
+    setAddMenuExpanded(addMenu, false);
+    event.preventDefault();
+    return;
+  }
   if (wasmReady && event.target.matches('.segmented-control > .segment') &&
       ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
     const options = [...event.target.parentElement.querySelectorAll('.segment:not(:disabled)')];
@@ -531,18 +572,15 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && pointerDrag) { finishPointerDrag(); event.preventDefault(); return; }
   const context=event.target.closest('.game-context-menu');
   if(context && ['ArrowDown','ArrowUp','Home','End'].includes(event.key)) {
-    const submenu=event.target.closest('.context-submenu');
-    const nodes=submenu?[...submenu.querySelectorAll('button')]:[...context.querySelectorAll(':scope>button,:scope>.context-state>button')];
+    const nodes=[...context.querySelectorAll(':scope>button:not(:disabled)')];
     const current=nodes.indexOf(document.activeElement);
     const index=event.key==='Home'?0:event.key==='End'?nodes.length-1:(current+(event.key==='ArrowDown'?1:-1)+nodes.length)%nodes.length;
     nodes[index]?.focus({preventScroll:true});event.preventDefault();return;
   }
-  if(context && event.key==='ArrowRight' && event.target.closest('.context-state')){context.querySelector('.context-submenu button')?.focus({preventScroll:true});event.preventDefault();return;}
-  if(context && event.key==='ArrowLeft' && event.target.closest('.context-submenu')){context.querySelector('.context-state>button')?.focus({preventScroll:true});event.preventDefault();return;}
   const choice = event.target.closest('.choice-popup,.choice-trigger');
   if (choice && ui.choice_key(choice.dataset.choiceAnchor || choice.id, event.key)) { event.preventDefault(); return; }
   if (event.key === 'Escape') {
-    const action = document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
+    const action = document.querySelector('.snapshot-delete-dialog') ? 'cancel-action' : document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.archive-dialog') ? 'close-archive' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
     if (action === 'close-detail') closeDetail();
     else ui.dispatch(action, '');
     event.preventDefault();
@@ -579,6 +617,7 @@ function markDropTarget(target) {
   }
 }
 function finishPointerDrag() {
+  if (pointerDrag) document.getSelection()?.removeAllRanges();
   if (pointerDrag?.source.hasPointerCapture(pointerDrag.id)) pointerDrag.source.releasePointerCapture(pointerDrag.id);
   pointerDrag = null;
   dragPreview?.remove(); dragPreview = null;
@@ -598,6 +637,18 @@ document.addEventListener('keydown',event=> {
   }
 });
 
+const selectionCards = '.game-card[data-game-id],.folder-card[data-folder-id]';
+function selectionKey(card) {
+  return card.dataset.folderId === undefined ? `game:${card.dataset.gameId}` : `folder:${card.dataset.folderId}`;
+}
+function commitMarquee(keys) {
+  const selection = { games: [], folders: [] };
+  for (const key of keys) {
+    if (key.startsWith('folder:')) selection.folders.push(key.slice(7));
+    else selection.games.push(key.slice(5));
+  }
+  ui.library_marquee(JSON.stringify(selection), false);
+}
 function paintMarquee() {
   const drag=marqueeDrag;if (!drag || !drag.active) return;
   const pane=drag.pane;const paneBox=pane.getBoundingClientRect();
@@ -608,13 +659,14 @@ function paintMarquee() {
   const top=Math.min(drag.startY,currentY),bottom=Math.max(drag.startY,currentY);
   Object.assign(drag.box.style,{left:`${left}px`,top:`${top-pane.scrollTop}px`,width:`${right-left}px`,height:`${bottom-top}px`});
   drag.ids=new Set(drag.initial);
-  for(const card of document.querySelectorAll('[data-game-id]')) {
+  for(const card of drag.scope.querySelectorAll(selectionCards)) {
     const bounds=card.getBoundingClientRect();
     const intersects=bounds.left<right && bounds.right>left && bounds.top+pane.scrollTop<bottom && bounds.bottom+pane.scrollTop>top;
-    if(intersects) drag.ids.add(card.dataset.gameId);
-    const selected=drag.ids.has(card.dataset.gameId);
+    const key=selectionKey(card);
+    if(intersects) drag.ids.add(key);
+    const selected=drag.ids.has(key);
     card.classList.toggle('is-selected',selected);
-    card.querySelector('.game-face')?.setAttribute('aria-pressed',String(selected));
+    card.querySelector('.game-face,.folder-face')?.setAttribute('aria-pressed',String(selected));
     const check=card.querySelector('.selection-check');
     if(check) check.innerHTML=selected ? '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>' : '';
   }
@@ -627,17 +679,19 @@ function finishMarquee(commit=true) {
     paintMarquee();
   }
   const drag=marqueeDrag;marqueeDrag=null;cancelAnimationFrame(marqueeFrame);marqueeFrame=null;drag.box?.remove();
+  // Clear before rendering: a native Range can expand as its DOM nodes are reconciled.
+  document.getSelection()?.removeAllRanges();
   if(drag.pane.hasPointerCapture(drag.id))drag.pane.releasePointerCapture(drag.id);
   if(drag.active) {
     // The committed Rust paint already includes updates received during the drag.
     deferredDragFrame=null;
     suppressCardClickUntil=performance.now()+400;
     if(commit) {
-      ui.library_marquee(JSON.stringify([...drag.ids]),false);
+      commitMarquee(drag.ids);
       if(drag.ids.size===0) ui.dispatch('batch-toggle','');
     }
     else {
-      ui.library_marquee(JSON.stringify(drag.original),false);
+      commitMarquee(drag.original);
       if(!drag.wasSelecting) ui.dispatch('batch-toggle','');
     }
   }
@@ -646,18 +700,27 @@ function finishMarquee(commit=true) {
 document.addEventListener('pointerdown', event => {
   if (pointerDrag || marqueeDrag || event.isPrimary === false) return;
   const source = event.target.closest('[data-game-id]');
-  const grid=event.target.closest('.game-grid');
+  const grid=event.target.closest('.game-grid,.folder-grid');
   if(wasmReady && event.button===0 && !event.altKey && grid && !document.querySelector('.library-bar [data-action=batch-toggle]:disabled') && !event.target.closest('.card-action,.card-remove') && !document.querySelector('.library-overlay,.detail-overlay,.game-context-menu')) {
     const pane=document.getElementById('page-scroll');
     if(!pane) return;
     const bounds=grid.getBoundingClientRect();
-    const original=[...document.querySelectorAll('.game-card.is-selected')].map(card=>card.dataset.gameId);
-    marqueeDrag={id:event.pointerId,pane,grid,offsetX:event.clientX-bounds.left,offsetY:event.clientY-bounds.top,startX:event.clientX,startY:event.clientY+pane.scrollTop,x:event.clientX,y:event.clientY,active:false,wasSelecting:!!document.querySelector('.library-bar.selecting'),original,initial:event.ctrlKey||event.shiftKey?original:[],ids:new Set()};
+    const scope=grid.closest('.library-page');
+    if(!scope) return;
+    document.getSelection()?.removeAllRanges();
+    const original=[...scope.querySelectorAll(selectionCards)].filter(card=>card.classList.contains('is-selected')).map(selectionKey);
+    marqueeDrag={id:event.pointerId,pane,grid,scope,offsetX:event.clientX-bounds.left,offsetY:event.clientY-bounds.top,startX:event.clientX,startY:event.clientY+pane.scrollTop,x:event.clientX,y:event.clientY,active:false,wasSelecting:!!document.querySelector('.library-bar.selecting'),original,initial:event.ctrlKey||event.shiftKey?original:[],ids:new Set()};
     return;
   }
   if (!wasmReady || event.button !== 0 || !source || event.target.closest('.card-action,.card-remove') || document.querySelector('.library-overlay,.detail-overlay')) return;
   pointerDrag = { source, id: event.pointerId, x: event.clientX, y: event.clientY };
+  document.getSelection()?.removeAllRanges();
 });
+// Block native selection from pointerdown, including movement below the drag threshold.
+// Cancelling selectstart keeps ordinary card focus/click behavior intact.
+document.addEventListener('selectstart', event => {
+  if (marqueeDrag || pointerDrag) event.preventDefault();
+}, true);
 document.addEventListener('pointermove', event => {
   if(marqueeDrag && marqueeDrag.id===event.pointerId) {
     const drag=marqueeDrag;drag.x=event.clientX;drag.y=event.clientY;
@@ -715,6 +778,10 @@ document.addEventListener('pointerup', event => {
 document.addEventListener('pointercancel', event=>{
   if(pointerDrag?.id===event.pointerId) finishPointerDrag();
   if(marqueeDrag?.id===event.pointerId) finishMarquee(false);
+});
+window.addEventListener('blur', () => {
+  if (pointerDrag) finishPointerDrag();
+  if (marqueeDrag) finishMarquee(false);
 });
 
 document.addEventListener('dragstart', event => {
@@ -778,6 +845,7 @@ try {
     await window.__TAURI__.event.listen('fan-download-progress', event => ui.download_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('fan-status-updated', event => ui.fan_status_updated(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('runtime-updated', event => ui.runtime_updated(JSON.stringify(event.payload)));
+    await window.__TAURI__.event.listen('magpie-hotkey-updated', event => ui.magpie_hotkey_updated(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('playtime-updated', event => ui.playtime_updated(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('backup-completed', event => ui.backup_completed(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('tool-failed', event => ui.tool_failed(JSON.stringify(event.payload)));

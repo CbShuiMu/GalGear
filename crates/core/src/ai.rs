@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use std::{io::Read, path::Path, time::Duration};
 
 pub mod runtime;
+pub mod skills;
 
 pub const PROVIDERS: [&str; 4] = ["openai", "deepseek", "qwen", "kimi"];
 
@@ -133,9 +134,20 @@ fn fetch_models(client: &Client, url: &str, token: &str) -> Result<Vec<Model>, M
     parse_models(&bytes)
 }
 
+fn client_builder(provider: &str) -> Result<reqwest::blocking::ClientBuilder, Message> {
+    models_url(provider)?;
+    let builder = Client::builder();
+    // OpenAI follows the configured proxy; domestic providers always connect directly.
+    Ok(if provider == "openai" {
+        builder
+    } else {
+        builder.no_proxy()
+    })
+}
+
 pub fn list_models(provider: &str, token: &str) -> Result<Vec<Model>, Message> {
     let url = models_url(provider)?;
-    let client = Client::builder()
+    let client = client_builder(provider)?
         .connect_timeout(Duration::from_secs(10))
         .timeout(Duration::from_secs(30))
         .redirect(Policy::none())
@@ -156,7 +168,7 @@ pub fn complete(
 ) -> Result<String, Message> {
     validate_token(token)?;
     let (url, body) = completion_request(provider, model, system, input, json)?;
-    let client = Client::builder()
+    let client = client_builder(provider)?
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(180))
         .redirect(Policy::none())

@@ -38,6 +38,7 @@ pub struct Account {
 }
 pub struct Session {
     client: Client,
+    download_client: Client,
     base: Url,
     credentials: FanCredentials,
 }
@@ -65,27 +66,35 @@ impl Session {
             }
             jar.add_cookie_str(&format!("{name}={value}; Path=/; Secure"), &base);
         }
-        let client = Client::builder()
-            .user_agent("GalGear/0.1 (+local game library)")
-            .cookie_provider(jar)
-            .connect_timeout(Duration::from_secs(8))
-            .timeout(Duration::from_secs(25))
-            .redirect(reqwest::redirect::Policy::custom({
-                let origin = base.origin();
-                move |attempt| {
-                    if attempt.previous().len() >= 5 {
-                        attempt.error("Too many redirects")
-                    } else if attempt.url().origin() == origin {
-                        attempt.follow()
-                    } else {
-                        attempt.stop()
+        let builder = || {
+            Client::builder()
+                .user_agent("GalGear/0.1 (+local game library)")
+                .cookie_provider(jar.clone())
+                .connect_timeout(Duration::from_secs(8))
+                .timeout(Duration::from_secs(25))
+                .redirect(reqwest::redirect::Policy::custom({
+                    let origin = base.origin();
+                    move |attempt| {
+                        if attempt.previous().len() >= 5 {
+                            attempt.error("Too many redirects")
+                        } else if attempt.url().origin() == origin {
+                            attempt.follow()
+                        } else {
+                            attempt.stop()
+                        }
                     }
-                }
-            }))
+                }))
+        };
+        let client = builder().build().map_err(|_| auth_error())?;
+        let download_client = builder()
+            .no_proxy()
+            .connect_timeout(Duration::from_secs(12))
+            .timeout(Duration::from_secs(1800))
             .build()
-            .map_err(|_| auth_error())?;
+            .map_err(|_| Message::new("download.network"))?;
         Ok(Self {
             client,
+            download_client,
             base,
             credentials,
         })
@@ -290,7 +299,7 @@ impl Session {
         }
         // Login cookies stay on the site. CDN requests use a separate client without credentials.
         let response = self
-            .client
+            .download_client
             .get(url.clone())
             .header(REFERER, &plan.preview.source_url)
             .timeout(Duration::from_secs(1800))
@@ -571,6 +580,8 @@ pub fn download(
         .as_ref()
         .ok_or_else(|| Message::new("download.site_required"))?;
     let client = Client::builder()
+        // Patch files bypass system and environment proxies.
+        .no_proxy()
         .user_agent("GalGear/0.1")
         .timeout(Duration::from_secs(1800))
         .connect_timeout(Duration::from_secs(12))
@@ -763,6 +774,7 @@ mod tests {
             .unwrap();
         });
         let session = Session {
+            download_client: Client::builder().no_proxy().build().unwrap(),
             client: Client::builder()
                 .no_proxy()
                 .timeout(Duration::from_secs(2))

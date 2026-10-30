@@ -90,7 +90,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, _value: &str) -> bool {
                 .game_edits
                 .get(&id)
                 .is_some_and(|e| e.ai_summary);
-            if !app.ai_available && !(action == "toggle-ai-summary" && enabled) {
+            if !(app.ai_available || action == "toggle-ai-summary" && enabled) {
                 return true;
             }
             if action == "route-map-open" {

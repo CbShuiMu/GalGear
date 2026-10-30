@@ -1,5 +1,5 @@
-//! Game actions and persistent play states exposed by a card context menu.
-use crate::{state::App, view::t, widgets::button, widgets::esc, widgets::icon};
+//! Game card context menu and shared play-state labels.
+use crate::{state::App, view::t, widgets::button, widgets::esc};
 use std::fmt::Write;
 
 pub(crate) struct Menu {
@@ -52,9 +52,5 @@ pub(crate) fn render(html: &mut String, app: &App) {
             disabled,
         ));
     }
-    write!(html,r#"<div class="context-state"><button type="button" class="button quiet" aria-haspopup="menu">{}<span>{}</span>{}</button><div class="context-submenu" role="menu">"#,icon("check"),t(app,"context.status"),icon("arrow")).unwrap();
-    for (status, key, symbol) in STATUSES {
-        write!(html,r#"<button type="button" class="status-option {}" role="menuitemradio" aria-checked="{}" data-action="play-status" data-value="{}"><span class="status-symbol {}">{}</span><span>{}</span></button>"#,if game.play_status==status{"selected"}else{""},game.play_status==status,status,status,symbol,t(app,key)).unwrap();
-    }
-    html.push_str("</div></div></section>");
+    html.push_str("</section>");
 }

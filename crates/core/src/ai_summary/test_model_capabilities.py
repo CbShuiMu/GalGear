@@ -59,6 +59,14 @@ class ModelCapabilitiesTests(unittest.TestCase):
         response.read.assert_called_once_with(capabilities.MAX_RESPONSE_BYTES+1)
         response.close.assert_called_once()
 
+    def test_deepseek_discovery_bypasses_configured_proxy(self):
+        opener, _ = self.opener()
+        with mock.patch.object(capabilities.urllib.request, 'getproxies', return_value={'https': 'http://127.0.0.1:18765'}), \
+                mock.patch.object(capabilities.urllib.request, 'build_opener', return_value=opener) as build:
+            capabilities.read_capabilities(self.config)
+        proxy = next(handler for handler in build.call_args.args if isinstance(handler, capabilities.urllib.request.ProxyHandler))
+        self.assertEqual(proxy.proxies, {})
+
     def test_no_fixed_model_names_or_numeric_limit_aliases(self):
         entry = dict(self.entry, id='new-model-revision', context_window=777777, max_output_tokens=135791)
         value = capabilities.normalize_models(self.body(entry), 'new-model-revision')

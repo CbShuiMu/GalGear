@@ -161,7 +161,9 @@ def complete(config, messages, tools, max_tokens=12000, timeout=300):
         except (TypeError, ValueError, UnicodeError):
             raise failure('configuration') from None
         try:
-            with urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout) as response:
+            # OpenAI uses configured proxies; DeepSeek bypasses them even in a frozen host.
+            proxy = urllib.request.ProxyHandler() if config['provider'] == 'openai' else urllib.request.ProxyHandler({})
+            with urllib.request.build_opener(NoRedirect(), proxy).open(request, timeout=timeout) as response:
                 try:
                     candidate_status = getattr(response, 'status', None)
                     if type(candidate_status) is not int:

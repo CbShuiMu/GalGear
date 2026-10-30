@@ -9,6 +9,12 @@ fn batch(app: &mut App, operation: &str, ids: Vec<String>, collection: Option<St
     if ids.is_empty() {
         return;
     }
+    if operation == "add"
+        && !collection.as_deref().is_some_and(|id| super::accepts_games(&app.settings.collections, id))
+    {
+        crate::state::show_toast(app, galgear_i18n::Message::new("folders.leaf_only"), true);
+        return;
+    }
     app.library.last_batch = Some((operation.into(), collection.clone()));
     issue(
         app,
@@ -118,7 +124,13 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.library.clear_filters();
             reset_scroll();
         }
-        "folder-new" => open_edit(app, None, (!value.is_empty()).then(|| value.into())),
+        "folder-new" => {
+            if value.is_empty() || super::parent_allowed(&app.settings.collections, value, None) {
+                open_edit(app, None, (!value.is_empty()).then(|| value.into()));
+            } else {
+                crate::state::show_toast(app, galgear_i18n::Message::new("folders.depth_limit"), true);
+            }
+        }
         "folder-edit" => {
             let parent = app
                 .settings
@@ -161,7 +173,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         }
         "batch-toggle" => {
             app.library.batch = !app.library.batch;
+            let visible_count = app.library.visible_count;
             clear_selection(&mut app.library);
+            app.library.visible_count = visible_count;
         }
         "batch-select" => {
             if app.library.batch && !app.library.checked.remove(value) {
@@ -198,9 +212,13 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "folder-add-games" => {
-            app.library.picker_games.clear();
-            app.form.insert("game-query".into(), String::new());
-            app.library.dialog = Some(Dialog::AddGames);
+            if app.library.collection.as_deref().is_some_and(|id| super::accepts_games(&app.settings.collections, id)) {
+                app.library.picker_games.clear();
+                app.form.insert("game-query".into(), String::new());
+                app.library.dialog = Some(Dialog::AddGames);
+            } else {
+                crate::state::show_toast(app, galgear_i18n::Message::new("folders.leaf_only"), true);
+            }
         }
         "picker-game" => {
             if !app.library.picker_games.remove(value) {

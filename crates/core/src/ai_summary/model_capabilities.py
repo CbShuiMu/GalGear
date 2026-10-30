@@ -137,7 +137,7 @@ def read_capabilities(config, timeout=20):
         request = urllib.request.Request(DEEPSEEK_MODELS, method='GET', headers={
             'Authorization': 'Bearer '+secret, 'Accept': 'application/json', 'Connection': 'close'})
         try:
-            with urllib.request.build_opener(NoRedirect()).open(request, timeout=timeout) as response:
+            with urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({})).open(request, timeout=timeout) as response:
                 try:
                     candidate_status = getattr(response, 'status', None)
                     if type(candidate_status) is not int:

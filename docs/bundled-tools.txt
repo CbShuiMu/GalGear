@@ -3,12 +3,24 @@ GalGear 内置工具
 请将整个 artifacts 目录一起移动，保留 GalGear.exe 旁的 tools 文件夹。
 工具路径以 GalGear.exe 所在目录为基准，不依赖启动时的工作目录。
 
+补丁解压：tools/7zip/7z.exe 和 7z.dll（7-Zip 26.05）
+ZIP 由程序直接读取，RAR / 7z 使用随包附带的完整解码器。
+解压成功后才删除下载的压缩包；失败或需要密码时保留原文件。
+许可证见 tools/7zip/License.txt；上游源代码：https://github.com/ip7z/7zip/tree/26.05
+
 超分：tools/magpie/Magpie.exe（本机 Magpie 0.13.0）
 配置：tools/magpie/config/config.json
 已带入本机的缩放方案，当前全屏缩放快捷键为 Alt+Shift+A。
-在游戏配置中勾选“超分”后启动游戏，GalGear 会自动在托盘启动 Magpie，
+在游戏配置中勾选“超分”后启动游戏，GalGear 会默认以管理员身份在托盘启动 Magpie，
+首次启动或重启时 Windows 可能显示权限确认；取消确认会停止本次启动。
+内置 Magpie 自身的“始终以管理员身份运行”也默认开启。
 等待游戏窗口后触发缩放。算法和倍率可直接打开内置 Magpie 调整。
-GalGear 每次调用都会读取便携配置中的快捷键。
+在 GalGear 保存缩放快捷键会同步写入 Magpie 配置；已运行的 Magpie 会短暂重启，当前缩放会结束。
+若 GalGear 权限低于正在运行的 Magpie，请先退出 Magpie 再保存快捷键，或以相同权限运行 GalGear。
+在 Magpie 中修改快捷键并保存后，GalGear 约两秒内同步显示。未保存的输入会保留。
+正常退出 GalGear 时会一并关闭使用中的 Magpie；最小化到托盘时继续保留。
+Magpie 的启动与退出由同一次提权启动的后台进程管理，退出时无需再次确认权限。
+除便携配置外，也支持 Magpie 0.13 的用户配置目录。
 如另一个目录的 Magpie 已在运行，请先退出它，以便使用内置版本及配置。
 
 转区：tools/locale-emulator/LEProc.exe（本机 Locale Emulator 2.5.0.1）
@@ -30,3 +42,11 @@ Locale Emulator：https://github.com/xupefei/Locale-Emulator
 
 程序默认仍使用 %APPDATA%/com.galgear.desktop 保存游戏库和偏好。
 内置工具的配置随 tools 目录携带。现有工具路径为空或失效时会自动补全。
+
+AI Skills（运行时自动下载）
+Skills 版本检查和压缩包下载使用直连，不经过系统或环境变量代理。
+Skills 不随安装包或便携版打包。每次启动检查以下仓库 main 的最新 commit：
+https://github.com/CbShuiMu/Galgear-GalgameReverse-Skill
+首次运行或 commit 变化时下载对应 ZIP 并解压，校验成功后替换软件目录中的
+Galgear-GalgameReverse-Skill 文件夹；未变化则复用，更新失败保留已有版本。
+首次下载需要联网和软件目录写入权限。AI 宿主仍随 tools/ai-agent 附带。

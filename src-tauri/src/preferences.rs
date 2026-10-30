@@ -1,6 +1,6 @@
 //! Application preferences and release checks.
 use crate::{state::AppState, state::snapshot};
-use galgear_core::{Settings, providers};
+use galgear_core::Settings;
 use galgear_i18n::{Language, Message};
 use tauri::State;
 
@@ -21,6 +21,7 @@ pub(crate) fn update(
 
 #[tauri::command]
 pub(crate) fn get_preferences(state: State<'_, AppState>) -> Result<Settings, Message> {
+    let _ = crate::tools::sync_magpie_hotkey(&state);
     snapshot(&state)
 }
 
@@ -191,35 +192,4 @@ pub(crate) fn set_release_page(
     state.store.save(&next)?;
     *settings = next.clone();
     Ok(next)
-}
-
-#[tauri::command]
-pub(crate) async fn check_update(state: State<'_, AppState>) -> Result<serde_json::Value, Message> {
-    let url = snapshot(&state)?.release_page;
-    if url.is_empty() {
-        return Err(Message::new("error.release_page"));
-    }
-    let parsed = reqwest::Url::parse(&url).map_err(|_| Message::new("error.site_url"))?;
-    let parts: Vec<_> = parsed.path_segments().into_iter().flatten().collect();
-    if parsed.scheme() != "https" || parsed.host_str() != Some("github.com") || parts.len() != 3 {
-        return Err(Message::new("error.site_url"));
-    }
-    let api = format!(
-        "https://api.github.com/repos/{}/{}/releases/latest",
-        parts[0], parts[1]
-    );
-    let release =
-        tauri::async_runtime::spawn_blocking(move || -> Result<serde_json::Value, Message> {
-            providers::client()?
-                .get(api)
-                .send()
-                .map_err(|e| Message::detail("error.network", e))?
-                .error_for_status()
-                .map_err(|e| Message::detail("error.network", e))?
-                .json()
-                .map_err(|e| Message::detail("error.network", e))
-        })
-        .await
-        .map_err(|e| Message::detail("error.network", e))??;
-    Ok(serde_json::json!({"version":release["tag_name"],"url":url}))
 }

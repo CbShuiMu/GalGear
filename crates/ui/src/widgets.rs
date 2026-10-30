@@ -91,7 +91,7 @@ pub(crate) fn button(
     if class.split_whitespace().any(|name| name == "icon-only") {
         return icon_button(action, value, label, symbol, class, disabled);
     }
-    if matches!(action, "editor-close" | "summary-close" | "close-history") {
+    if matches!(action, "editor-close" | "summary-close" | "close-history" | "close-archive") {
         return format!(
             r#"<button type="button" class="button {class} close-button" data-action="{action}" data-value="{}" aria-label="{}" title="{}" {}>{}</button>"#,
             esc(value),
