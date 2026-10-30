@@ -18,14 +18,14 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 <p align="center"><sub>游戏库界面。截图来自 v0.1.0，使用演示条目和占位封面。</sub></p>
 
-> 当前发行版为 **v0.3.0（2026-10-30）**，新增应用内更新、AI 存档查找，改进补丁下载、存档备份与游戏库交互。
+> 当前发行版为 **v0.3.1（2026-10-31）**，修复重新添加游戏库、2DFan 补丁下载和已确认存档位置的候选项显示。
 
 ## 开始使用
 
 前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
 
-- **安装版**：下载 `GalGear_0.3.0_x64-setup.exe`，按提示安装。
-- **便携版**：下载 `GalGear-0.3.0-win64-portable.zip`，解压后运行 `GalGear.exe`。
+- **安装版**：下载 `GalGear_0.3.1_x64-setup.exe`，按提示安装。
+- **便携版**：下载 `GalGear-0.3.1-win64-portable.zip`，解压后运行 `GalGear.exe`。
 
 需要 Microsoft Edge WebView2 Runtime。目标系统为 Windows 10 / 11，Windows 10 还没有完成实机验证。仓库目前为私有，下载时需要登录有访问权限的 GitHub 账号。
 
@@ -131,6 +131,13 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 ## 更新记录
 
 
+
+### v0.3.1
+
+- 修复移除游戏与游戏库后重新添加时，未重新打开游戏资料与启动器确认窗口的问题。
+- 修复 2DFan 补丁下载强制直连导致连接失败的问题，下载遵循系统代理设置。
+- 已确认存档位置后隐藏其他未确认候选项，覆盖自动识别和手动确认。
+- 更新应用图标。
 
 ### v0.3.0
 

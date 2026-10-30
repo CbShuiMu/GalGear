@@ -224,13 +224,7 @@ pub(crate) async fn add_library_folder(
             .lock()
             .map_err(|_| Message::new("error.config_state"))?;
         let mut next = settings.clone();
-        if !next
-            .library_folders
-            .iter()
-            .any(|p| p.to_lowercase() == path.to_lowercase())
-        {
-            next.library_folders.push(path);
-        }
+        catalog::add_library_folder(&mut next, path);
         state.store.save(&next)?;
         *settings = next;
     }

@@ -301,6 +301,9 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         app.version = data.version;
                         app.ai_available = data.ai_available;
                         app.initialized = true;
+                        if matches!(kind, Pending::Add) {
+                            game_setup::refreshed(&mut app);
+                        }
                         if matches!(kind, Pending::Bootstrap) {
                             if data.update_complete { show_toast(&mut app, Message::new("update.complete"), false); }
                             issue(&mut app, Pending::AiRuntime, "get_ai_runtime", json!({}));

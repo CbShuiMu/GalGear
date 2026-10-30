@@ -87,7 +87,6 @@ impl Session {
         };
         let client = builder().build().map_err(|_| auth_error())?;
         let download_client = builder()
-            .no_proxy()
             .connect_timeout(Duration::from_secs(12))
             .timeout(Duration::from_secs(1800))
             .build()
@@ -580,8 +579,7 @@ pub fn download(
         .as_ref()
         .ok_or_else(|| Message::new("download.site_required"))?;
     let client = Client::builder()
-        // Patch files bypass system and environment proxies.
-        .no_proxy()
+        // Use the configured network route, just like account and resource requests.
         .user_agent("GalGear/0.1")
         .timeout(Duration::from_secs(1800))
         .connect_timeout(Duration::from_secs(12))
@@ -719,6 +717,85 @@ fn finish_download(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn downloads_use_configured_proxy_for_site_and_cdn_files() {
+        const WORKER: &str = "GALGEAR_FAN_DOWNLOAD_PROXY_TEST";
+        if std::env::var_os(WORKER).is_some() {
+            let directory = tempfile::tempdir().unwrap();
+            let mut session = Session::new("https://2dfmax.top", FanCredentials {
+                mode: "csrf".into(),
+                cookie: "session=private-fixture".into(),
+                token: "private-fixture".into(),
+            }).unwrap();
+            session.base = Url::parse("http://site.invalid/").unwrap();
+            for host in ["site.invalid", "cdn.invalid"] {
+                let plan = DownloadPlan {
+                    preview: DownloadPreview {
+                        title: host.into(),
+                        source_url: "http://site.invalid/downloads/1".into(),
+                        ..Default::default()
+                    },
+                    file_url: Some(Url::parse(&format!("http://{host}/patch.zip")).unwrap()),
+                    purchase_action: None,
+                    csrf: None,
+                };
+                let path = session.download(&plan, directory.path(), &AtomicBool::new(false), &mut |_| {}).unwrap();
+                assert_eq!(std::fs::read(path).unwrap(), b"proxy fixture");
+            }
+            return;
+        }
+
+        // Isolate proxy environment variables from tests running on other threads.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let proxy = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(20);
+            let mut requests = Vec::new();
+            while requests.len() < 2 && std::time::Instant::now() < deadline {
+                let mut socket = match listener.accept() {
+                    Ok((socket, _)) => socket,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(Duration::from_millis(10));
+                        continue;
+                    }
+                    Err(error) => panic!("Proxy accept failed: {error}"),
+                };
+                socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 1024];
+                while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                    let count = socket.read(&mut buffer).unwrap();
+                    assert!(count > 0 && request.len() < 8192);
+                    request.extend_from_slice(&buffer[..count]);
+                }
+                requests.push(String::from_utf8(request).unwrap());
+                socket.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 13\r\nContent-Type: application/zip\r\nConnection: close\r\n\r\nproxy fixture").unwrap();
+            }
+            requests
+        });
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "fan_account::tests::downloads_use_configured_proxy_for_site_and_cdn_files", "--nocapture"])
+            .env(WORKER, "1")
+            .env("HTTP_PROXY", &proxy)
+            .env("http_proxy", &proxy)
+            .env("HTTPS_PROXY", &proxy)
+            .env("https_proxy", &proxy)
+            .env("ALL_PROXY", &proxy)
+            .env("all_proxy", &proxy)
+            .env("NO_PROXY", "")
+            .env("no_proxy", "")
+            .output().unwrap();
+        let requests = server.join().unwrap();
+        assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+        assert_eq!(requests.len(), 2);
+        assert!(requests[0].starts_with("GET http://site.invalid/patch.zip "));
+        assert!(requests[1].starts_with("GET http://cdn.invalid/patch.zip "));
+        assert!(!requests[1].to_ascii_lowercase().contains("\r\ncookie:"));
+        assert!(!requests[1].contains("private-fixture"));
+    }
+
     #[test]
     fn explicit_zero_point_form_is_free_and_requires_an_authenticated_same_origin_action() {
         let body = r#"<header data-island='NexusHeader' data-props='{"user":{"id":1,"points":14}}'></header><meta name='csrf-token' content='fixture'><h1>Free save</h1><main><form method='post' action='/downloads/2682/purchase'><button type='submit'>消耗 0 积分下载</button></form></main>"#;

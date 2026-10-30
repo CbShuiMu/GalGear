@@ -569,10 +569,12 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
             .as_deref()
             .filter(|path| !path.trim().is_empty())
             .or_else(|| (edit.save_paths.len() == 1).then(|| edit.save_paths[0].as_str()));
+        let has_confirmed = report.locations.iter().any(|location| location.confidence == "confirmed");
         for location in report
             .locations
             .iter()
             .filter(|location| edit.save_path_auto || selected.is_none_or(|path| location.path.eq_ignore_ascii_case(path)))
+            .filter(|location| !has_confirmed || location.confidence == "confirmed")
         {
             write!(html,"<div class=\"save-entry\"><p class=\"save-status\" title=\"{}\"><span></span>{}</p><p class=\"path-value\">{}</p><div class=\"detail-actions\">",t(app,match location.source.as_str(){"manual"=>"save.manual","config"=>"save.config","roaming"=>"save.roaming","documents"=>"save.documents","saved-games"=>"save.saved_games",_=>"save.game"}),t(app,if !location.exists{"save.uncreated"}else if location.confidence=="confirmed"{"backup.confirmed"}else{"save.candidate"}),esc(&location.path)).unwrap();
             if location.exists {
@@ -727,14 +729,43 @@ mod tests {
         assert!(!html.contains("C:/OtherCandidate"));
         assert!(html.contains("data-action=\"choose-save\""));
         let mut automatic = GameEdit { save_path: Some("C:/Old".into()), save_path_auto: true, ..Default::default() };
-        app.detail.saves.get_mut(&game.id).unwrap().locations.truncate(1);
         let mut updated = String::new();
         saves_card(&mut updated, &app, &game, &automatic);
         assert!(updated.contains("C:/Chosen"));
+        assert!(!updated.contains("C:/OtherCandidate"));
         automatic.save_path_auto = false;
         let mut manual = String::new();
         saves_card(&mut manual, &app, &game, &automatic);
         assert!(!manual.contains("C:/Chosen"));
+    }
+
+    #[test]
+    fn automatically_confirmed_save_hides_other_candidates_without_a_manual_selection() {
+        let mut app = App::default();
+        let game: Game = serde_json::from_value(json!({
+            "id":"atri", "title":"ATRI", "folder":"F:/Games/ATRI",
+            "engine":"unknown", "modified":0
+        })).unwrap();
+        app.detail.saves.insert(game.id.clone(), serde_json::from_value(json!({
+            "locations":[
+                {"path":"C:/Goldberg SteamEmu Saves/1230140/remote", "source":"config", "confidence":"confirmed", "exists":true, "readable":true},
+                {"path":"C:/Aniplex/ATRI-MyDearMoments-", "source":"roaming", "confidence":"matched", "exists":true, "readable":true}
+            ],
+            "limited":false
+        })).unwrap());
+        let mut html = String::new();
+        saves_card(&mut html, &app, &game, &GameEdit::default());
+        assert!(html.contains("C:/Goldberg SteamEmu Saves/1230140/remote"));
+        assert!(!html.contains("C:/Aniplex/ATRI-MyDearMoments-"));
+        assert!(!html.contains("data-action=\"confirm-save\""));
+        assert!(html.contains("data-action=\"backup-saves\""));
+
+        app.detail.saves.get_mut(&game.id).unwrap().locations[0].confidence = "matched".into();
+        html.clear();
+        saves_card(&mut html, &app, &game, &GameEdit::default());
+        assert!(html.contains("C:/Goldberg SteamEmu Saves/1230140/remote"));
+        assert!(html.contains("C:/Aniplex/ATRI-MyDearMoments-"));
+        assert_eq!(html.matches("data-action=\"confirm-save\"").count(), 2);
     }
     #[test]
     fn detail_shows_playtime_and_never_played_without_metadata() {

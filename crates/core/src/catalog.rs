@@ -97,7 +97,37 @@ pub fn is_excluded(game: &Game, settings: &Settings) -> bool {
         })
 }
 
-/// Existing games stay excluded until explicitly restored. Missing games are
+/// Register a normalized library directory and reconsider games removed from it.
+/// Re-adding an existing directory leaves its exclusions unchanged.
+pub fn add_library_folder(settings: &mut Settings, path: String) {
+    if settings
+        .library_folders
+        .iter()
+        .any(|root| root.eq_ignore_ascii_case(&path))
+    {
+        return;
+    }
+    let root = path.to_lowercase();
+    let restored: std::collections::BTreeSet<_> = settings
+        .excluded_entries
+        .values()
+        .filter(|game| {
+            settings.excluded_games.contains(&game.id)
+                && Path::new(&game.folder.to_lowercase()).starts_with(Path::new(&root))
+        })
+        .map(|game| game.id.clone())
+        .collect();
+    settings.excluded_games.retain(|id| !restored.contains(id));
+    for id in restored {
+        let edit = settings.game_edits.entry(id).or_default();
+        edit.setup_confirmed = false;
+        edit.setup_pending = true;
+    }
+    settings.library_folders.push(path);
+}
+
+/// Existing games stay excluded during ordinary scans; restoring them or
+/// re-adding their removed library makes them eligible again. Missing games are
 /// forgotten so that a later scan can discover them with a fresh setup record.
 /// Only application records are changed; game files and backups are untouched.
 pub fn remove_entry(settings: &mut Settings, list: &mut ScanResult, id: &str) -> Result<(), Message> {
@@ -246,6 +276,77 @@ pub fn save(path: &Path, catalog: &ScanResult) -> Result<(), Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn readding_removed_library_after_restart_requires_setup_for_its_excluded_games() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("Library");
+        let other_root = temp.path().join("Library-other");
+        for root in [&root, &other_root] {
+            let folder = root.join("Game");
+            fs::create_dir_all(&folder).unwrap();
+            fs::write(folder.join("game.exe"), b"game").unwrap();
+            fs::write(folder.join("data.xp3"), b"data").unwrap();
+        }
+        let root = display_path(&root);
+        let mut settings = Settings {
+            library_folders: vec![root.clone(), display_path(&other_root)],
+            ..Default::default()
+        };
+        let mut list = crate::scanner::scan(&settings);
+        let id = list.games.iter().find(|game| game.library == root).unwrap().id.clone();
+        let other_id = list.games.iter().find(|game| game.id != id).unwrap().id.clone();
+        let game = list.games.iter_mut().find(|game| game.id == id).unwrap();
+        game.playtime_seconds = 3600;
+        let edit = settings.game_edits.entry(id.clone()).or_default();
+        edit.setup_confirmed = true;
+        edit.arguments = vec!["--custom".into()];
+        edit.metadata = Some(crate::providers::Metadata {
+            url: "https://vndb.org/v1".into(),
+            ..Default::default()
+        });
+        remove_entry(&mut settings, &mut list, &id).unwrap();
+        remove_entry(&mut settings, &mut list, &other_id).unwrap();
+        let mut expected_edit = settings.game_edits[&id].clone();
+        expected_edit.setup_confirmed = false;
+        expected_edit.setup_pending = true;
+
+        // Restart with the persisted exclusions, then remove and re-add the root.
+        let mut settings: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        assert!(merge(crate::scanner::scan(&settings), &list, &settings).games.is_empty());
+        settings.library_folders.retain(|path| path != &root);
+        add_library_folder(&mut settings, root);
+        let mut settings: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        let fresh = crate::scanner::scan(&settings);
+        crate::game_setup::mark_new(&mut settings, &fresh.games, &Default::default());
+        let restored = merge(fresh, &list, &settings);
+
+        assert_eq!(restored.games.iter().map(|game| &game.id).collect::<Vec<_>>(), vec![&id]);
+        assert_eq!(settings.game_edits[&id], expected_edit);
+        assert_eq!(settings.excluded_games, vec![other_id]);
+        assert_eq!(settings.excluded_entries[&id].playtime_seconds, 3600);
+    }
+
+    #[test]
+    fn adding_an_already_registered_library_preserves_exclusions() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("game.exe");
+        fs::write(&path, b"game").unwrap();
+        let game = manual_game(&path, "Game".into()).unwrap();
+        let root = display_path(temp.path());
+        let mut settings = Settings {
+            library_folders: vec![root.clone()],
+            ..Default::default()
+        };
+        let id = game.id.clone();
+        let mut list = ScanResult { games: vec![game], ..Default::default() };
+        remove_entry(&mut settings, &mut list, &id).unwrap();
+        let previous = settings.clone();
+
+        add_library_folder(&mut settings, root.to_uppercase());
+
+        assert_eq!(settings, previous);
+    }
 
     #[test]
     fn hidden_game_is_forgotten_when_its_directory_disappears_and_is_new_if_recreated() {
