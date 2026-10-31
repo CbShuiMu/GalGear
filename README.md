@@ -14,9 +14,9 @@ Windows x64 · 简体中文 / 日本語 / English
 
 GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加进来，就能看封面、找游戏、整理收藏夹、启动游戏，也能在同一个地方管理存档和补丁。
 
-![GalGear 首页：最近游戏、作品背景和快捷启动](assets/readme/home.jpg)
+[![GalGear 首页：最近游戏、作品背景和快捷启动](assets/readme/home-native.png)](assets/readme/home-native.png)
 
-<p align="center"><sub>首页实机截图，来自 v0.3.1（2026-10-31）。</sub></p>
+<p align="center"><sub>以下四张截图均来自运行中的 v0.3.1（2026-10-31），以 2560 × 1392 原始分辨率保存为无损 PNG，点击图片可查看原图。</sub></p>
 
 > 当前发行版为 **v0.3.1（2026-10-31）**，修复重新添加游戏库、2DFan 补丁下载和已确认存档位置的候选项显示。
 
@@ -42,7 +42,7 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 游戏可以放在不同目录，不必为了使用 GalGear 重新搬家。支持按名称搜索、组合标签筛选和排序，也可以用多层收藏夹整理正在玩、想玩或已经通关的作品。一款游戏能放进多个收藏夹，支持拖放和批量整理。
 
-![GalGear 游戏库：游戏封面、搜索、标签筛选和排序](assets/readme/library.jpg)
+[![GalGear 游戏库：游戏封面、搜索、标签筛选和排序](assets/readme/library-native.png)](assets/readme/library-native.png)
 
 GalGear 会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游戏进程的检测，玩游戏时请保持 GalGear 运行。
 
@@ -58,18 +58,9 @@ GalGear 会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游
 
 **感谢以上提到的平台。**
 
-<details>
-<summary>看看游戏详情和主题设置</summary>
+[![GalGear ATRI 游戏详情：启动按钮、作品资料、标签、存档和补丁管理](assets/readme/detail-native.png)](assets/readme/detail-native.png)
 
-![GalGear 游戏详情：启动按钮、作品资料、标签和存档位置](assets/readme/detail.jpg)
-
-![GalGear 亮色模式下的显示与交互设置](assets/readme/settings-light.jpg)
-
-![GalGear 夜间模式下的显示与交互设置](assets/readme/settings-dark.jpg)
-
-以上均为 v0.3.1 的实机截图。界面支持粉色、白粉、白色三种主题色，可分别搭配亮色或夜间模式；语言和字号也能在设置中调整。
-
-</details>
+界面支持粉色、白粉、白色三种主题色，可分别搭配亮色或夜间模式；语言和字号也能在设置中调整。
 
 ### 云上存档/存档管理
 
@@ -88,6 +79,10 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 ### 补丁搜索与管理
 
 可以搜索 **2DFan、鲲 Gal** 的补丁资源，查看原站说明，下载网站提供的可用直链；也可以直接导入本地补丁。需要登录或付费的资源，仍受原站账号和权限限制。
+
+可直接从游戏库选择作品来搜索补丁。下图以库中的 **ATRI -My Dear Moments-** 为例，展示两个来源的补丁和存档结果。
+
+[![GalGear 补丁页：联动游戏库中的 ATRI，展示 2DFan 与鲲 Gal 搜索结果](assets/readme/patches-native.png)](assets/readme/patches-native.png)
 
 本地 ZIP 可直接预览；RAR / 7z 使用随程序附带的 7-Zip。覆盖文件前会列出冲突并保留备份，之后可以恢复。叠加安装的补丁要按相反顺序撤销；EXE 补丁则使用它自己的安装流程。
 
@@ -167,7 +162,5 @@ AI功能（测试中）：AI前情提要以及AI路线图，AI路线图涉及剧
 
 主题切换：暗色模式  
 补丁搜索：补丁tab可设置-系统中关闭，补丁搜索可从游戏库中选取后搜索**2Dfan、KunGal**平台的补丁  
-
-</details>
 
 GalGear 使用 [MIT 许可证](LICENSE)。第三方工具、图标和资料遵循各自的许可与使用条款。
