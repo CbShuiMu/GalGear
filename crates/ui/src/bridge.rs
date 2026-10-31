@@ -9,6 +9,7 @@ extern "C" {
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_namespace = GalGearBridge)]
     pub(crate) fn local_date_time(seconds: f64) -> String;
+    #[cfg(not(test))]
     #[wasm_bindgen(js_namespace = GalGearBridge)]
     pub(crate) fn render(html: &str);
     #[cfg(not(test))]
@@ -48,3 +49,7 @@ pub(crate) fn schedule_toast_expiry(_token: u32, _milliseconds: u32) {}
 
 #[cfg(test)]
 pub(crate) fn reset_scroll() {}
+
+// Native event-routing tests exercise state changes without a browser DOM.
+#[cfg(test)]
+pub(crate) fn render(_html: &str) {}

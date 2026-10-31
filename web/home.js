@@ -218,14 +218,19 @@ export function installHomeNavigation(dispatch, ready) {
     const game = event.target.closest?.('.home-game');
     if (game) select(game);
   });
-  // Pointer presses must not transfer focus, which is used by keyboard/gamepad selection.
+  // Focus on click with preventScroll so the browser cannot jump ahead of the shelf animation.
   document.addEventListener('pointerdown', event => {
     if (event.target.closest?.('.home-game')) event.preventDefault();
   });
   document.addEventListener('click', event => {
-    if (event.detail > 0 && event.target.closest?.('.home-game')) {
+    const game = event.target.closest?.('.home-game');
+    if (event.detail > 0 && game) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (activeHome() && !game.disabled) {
+        game.focus({preventScroll:true});
+        select(game);
+      }
     }
   }, true);
 

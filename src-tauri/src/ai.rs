@@ -65,6 +65,9 @@ pub async fn save_ai_provider(
     state: State<'_, AppState>,
 ) -> Result<ProviderStatus, Message> {
     ai::models_url(&provider)?;
+    if model.trim().is_empty() {
+        return Err(Message::new("ai.model_unavailable"));
+    }
     let path = state.store.path.clone();
     let source = provider.clone();
     let selected = model.clone();

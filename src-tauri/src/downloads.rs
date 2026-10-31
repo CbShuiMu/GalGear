@@ -268,10 +268,11 @@ pub(crate) async fn start_fan_download(
                     final_transfer = progress.clone();
                     let _ = app.emit("fan-download-progress", progress);
                 })?;
-            let ready = galgear_core::patches::downloads::finish(
+            let ready = galgear_core::patches::downloads::finish_resource(
                 &directory,
                 std::path::Path::new(&downloaded),
                 game.is_some(),
+                fresh.preview.save_data,
                 &cancel,
             )
             .map_err(|error| {

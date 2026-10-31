@@ -55,6 +55,7 @@ pub fn options(app: &App, field: &str) -> Vec<OptionItem> {
             item("csrf", "authenticity_token / CSRF"),
             item("bearer", "Bearer token"),
         ],
+        "magpie-mode" => crate::tool_preferences::options(app),
         "cloud-game" => cloud::choice_options(app),
         "patch-game" | "patch-search-game" => {
             let mut games: Vec<_> = app
@@ -100,6 +101,7 @@ pub fn current<'a>(app: &'a App, field: &str) -> &'a str {
         "patch-game" => &app.patches.patch_game,
         "patch-search-game" => &app.patches.patch_search_game,
         "fan-mode" => &app.account.credentials.mode,
+        "magpie-mode" => &app.tool_preferences.selected,
         "cloud-game" => cloud::choice_current(app),
         field if field.starts_with("ai-model:") => ai::choice_current(app, field),
         _ => game_setup::choice_current(app, field),
@@ -187,14 +189,16 @@ pub fn popup(html: &mut String, app: &App) {
     let values = filtered(app, field);
     let searchable = matches!(
         field,
-        "patch-game" | "patch-search-game" | "folder-parent" | "cloud-game"
+        "patch-game" | "patch-search-game" | "folder-parent" | "cloud-game" | "magpie-mode"
     ) || field.starts_with("ai-model:");
     let label = match field {
         "patch-game" => t(app, "patches.target"),
         "cloud-game" => t(app, "cloud.game"),
         "patch-search-game" => t(app, "patches.library_search"),
         "folder-parent" => t(app, "folders.parent"),
+        "magpie-mode" => t(app,"tools.magpie_mode"),
         "sort" => t(app, "games.sort_label"),
+        "setup-batch-source" => t(app, "setup.batch_source"),
         field if field.starts_with("ai-model:") => t(app, "ai.model"),
         field if field.starts_with("setup-source:") => t(app, "setup.source"),
         field if field.starts_with("setup-candidate:") => t(app, "setup.entry"),
@@ -205,6 +209,8 @@ pub fn popup(html: &mut String, app: &App) {
         r#"<section class="choice-popup {}" data-render-key="choice-popup" data-choice-anchor="{}" aria-label="{}">"#,
         if matches!(field, "patch-game" | "patch-search-game" | "cloud-game") {
             "game-menu"
+        } else if field == "magpie-mode" {
+            "magpie-menu"
         } else if field.starts_with("setup-") {
             "setup-menu"
         } else {

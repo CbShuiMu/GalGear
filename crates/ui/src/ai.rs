@@ -49,6 +49,15 @@ struct ProviderState {
     error: Option<Message>,
 }
 
+impl ProviderState {
+    fn can_save(&self) -> bool {
+        (self.configured || !self.token.trim().is_empty())
+            && self.loaded
+            && !self.selected.trim().is_empty()
+            && self.models.iter().any(|model| model.id == self.selected)
+    }
+}
+
 pub(crate) struct State {
     providers: BTreeMap<String, ProviderState>,
     loaded: bool,
@@ -144,7 +153,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if let Some(provider) = action.strip_prefix("ai-model:") {
         if choice_enabled(app, action)
             && let Some(state) = app.ai.providers.get_mut(provider)
-            && state.models.iter().any(|model| model.id == value)
+            && (value.is_empty() || state.models.iter().any(|model| model.id == value))
         {
             state.selected = value.into();
         }
@@ -165,7 +174,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     };
     state.error = None;
     if action == "ai-save" {
-        if !state.loaded || !state.models.iter().any(|model| model.id == state.selected) {
+        if !state.can_save() {
             return true;
         }
         let payload = json!({"provider":value,"token":state.token,"model":state.selected});
@@ -195,6 +204,7 @@ pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
     }
     if let Some(state) = app.ai.providers.get_mut(provider) {
         state.token = value.into();
+        state.selected.clear();
         state.models.clear();
         state.loaded = false;
         state.error = None;
@@ -377,7 +387,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
             disabled || !choice_enabled(app, &model_field),
         );
         let has_token = state.configured || !state.token.trim().is_empty();
-        let can_save = state.loaded && state.models.iter().any(|model| model.id == state.selected);
+        let can_save = state.can_save();
         let status = if pending {
             "ai.loading"
         } else if state.configured {
@@ -394,6 +404,8 @@ pub(crate) fn render(html: &mut String, app: &App) {
             Message::new("ai.loading")
         } else if state.loaded && state.models.is_empty() {
             Message::new("ai.empty")
+        } else if state.loaded && state.selected.is_empty() {
+            Message::new("ai.select_model_hint")
         } else if state.loaded {
             Message::new("ai.model_count").arg("count", state.models.len())
         } else {
@@ -590,6 +602,31 @@ mod tests {
         input(&mut app, "ai-token:openai", "replacement-token");
         assert!(!choice_enabled(&app, "ai-model:openai"));
         assert!(app.ai.providers["openai"].models.is_empty());
+    }
+
+    #[test]
+    fn replacement_token_requires_a_new_model_selection_before_saving() {
+        let mut app = App::default();
+        app.ai.loaded = true;
+        let state = app.ai.providers.get_mut("openai").unwrap();
+        state.configured = true;
+        state.selected = "current-model".into();
+        input(&mut app, "ai-token:openai", "replacement-token");
+        dispatch(&mut app, "ai-save", "openai");
+        assert!(crate::bridge::take_requests().is_empty());
+        resolve(&mut app, &Request::Models("openai".into()), 0, true,
+            r#"[{"id":"current-model"}]"#);
+        dispatch(&mut app, "ai-save", "openai");
+        assert!(crate::bridge::take_requests().is_empty());
+        let mut html = String::new();
+        render(&mut html, &app);
+        let save = html.split("data-action=\"ai-save\"").nth(1).unwrap().split('>').next().unwrap();
+        assert!(save.contains("disabled"));
+        dispatch(&mut app, "ai-model:openai", "current-model");
+        dispatch(&mut app, "ai-save", "openai");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "save_ai_provider");
     }
 
     #[test]

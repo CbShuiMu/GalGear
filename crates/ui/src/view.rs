@@ -99,7 +99,9 @@ pub(crate) fn paint(app: &App) {
         ("collections", "folders.title"),
         ("patches", "nav.patches"),
     ] {
-        if value != "patches" || app.settings.show_patches {
+        if (value != "patches" || app.settings.show_patches)
+            && (value != "collections" || app.settings.show_collections)
+        {
             nav(&mut html, app, value, t(app, key));
         }
     }
@@ -136,6 +138,7 @@ pub(crate) fn paint(app: &App) {
         detail(&mut html, app, game);
     }
     library::dialog(&mut html, app);
+    crate::library_import::render(&mut html, app);
     context_menu::render(&mut html, app);
     choices::popup(&mut html, app);
     game_setup::render(&mut html, app);

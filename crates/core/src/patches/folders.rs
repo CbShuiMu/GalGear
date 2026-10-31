@@ -12,6 +12,8 @@ use std::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Entry {
     pub name: String,
+    #[serde(default)]
+    pub save_data: bool,
     pub files: usize,
     pub replaces_existing: bool,
     pub error: Option<Message>,
@@ -41,6 +43,24 @@ pub fn directory(folder: &Path) -> Result<PathBuf, Message> {
         return Err(Message::new("local_patches.unsafe"));
     }
     Ok(path)
+}
+
+pub const RESOURCE_MARKER: &str = ".galgear-resource.json";
+
+/// Resource types are recorded at download time; legacy named save folders remain recognizable.
+pub fn is_save_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    name.contains("存档") || name.contains("存檔") || lower.contains("savedata")
+        || lower.split(|c: char| !c.is_ascii_alphanumeric()).any(|part| part == "save" || part == "saves")
+}
+
+/// Read a published resource marker, falling back to legacy folder names.
+pub fn is_save(folder: &Path, name: &str) -> Result<bool, Message> {
+    let path = source(&directory(folder)?, name)?.join(RESOURCE_MARKER);
+    if !path.exists() { return Ok(is_save_name(name)); }
+    if is_link(&fs::symlink_metadata(&path).map_err(error)?) { return Err(Message::new("local_patches.unsafe")); }
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(path).map_err(error)?).map_err(error)?;
+    Ok(value["save_data"] == true)
 }
 
 fn source(storage: &Path, name: &str) -> Result<PathBuf, Message> {
@@ -74,6 +94,7 @@ fn files(source: &Path, root: &Path) -> Result<Vec<PathBuf>, Message> {
                 return Err(Message::new("local_patches.unsafe"));
             }
             let path = path.strip_prefix(source).map_err(error)?;
+            if path == Path::new(RESOURCE_MARKER) { continue; }
             let name = path
                 .to_str()
                 .ok_or_else(|| Message::new("local_patches.unsafe"))?;
@@ -159,11 +180,16 @@ pub fn list(folder: &Path) -> Result<Report, Message> {
             .and_then(|source| files(&source, root))
             .and_then(|files| Ok((!matching_files(root, &files)?.is_empty(), files)));
         let mut patch = Entry {
+            save_data: false,
             name,
             files: 0,
             replaces_existing: false,
             error: None,
         };
+        match is_save(folder, &patch.name) {
+            Ok(save_data) => patch.save_data = save_data,
+            Err(error) => { patch.error = Some(error); patches.push(patch); continue; }
+        }
         match contents {
             Ok((replaces_existing, files)) => {
                 patch.files = files.len();
@@ -186,12 +212,27 @@ pub fn list(folder: &Path) -> Result<Report, Message> {
 /// Stages a fresh copy for the existing backed-up, hash-checked installer.
 /// Large resources are streamed to disk and the source patch remains intact.
 pub fn preview(folder: &Path, name: &str, game_id: String) -> Result<Plan, Message> {
+    preview_to(folder, name, game_id, None)
+}
+
+/// Save resources require a confirmed destination; all writes use the backed-up installer.
+pub fn preview_to(folder: &Path, name: &str, game_id: String, save_path: Option<&Path>) -> Result<Plan, Message> {
+    let save_data = is_save(folder, name)?;
     let storage = directory(folder)?;
-    let root = storage
-        .parent()
-        .ok_or_else(|| error("Missing game folder"))?
-        .to_path_buf();
-    let source = source(&storage, name)?;
+    let root = if save_data {
+        save_path.ok_or_else(|| Message::new("local_patches.confirm_save"))?.canonicalize().map_err(error)?
+    } else { folder.canonicalize().map_err(error)? };
+    if !root.is_dir() { return Err(Message::new("local_patches.unsafe")); }
+    let mut source = source(&storage, name)?;
+    // A save archive may wrap its files in the destination directory's own name.
+    if save_data && let Some(base) = root.file_name() {
+        let entries = fs::read_dir(&source).map_err(error)?.collect::<Result<Vec<_>, _>>().map_err(error)?;
+        let contents: Vec<_> = entries.iter().filter(|entry| entry.file_name() != RESOURCE_MARKER).collect();
+        if contents.len() == 1 && contents[0].file_name() == base && contents[0].file_type().map_err(error)?.is_dir() {
+            source = contents[0].path();
+            if is_link(&fs::symlink_metadata(&source).map_err(error)?) { return Err(Message::new("local_patches.unsafe")); }
+        }
+    }
     let files = files(&source, &root)?;
     if files.is_empty() {
         return Err(Message::new("local_patches.empty_patch"));
@@ -200,7 +241,7 @@ pub fn preview(folder: &Path, name: &str, game_id: String) -> Result<Plan, Messa
         .iter()
         .map(|file| file.to_string_lossy().to_lowercase())
         .collect();
-    let replaced = matching_files(&root, &files)?;
+    let replaced = if save_data { Vec::new() } else { matching_files(&root, &files)? };
     let staging = tempfile::tempdir().map_err(error)?;
     let mut preview = Preview {
         title: name.into(),
@@ -246,7 +287,7 @@ pub fn preview(folder: &Path, name: &str, game_id: String) -> Result<Plan, Messa
         preview,
         staging,
         root,
-        reuse_patch_files: true,
+        backup: if save_data { super::BackupStrategy::Record } else { super::BackupStrategy::PatchFiles },
     })
 }
 
@@ -351,6 +392,30 @@ pub(super) fn backup_originals(
 mod tests {
     use super::super::{install, restore};
     use super::*;
+
+    #[test]
+    fn save_install_requires_target_and_backs_up_without_replacing_game_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let game = temp.path().join("game"); let saves = temp.path().join("saves");
+        fs::create_dir(&game).unwrap(); fs::create_dir(&saves).unwrap();
+        let storage = directory(&game).unwrap(); let resource=storage.join("Full save");
+        fs::create_dir_all(resource.join("saves")).unwrap();
+        fs::write(resource.join("saves/slot.dat"),b"complete").unwrap();
+        fs::write(saves.join("slot.dat"),b"original").unwrap();
+        fs::write(saves.join("slot.bak"),b"keep same stem").unwrap();
+        fs::write(game.join("slot.dat"),b"game resource").unwrap();
+        assert!(preview(&game,"Full save","id".into()).is_err());
+        let plan=preview_to(&game,"Full save","id".into(),Some(&saves)).unwrap();
+        assert_eq!(plan.preview.files.len(),1);
+        let data=temp.path().join("backups");
+        let installed=install(plan,&data).unwrap();
+        assert_eq!(fs::read(saves.join("slot.dat")).unwrap(),b"complete");
+        assert_eq!(fs::read(saves.join("slot.bak")).unwrap(),b"keep same stem");
+        assert_eq!(fs::read(game.join("slot.dat")).unwrap(),b"game resource");
+        assert!(!saves.join("patch").exists());
+        restore(&data,&installed.id).unwrap();
+        assert_eq!(fs::read(saves.join("slot.dat")).unwrap(),b"original");
+    }
 
     #[test]
     fn named_original_folder_keeps_all_names_and_can_be_switched_back() {

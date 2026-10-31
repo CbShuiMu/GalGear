@@ -229,6 +229,7 @@ pub fn dispatch(action: &str, value: &str) {
             || game_setup::dispatch(&mut app, action, value)
             || cover_picker::dispatch(&mut app, action, value)
             || local_patches::dispatch(&mut app, action, value)
+            || crate::library_import::dispatch(&mut app, action, value).is_some()
             || library::dispatch(&mut app, action, value)
             || features::dispatch(&mut app, action, value)
         {
@@ -350,6 +351,7 @@ pub fn choice_key(field: &str, key: &str) -> bool {
                 "sort" | "patch-game" | "patch-search-game" | "fan-mode"
             ) || ai::choice_enabled(&app, field)
                 || cloud::choice_enabled(&app, field)
+                || crate::tool_preferences::enabled(&app, field)
                 || game_setup::choice_enabled(&app, field))
         {
             app.choices.query.clear();
@@ -636,6 +638,17 @@ pub fn enrichment_progress(payload: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_dialog_receives_the_shared_close_action_before_library_dialogs() {
+        APP.with(|state| {
+            *state.borrow_mut() = crate::state::App::default();
+        });
+        dispatch("import-open", "");
+        APP.with(|state| assert!(state.borrow().library_import.open));
+        dispatch("library-close", "");
+        APP.with(|state| assert!(!state.borrow().library_import.open));
+    }
 
     #[test]
     fn marquee_keeps_games_and_folders_separate_and_rejects_other_collection_items() {

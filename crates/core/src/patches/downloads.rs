@@ -62,12 +62,18 @@ pub fn finish(
     game_patch: bool,
     cancel: &AtomicBool,
 ) -> Result<PathBuf, Message> {
+    finish_resource(directory, downloaded, game_patch, false, cancel)
+}
+
+/// Publishes the resource type together with its contents, before announcing completion.
+pub fn finish_resource(directory: &Path, downloaded: &Path, game_patch: bool, save_data: bool, cancel: &AtomicBool) -> Result<PathBuf, Message> {
     let storage = directory.canonicalize().map_err(error)?;
     let downloaded = downloaded.canonicalize().map_err(error)?;
     if downloaded.parent() != Some(storage.as_path()) || !downloaded.is_file() {
         return Err(Message::new("local_patches.unsafe"));
     }
     check_cancel(cancel)?;
+    let save_data = save_data || folders::is_save_name(&downloaded.file_name().unwrap_or_default().to_string_lossy());
     let kind = archive_kind(&downloaded)?;
     if kind.is_none() && !game_patch {
         return Ok(downloaded);
@@ -188,6 +194,12 @@ pub fn finish(
     } else {
         contents
     };
+    if game_patch || save_data {
+        let mut marker = fs::OpenOptions::new().write(true).create_new(true)
+            .open(publish.join(folders::RESOURCE_MARKER)).map_err(error)?;
+        marker.write_all(if save_data { br#"{"save_data":true}"# } else { br#"{"save_data":false}"# }).map_err(error)?;
+        marker.sync_all().map_err(error)?;
+    }
     for suffix in 0..1000 {
         let destination = storage.join(if suffix == 0 {
             name.to_owned()
@@ -215,6 +227,19 @@ mod tests {
             zip.write_all(bytes).unwrap();
         }
         zip.finish().unwrap();
+    }
+    #[test]
+    fn save_classification_is_published_and_cannot_be_spoofed_by_archive() {
+        let temp=tempfile::tempdir().unwrap(); let storage=folders::directory(temp.path()).unwrap();
+        let download=storage.join("resource.zip");
+        archive(&download,&[("slot.dat",b"save")]);
+        finish_resource(&storage,&download,true,true,&AtomicBool::new(false)).unwrap();
+        let report=folders::list(temp.path()).unwrap();
+        assert!(report.patches[0].save_data); assert_eq!(report.patches[0].files,1);
+        let bad=storage.join("bad.zip");
+        archive(&bad,&[(folders::RESOURCE_MARKER,br#"{"save_data":false}"#),("slot.dat",b"data")]);
+        assert!(finish_resource(&storage,&bad,true,true,&AtomicBool::new(false)).is_err());
+        assert!(bad.exists()); assert!(!storage.join("bad").exists());
     }
     #[test]
     fn extracts_signature_detected_archives_and_deletes_only_after_success() {

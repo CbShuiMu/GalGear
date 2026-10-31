@@ -175,3 +175,5 @@
 .detail-state-actions{display:flex;align-items:center;gap:8px;margin-bottom:16px}
 
 .reference-detail .card-heading-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}.reference-detail .save-card .utility-heading,.reference-detail .patch-card .utility-heading{flex-wrap:wrap}.reference-detail .official-card[hidden]{display:none}
+
+.save-resource-badge { display:inline-flex; border:1px solid var(--line); padding:2px 7px; border-radius:999px; font-size:.75rem; color:var(--pink); }

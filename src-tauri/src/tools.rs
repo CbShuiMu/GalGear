@@ -93,11 +93,12 @@ fn start_magpie(executable: &Path) -> Result<MagpieProcess, Message> {
     command.spawn().map_err(|e| Message::detail("tools.error", e))
 }
 
-fn save_magpie_hotkey(state: &AppState, executable: &Path, hotkey: &str) -> Result<String, Message> {
-    crate::bundled_tools::validate_magpie_hotkey(executable, hotkey)?;
+fn save_magpie_hotkey(state: &AppState, executable: &Path, hotkey: &str, mode: Option<&str>) -> Result<String, Message> {
+    crate::bundled_tools::validate_magpie_hotkey(executable, hotkey, mode)?;
     let current = crate::bundled_tools::magpie_hotkey(executable, "")?;
     // A redundant Save must not interrupt scaling or restart the application.
-    if current == crate::bundled_tools::canonical_magpie_hotkey(hotkey)? { return Ok(current); }
+    if current == crate::bundled_tools::canonical_magpie_hotkey(hotkey)?
+        && mode.is_none_or(|mode| crate::bundled_tools::modes::read(executable).is_ok_and(|m| m.selected == mode)) { return Ok(current); }
     let mut owned = state.tools.magpie.lock().map_err(|_| Message::new("error.operation"))?;
     if state.tools.shutting_down.load(std::sync::atomic::Ordering::SeqCst) {
         return Err(Message::new("error.operation"));
@@ -114,7 +115,7 @@ fn save_magpie_hotkey(state: &AppState, executable: &Path, hotkey: &str) -> Resu
     #[cfg(not(windows))]
     let running = false;
     // Read again after exit to include any pending Magpie settings save.
-    let saved = crate::bundled_tools::write_magpie_hotkey(executable, hotkey);
+    let saved = crate::bundled_tools::write_magpie_hotkey(executable, hotkey, mode);
     let restarted = if running {
         start_magpie(executable).map(|child| *owned = Some(child))
     } else { Ok(()) };
@@ -237,16 +238,17 @@ pub(crate) async fn configure_tools(
     magpie: String,
     magpie_hotkey: String,
     backup_retention: usize,
+    magpie_mode: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<Settings, Message> {
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        configure_tools_at(&handle.state::<AppState>(), &locale_emulator, &magpie, &magpie_hotkey, backup_retention)
+        configure_tools_at(&handle.state::<AppState>(), &locale_emulator, &magpie, &magpie_hotkey, backup_retention, magpie_mode.as_deref())
     }).await.map_err(|e| Message::detail("tools.error", e))?
 }
 
 fn configure_tools_at(
-    state: &AppState, locale_emulator: &str, magpie: &str, magpie_hotkey: &str, backup_retention: usize,
+    state: &AppState, locale_emulator: &str, magpie: &str, magpie_hotkey: &str, backup_retention: usize, magpie_mode: Option<&str>,
 ) -> Result<Settings, Message> {
     runtime::hotkey_keys(magpie_hotkey).map_err(|e| Message::detail("tools.error", e))?;
     if !(1..=1000).contains(&backup_retention) { return Err(Message::new("error.operation")); }
@@ -256,7 +258,7 @@ fn configure_tools_at(
     let executable = if magpie.is_empty() { None } else { Some(tool_path(magpie, "tools.magpie_missing")?) };
     update(state, |settings| {
         let hotkey = if let Some(executable) = &executable {
-            save_magpie_hotkey(state, executable, magpie_hotkey)?
+            save_magpie_hotkey(state, executable, magpie_hotkey, magpie_mode)?
         } else { magpie_hotkey.trim().into() };
         settings.locale_emulator = locale_emulator.into();
         settings.magpie = magpie.into();
@@ -543,7 +545,7 @@ mod tests {
         let config = data.path().join("config/config.json");
         std::fs::write(&config, r#"{"shortcuts":{"scale":3137}}"#).unwrap();
         let path = executable.to_str().unwrap();
-        let settings = configure_tools_at(&state, "", path, "Alt+Shift+B", 10).unwrap();
+        let settings = configure_tools_at(&state, "", path, "Alt+Shift+B", 10, None).unwrap();
         assert_eq!(settings.magpie_hotkey, "Alt+Shift+B");
         assert_eq!(crate::bundled_tools::magpie_hotkey(&executable, "").unwrap(), settings.magpie_hotkey);
         assert!(sync_magpie_hotkey(&state).unwrap().is_none());
@@ -559,6 +561,26 @@ mod tests {
     }
 
     #[test]
+    fn saving_magpie_mode_preserves_other_profiles_and_rejects_deleted_modes() {
+        let data = tempfile::tempdir().unwrap();
+        let state = AppState::load(data.path().join("data")).unwrap();
+        let executable = data.path().join("Magpie.exe");
+        std::fs::write(&executable, []).unwrap();
+        std::fs::create_dir(data.path().join("config")).unwrap();
+        let config = data.path().join("config/config.json");
+        let original=serde_json::json!({"shortcuts":{"scale":3137},"scalingModes":[{"name":"First"},{"name":"Second"}],"profiles":[{"scalingMode":0},{"name":"Game","scalingMode":0}],"unknown":true});
+        std::fs::write(&config,serde_json::to_vec(&original).unwrap()).unwrap();
+        configure_tools_at(&state,"",executable.to_str().unwrap(),"Alt+Shift+A",10,Some(r#"{"name":"Second"}"#)).unwrap();
+        let value:serde_json::Value=serde_json::from_slice(&std::fs::read(&config).unwrap()).unwrap();
+        assert_eq!(value["profiles"][0]["scalingMode"],1);
+        assert_eq!(value["profiles"][1],original["profiles"][1]);
+        assert_eq!(value["unknown"],true);
+        assert!(configure_tools_at(&state,"",executable.to_str().unwrap(),"Alt+Shift+B",20,Some(r#"{"name":"Removed"}"#)).is_err());
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&std::fs::read(&config).unwrap()).unwrap(),value);
+        assert_eq!(snapshot(&state).unwrap().backup_retention,10);
+    }
+
+    #[test]
     fn failed_hotkey_save_preserves_galgear_preferences() {
         let data = tempfile::tempdir().unwrap();
         let state = AppState::load(data.path().join("data")).unwrap();
@@ -568,7 +590,7 @@ mod tests {
         let config = data.path().join("config/config.json");
         std::fs::write(&config, r#"{"shortcuts":{"scale":3137,"windowedModeScale":3138}}"#).unwrap();
         let previous = serde_json::to_value(snapshot(&state).unwrap()).unwrap();
-        assert!(configure_tools_at(&state, "", executable.to_str().unwrap(), "Alt+Shift+B", 20).is_err());
+        assert!(configure_tools_at(&state, "", executable.to_str().unwrap(), "Alt+Shift+B", 20, None).is_err());
         assert_eq!(serde_json::to_value(snapshot(&state).unwrap()).unwrap(), previous);
     }
 
@@ -674,17 +696,17 @@ mod tests {
         let _cleanup = Cleanup(&state);
         let path = executable.to_str().unwrap();
         let original = crate::bundled_tools::magpie_hotkey(&executable, "").unwrap();
-        let settings = configure_tools_at(&state, "", path, &original, 10).unwrap();
+        let settings = configure_tools_at(&state, "", path, &original, 10, None).unwrap();
         ensure_magpie(&state, &settings).unwrap();
         let previous = state.tools.magpie.lock().unwrap().as_ref().unwrap().id();
-        let saved = configure_tools_at(&state, "", path, "Alt+Shift+B", 10).unwrap();
+        let saved = configure_tools_at(&state, "", path, "Alt+Shift+B", 10, None).unwrap();
         assert_eq!(saved.magpie_hotkey, "Alt+Shift+B");
         assert_eq!(runtime::detect(executable.to_str()), Status::Running);
         let current = state.tools.magpie.lock().unwrap().as_ref().unwrap().id();
         assert_ne!(current, previous);
         assert_eq!(crate::bundled_tools::magpie_hotkey(&executable, "").unwrap(), "Alt+Shift+B");
         // A repeated save leaves the same live process in place.
-        configure_tools_at(&state, "", path, "Shift+Alt+B", 10).unwrap();
+        configure_tools_at(&state, "", path, "Shift+Alt+B", 10, None).unwrap();
         assert_eq!(state.tools.magpie.lock().unwrap().as_ref().unwrap().id(), current);
     }
 
@@ -704,4 +726,11 @@ mod tests {
         assert_eq!(result.unwrap(), "Alt+Shift+A");
         assert_eq!(running, Status::Running);
     }
+}
+
+#[tauri::command]
+pub(crate) async fn magpie_modes(magpie: String) -> Result<crate::bundled_tools::modes::Modes, Message> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::bundled_tools::modes::read(&tool_path(&magpie, "tools.magpie_missing")?)
+    }).await.map_err(|e| Message::detail("tools.error", e))?
 }

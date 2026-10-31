@@ -70,6 +70,14 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
             paint(&app);
             return;
         }
+        if crate::library_import::resolve(&mut app, &kind, id, success, payload) {
+            paint(&app);
+            return;
+        }
+        if crate::tool_preferences::resolve(&mut app, &kind, id, success, payload) {
+            paint(&app);
+            return;
+        }
         if local_patches::resolve(&mut app, &kind, id, success, payload) {
             paint(&app);
             return;
@@ -101,7 +109,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         } else {
             let handled: Result<(), String> = (|| {
                 match kind {
-                    Pending::FindSave(_)
+                    Pending::ImportPreview | Pending::ImportCommit | Pending::MagpieModes | Pending::ExportPotato | Pending::FindSave(_)
                     | Pending::Background
                     | Pending::Ai(_)
                     | Pending::Cloud(_)

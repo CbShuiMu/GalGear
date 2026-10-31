@@ -13,7 +13,9 @@ pub(crate) struct App {
     pub(crate) ai: ai::State,
     pub(crate) cloud: cloud::State,
     pub(crate) summary: crate::ai_summary::State,
+    pub(crate) tool_preferences: crate::tool_preferences::State,
     pub(crate) setup: game_setup::State,
+    pub(crate) library_import: crate::library_import::State,
     pub(crate) page: String,
     pub(crate) home_selected: Option<String>,
     pub(crate) settings: Settings,
@@ -53,6 +55,8 @@ impl Default for App {
             cloud: cloud::State::default(),
             summary: crate::ai_summary::State::default(),
             setup: game_setup::State::default(),
+            library_import: Default::default(),
+            tool_preferences: Default::default(),
             page: "home".into(),
             home_selected: None,
             settings: Settings {
@@ -64,6 +68,8 @@ impl Default for App {
                 sort_by: "title".into(),
                 ai_provider: crate::models::default_ai_provider(),
                 metadata_provider: default_source(),
+                show_collections: true,
+                show_patches: true,
                 ..Default::default()
             },
             catalog: Catalog::default(),
@@ -120,7 +126,9 @@ pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: 
         settings.magpie_hotkey.clone_from(&app.settings.magpie_hotkey);
     }
     app.settings = settings;
-    if app.page == "patches" && !app.settings.show_patches {
+    if (app.page == "patches" && !app.settings.show_patches)
+        || (app.page == "collections" && !app.settings.show_collections)
+    {
         app.page = "games".into();
     }
 }
@@ -136,6 +144,20 @@ pub(crate) fn show_toast(app: &mut App, message: Message, error: bool) {
 mod tests {
     use super::*;
     use crate::models::BackgroundImage;
+
+    #[test]
+    fn hiding_current_collection_page_returns_to_library_without_losing_collections() {
+        let mut app = App {
+            page: "collections".into(),
+            ..Default::default()
+        };
+        let mut settings = app.settings.clone();
+        settings.collections.push(crate::models::Collection { id: "saved".into(), ..Default::default() });
+        settings.show_collections = false;
+        apply_settings(&mut app, settings, 1);
+        assert_eq!(app.page, "games");
+        assert_eq!(app.settings.collections[0].id, "saved");
+    }
 
     #[test]
     fn delayed_preferences_cannot_restore_a_background_after_reset() {

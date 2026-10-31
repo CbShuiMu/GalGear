@@ -39,6 +39,23 @@ pub(crate) struct SourceStatus {
     pub source: String,
     pub configured: bool,
 }
+
+pub(crate) fn source_available(app: &App, source: &str) -> bool {
+    // Non-public credentials are saved only after a successful validation.
+    source == "2dfan"
+        || (SOURCES.iter().any(|(id, _)| *id == source)
+            && app.data_sources.iter().any(|status| status.source == source && status.configured))
+}
+
+pub(crate) fn available_source<'a>(app: &'a App, preferred: &'a str) -> &'a str {
+    if source_available(app, preferred) {
+        preferred
+    } else if source_available(app, &app.settings.metadata_provider) {
+        &app.settings.metadata_provider
+    } else {
+        "2dfan"
+    }
+}
 pub(crate) fn source_for_url(url: &str) -> (&'static str, &'static str) {
     let source = if url.starts_with("https://vndb.org/") {
         "vndb"
@@ -140,12 +157,31 @@ pub(crate) fn source_picker(
     disabled: bool,
 ) {
     options_start(html, action, t(app, "sources.default"));
-    for (source, name) in SOURCES {
+    for (source, name) in SOURCES.into_iter().filter(|(source, _)| source_available(app, source)) {
         option(html, action, source, name, source == selected, disabled);
     }
     html.push_str("</div>");
 }
 fn account(html: &mut String, app: &App) {
+    write!(
+        html,
+        "<section class=\"settings-card\"><h2>{}</h2><p class=\"field-help\">{}</p>",
+        t(app, "sources.default"),
+        t(app, "sources.default_help")
+    )
+    .unwrap();
+    options_start(html, "source-default", t(app, "sources.default"));
+    for (source, name) in SOURCES {
+        option(
+            html,
+            "source-default",
+            source,
+            name,
+            app.settings.metadata_provider == source,
+            app.busy(),
+        );
+    }
+    html.push_str("</div></section>");
     write!(html,r#"<section class="account-panel"><div class="panel-heading"><h2>{}</h2><span class="connection-status {}">{}</span></div><div class="account-summary"><div><strong>{}</strong><small>{}</small></div><div class="account-balance"><span>{}</span><strong>{}</strong></div></div>"#,t(app,"auth.title"),if app.account.status.status=="authenticated"{"connected"}else{""},account_label(app),esc(app.account.status.username.as_deref().unwrap_or(t(app,"auth.account"))),esc(&app.settings.fan_domain),t(app,"auth.points"),app.account.status.balance.map(|balance|balance.to_string()).unwrap_or_else(||t(app,"auth.unknown").into())).unwrap();
     if let Some(reason) = &app.account.status.reason {
         write!(
@@ -232,25 +268,6 @@ fn account(html: &mut String, app: &App) {
         )
         .unwrap();
     }
-    write!(
-        html,
-        "<section class=\"settings-card\"><h2>{}</h2><p class=\"field-help\">{}</p>",
-        t(app, "sources.default"),
-        t(app, "sources.default_help")
-    )
-    .unwrap();
-    options_start(html, "source-default", t(app, "sources.default"));
-    for (source, name) in SOURCES {
-        option(
-            html,
-            "source-default",
-            source,
-            name,
-            app.settings.metadata_provider == source,
-            app.busy(),
-        );
-    }
-    html.push_str("</div></section>");
 }
 
 fn source_field(
@@ -266,7 +283,7 @@ fn source_field(
     write!(html,r#"<label class="edit-field" for="{}"><span>{}</span><input id="{}" data-input="{}" type="{}" value="{}" autocomplete="off" spellcheck="false" placeholder="{}"/></label>"#,key,label,key,key,if password{"password"}else{"text"},esc(&features::form(app,&key)),t(app,if saved{"sources.keep_saved"}else{"sources.optional"})).unwrap();
 }
 fn library(html: &mut String, app: &App) {
-    write!(html,r#"<section class="settings-card"><div class="panel-heading"><div><h2>{}</h2><p>{}</p></div>{}</div>"#,t(app,"settings.folders"),t(app,"settings.folders_help"),button("choose-folder","",t(app,"settings.add_folder"),"create_new_folder","primary",app.busy())).unwrap();
+    write!(html,r#"<section class="settings-card"><div class="panel-heading"><div><h2>{}</h2><p>{}</p></div><div class="library-settings-actions">{}{}</div></div>"#,t(app,"settings.folders"),t(app,"settings.folders_help"),button("import-open","",t(app,"import.button"),"database","secondary",app.busy()),button("choose-folder","",t(app,"settings.add_folder"),"create_new_folder","primary",app.busy())).unwrap();
     for path in &app.settings.library_folders {
         write!(html,r#"<div class="folder-row"><span class="folder-symbol">{}</span><div><strong>{}</strong></div>{}</div>"#,icon("folder"),esc(path),button("remove-folder",path,t(app,"settings.remove_folder"),"close","quiet",app.busy())).unwrap();
     }
@@ -368,8 +385,8 @@ fn display(html: &mut String, app: &App) {
         t(app, "display.help")
     )
     .unwrap();
-    background(html, app);
     navigation(html, app);
+    background(html, app);
 }
 
 fn background(html: &mut String, app: &App) {
@@ -433,7 +450,16 @@ fn background(html: &mut String, app: &App) {
 }
 
 fn navigation(html: &mut String, app: &App) {
-    write!(html,r#"<section class="settings-card"><h2>{}</h2><p>{}</p><div class="preference-row"><h3>{}</h3><button id="patch-tab-toggle" class="preference-switch" role="switch" aria-label="{}" aria-checked="{}" data-action="patch-tab" data-value="{}" {}><span></span></button></div></section>"#,t(app,"settings.navigation"),t(app,"settings.navigation_help"),t(app,"nav.patches"),t(app,"settings.patch_tab"),app.settings.show_patches,!app.settings.show_patches,if app.busy(){"disabled"}else{""}).unwrap();
+    let _ = write!(html, r#"<section class="settings-card"><h2>{}</h2><p>{}</p>"#,
+        t(app, "settings.navigation"), t(app, "settings.navigation_help"));
+    for (action, title, label, visible) in [
+        ("collection-tab", "folders.title", "settings.collection_tab", app.settings.show_collections),
+        ("patch-tab", "nav.patches", "settings.patch_tab", app.settings.show_patches),
+    ] {
+        let _ = write!(html, r#"<div class="preference-row"><h3>{}</h3><button id="{action}-toggle" class="preference-switch" role="switch" aria-label="{}" aria-checked="{visible}" data-action="{action}" data-value="{}" {}><span></span></button></div>"#,
+            t(app, title), t(app, label), !visible, if app.busy() { "disabled" } else { "" });
+    }
+    html.push_str("</section>");
 }
 
 fn system(html: &mut String, app: &App) {
@@ -491,21 +517,22 @@ fn paths(html: &mut String, app: &App) {
             "tools.hotkey",
             app.settings.magpie_hotkey.clone(),
         ),
-        (
-            "backup-retention",
-            "backup.retention",
-            app.settings.backup_retention.to_string(),
-        ),
+
     ] {
         write!(html,r#"<label class="edit-field" for="{}"><span>{}</span><input id="{}" data-input="{}" value="{}"/></label>"#,key,t(app,label),key,key,esc(&features::setting(app,key,&fallback))).unwrap();
     }
+    crate::tool_preferences::render(html, app);
     write!(
         html,
-        "</div><p>{}</p><p>{}</p></section><p class=\"config-note\">{}<br>{}</p>",
+        "<label class=\"edit-field\" for=\"backup-retention\"><span>{}</span><input id=\"backup-retention\" data-input=\"backup-retention\" value=\"{}\" type=\"number\" min=\"1\" max=\"1000\"/></label></div><p>{}</p><p>{}</p></section><div class=\"config-export-row\"><p class=\"config-note\">{}<br>{}</p>{}</div><p class=\"muted\">{}</p>",
+        t(app, "backup.retention"),
+        esc(&features::setting(app,"backup-retention",&app.settings.backup_retention.to_string())),
         t(app, "backup.location_help"),
         t(app, "tools.help"),
         t(app, "settings.config_path"),
-        esc(&app.config_path)
+        esc(&app.config_path),
+        button("export-potatovn","",t(app,"export.button"),"download","quiet",app.busy()),
+        t(app,"export.help")
     )
     .unwrap();
 }
@@ -539,6 +566,28 @@ fn about(html: &mut String, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_pickers_only_offer_verified_credentials_and_public_2dfan() {
+        let app = App {
+            data_sources: serde_json::from_str(r#"[
+                {"source":"vndb","configured":true},
+                {"source":"ymgal","configured":false},
+                {"source":"nextmoe","configured":true}
+            ]"#).unwrap(),
+            ..Default::default()
+        };
+        for action in ["metadata-provider", "cover-provider"] {
+            let mut html = String::new();
+            source_picker(&mut html, &app, action, "2dfan", false);
+            for source in ["2dfan", "vndb", "nextmoe"] {
+                assert!(html.contains(&format!("data-value=\"{source}\"")));
+            }
+            for source in ["bangumi", "ymgal"] {
+                assert!(!html.contains(&format!("data-value=\"{source}\"")));
+            }
+        }
+    }
 
     #[test]
     fn background_url_cannot_escape_the_managed_image_cache() {

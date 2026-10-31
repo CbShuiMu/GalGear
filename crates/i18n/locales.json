@@ -69,6 +69,11 @@
     "ja-JP": "{count} 件のモデルを取得しました。一覧内で検索できます。",
     "en-US": "Fetched {count} models. Search in the dropdown to find one."
   },
+  "ai.select_model_hint": {
+    "zh-CN": "模型列表已获取，请选择模型后保存配置。",
+    "ja-JP": "モデル一覧を取得しました。モデルを選択してから設定を保存してください。",
+    "en-US": "Models loaded. Choose a model before saving the configuration."
+  },
   "ai.empty": {
     "zh-CN": "此 Token 未返回可用模型，请检查账号权限后重试。",
     "ja-JP": "利用可能なモデルがありません。アカウントの権限を確認して再試行してください。",
@@ -2225,9 +2230,9 @@
     "en-US": "Current Magpie scaling hotkey"
   },
   "tools.help": {
-    "zh-CN": "默认使用软件 tools 目录中的内置工具，相对路径以 GalGear.exe 所在目录为准。保存缩放快捷键会同步到 Magpie；若 Magpie 已运行，会短暂重启以应用新键，当前缩放会结束。Magpie 中修改的快捷键会自动同步回来，未保存的输入会保留。算法和倍率可在 Magpie 中调整。转区默认使用 Run in Japanese (Admin)，可指定其他配置。",
-    "ja-JP": "既定では GalGear.exe の tools 内のツールを使います。拡大キーを保存すると Magpie に同期し、起動中の場合は再起動して適用するため拡大が終了します。Magpie での変更は自動反映され、未保存の入力は保持されます。方式と倍率は Magpie で変更できます。ロケールの既定は Run in Japanese (Admin) です。",
-    "en-US": "Tools default to the tools folder beside GalGear.exe. Saving the scaling hotkey syncs it to Magpie. A running Magpie restarts briefly to apply it, ending active scaling. Changes in Magpie sync back automatically while unsaved edits are preserved. Adjust algorithms and scale in Magpie. Locale launch defaults to Run in Japanese (Admin)."
+    "zh-CN": "默认使用软件 tools 目录中的内置工具，相对路径以 GalGear.exe 所在目录为准。保存缩放快捷键和配置会同步到 Magpie；若 Magpie 已运行，会短暂重启以应用更改，当前缩放会结束。Magpie 中修改的快捷键会自动同步回来，未保存的输入会保留。可在下拉框选择 Magpie 默认配置；算法和倍率在 Magpie 中调整。转区默认使用 Run in Japanese (Admin)，可指定其他配置。",
+    "ja-JP": "既定では GalGear.exe の tools 内のツールを使います。拡大キーと既定の設定を保存すると Magpie に同期し、起動中の場合は再起動して適用するため拡大が終了します。Magpie での変更は自動反映され、未保存の入力は保持されます。ドロップダウンで既定の設定を選択できます。方式と倍率は Magpie で変更できます。ロケールの既定は Run in Japanese (Admin) です。",
+    "en-US": "Tools default to the tools folder beside GalGear.exe. Saving the scaling hotkey and profile syncs them to Magpie. A running Magpie restarts briefly to apply it, ending active scaling. Changes in Magpie sync back automatically while unsaved edits are preserved. Choose the default profile from the dropdown; adjust algorithms and scale in Magpie. Locale launch defaults to Run in Japanese (Admin)."
   },
   "tools.locale_launch": {
     "zh-CN": "转区启动",
@@ -2475,14 +2480,14 @@
     "en-US": "Refresh metadata"
   },
   "detail.change_association": {
-    "zh-CN": "更改资料关联",
-    "ja-JP": "情報の関連付けを変更",
-    "en-US": "Change metadata association"
+    "zh-CN": "更改资料源",
+    "ja-JP": "情報ソースを変更",
+    "en-US": "Change metadata source"
   },
   "detail.change_tag_source": {
-    "zh-CN": "更换数据源",
-    "ja-JP": "データソースを変更",
-    "en-US": "Change source"
+    "zh-CN": "更换标签源",
+    "ja-JP": "タグソースを変更",
+    "en-US": "Change tag source"
   },
   "detail.configure": {
     "zh-CN": "编辑配置",
@@ -3060,19 +3065,24 @@
     "en-US": "Paths & backups"
   },
   "settings.navigation": {
-    "zh-CN": "导航 Tabs",
-    "ja-JP": "ナビゲーション",
-    "en-US": "Navigation tabs"
+    "zh-CN": "功能入口显示",
+    "ja-JP": "機能メニューの表示",
+    "en-US": "Feature visibility"
+  },
+  "settings.collection_tab": {
+    "zh-CN": "显示收藏入口",
+    "ja-JP": "お気に入りを表示",
+    "en-US": "Show favorites"
   },
   "settings.patch_tab": {
-    "zh-CN": "显示补丁 Tab",
+    "zh-CN": "显示补丁入口",
     "ja-JP": "パッチタブを表示",
     "en-US": "Show the patches tab"
   },
   "settings.navigation_help": {
-    "zh-CN": "可选择是否显示补丁入口；其他导航入口固定显示。",
-    "ja-JP": "パッチタブの表示を切り替えます。他のタブは常に表示されます。",
-    "en-US": "Choose whether to show Patches. Other navigation tabs stay visible."
+    "zh-CN": "选择是否显示收藏和补丁入口。",
+    "ja-JP": "お気に入りとパッチの表示を切り替えます。",
+    "en-US": "Choose whether to show Favorites and Patches."
   },
   "games.tag_filter": {
     "zh-CN": "标签筛选",
@@ -3135,7 +3145,7 @@
     "en-US": "Default metadata source"
   },
   "sources.default_help": {
-    "zh-CN": "自动获取资料时使用此来源；更改资料关联时也可单独选择。",
+    "zh-CN": "自动获取资料时使用此来源；更改资料源时也可单独选择。",
     "ja-JP": "自動取得に使用します。関連付けを変更する際に別のソースも選択できます。",
     "en-US": "Used for automatic metadata lookup. You can choose another source when linking a game."
   },
@@ -3715,7 +3725,7 @@
     "en-US": "Auto scrape"
   },
   "save.ai_find": {
-    "zh-CN": "AI寻找",
+    "zh-CN": "AI搜索",
     "ja-JP": "AIで検索",
     "en-US": "Find with AI"
   },
@@ -3838,5 +3848,165 @@
     "zh-CN": "更新完成",
     "ja-JP": "更新が完了しました",
     "en-US": "Update complete"
+  },
+  "setup.batch_source": {
+    "zh-CN": "批量修改",
+    "ja-JP": "一括変更",
+    "en-US": "Batch change"
+  },
+  "local_patches.save_data": {
+    "zh-CN": "存档",
+    "ja-JP": "セーブデータ",
+    "en-US": "Save data"
+  },
+  "local_patches.confirm_save": {
+    "zh-CN": "确认唯一的存档位置后可安装",
+    "ja-JP": "保存先を一つ確認するとインストールできます",
+    "en-US": "Confirm one save location to install"
+  },
+  "tools.magpie_mode": {
+    "zh-CN": "Magpie 配置",
+    "ja-JP": "Magpie 設定",
+    "en-US": "Magpie profile"
+  },
+  "tools.magpie_mode_load": {
+    "zh-CN": "读取配置",
+    "ja-JP": "設定を読み込む",
+    "en-US": "Read profiles"
+  },
+  "tools.magpie_mode_select": {
+    "zh-CN": "请选择配置",
+    "ja-JP": "設定を選択",
+    "en-US": "Select a profile"
+  },
+  "tools.magpie_mode_invalid": {
+    "zh-CN": "Magpie 配置已变更或不可用，请重新读取配置。",
+    "ja-JP": "Magpie の設定が変更されたか利用できません。再読み込みしてください。",
+    "en-US": "Magpie profiles changed or are unavailable. Read profiles again."
+  },
+  "export.button": {
+    "zh-CN": "导出",
+    "ja-JP": "エクスポート",
+    "en-US": "Export"
+  },
+  "export.help": {
+    "zh-CN": "导出可直接导入 PotatoVN 的数据包，包含游戏资料、封面、收藏和游玩记录。导入会替换 PotatoVN 原有数据，请先在 PotatoVN 备份。",
+    "ja-JP": "ゲーム情報・カバー・コレクション・プレイ記録を PotatoVN 用に出力します。インポートは既存データを置き換えるため、先に PotatoVN でバックアップしてください。",
+    "en-US": "Export games, covers, collections and play records for PotatoVN. Import replaces existing PotatoVN data; back it up in PotatoVN first."
+  },
+  "export.saved": {
+    "zh-CN": "已导出到 {path}",
+    "ja-JP": "{path} にエクスポートしました",
+    "en-US": "Exported to {path}"
+  },
+  "export.error": {
+    "zh-CN": "导出失败：{detail}",
+    "ja-JP": "エクスポート失敗：{detail}",
+    "en-US": "Export failed: {detail}"
+  },
+  "export.extension": {
+    "zh-CN": "文件名须以 .pvnExport.zip 结尾。",
+    "ja-JP": "ファイル名は .pvnExport.zip で終わる必要があります。",
+    "en-US": "The filename must end with .pvnExport.zip."
+  },
+  "import.button": {
+    "zh-CN": "导入",
+    "ja-JP": "インポート",
+    "en-US": "Import"
+  },
+  "import.title": {
+    "zh-CN": "导入其他游戏管理器的数据",
+    "ja-JP": "他のゲーム管理アプリからインポート",
+    "en-US": "Import from another game manager"
+  },
+  "import.help": {
+    "zh-CN": "选择备份来源并预览。仅添加本机启动程序存在的游戏；已有或已排除的游戏会跳过。保留资料、封面、标签、收藏、状态和累计时长。",
+    "ja-JP": "バックアップを選んでプレビューします。このPCに起動ファイルがあるゲームを追加し、既存・除外済みゲームはスキップします。情報、カバー、タグ、コレクション、状態と累計プレイ時間を引き継ぎます。",
+    "en-US": "Choose a backup to preview. Adds games with an executable on this PC; existing and excluded games are skipped. Preserves metadata, covers, tags, collections, status and total playtime."
+  },
+  "import.potato_help": {
+    "zh-CN": "在 PotatoVN 导出的 .pvnExport.zip 数据包",
+    "ja-JP": "PotatoVN の .pvnExport.zip 出力ファイル",
+    "en-US": "A .pvnExport.zip archive exported by PotatoVN"
+  },
+  "import.reina_help": {
+    "zh-CN": "在 ReinaManager 备份的 .db 数据库；本地封面需保留在相邻 covers 目录",
+    "ja-JP": "ReinaManager の .db バックアップ。ローカルカバーは隣の covers フォルダーに置いてください。",
+    "en-US": "A ReinaManager .db backup; keep local covers in the adjacent covers folder."
+  },
+  "import.luna_help": {
+    "zh-CN": "LunaBox 的数据库或全量 ZIP 备份（含 CSV 表）",
+    "ja-JP": "CSV テーブルを含む LunaBox のデータベース／全体 ZIP バックアップ",
+    "en-US": "A LunaBox database or full ZIP backup containing CSV tables"
+  },
+  "import.working": {
+    "zh-CN": "正在处理，请稍候…",
+    "ja-JP": "処理中です…",
+    "en-US": "Processing…"
+  },
+  "import.summary": {
+    "zh-CN": "可新增 {added} 款，跳过 {skipped} 款",
+    "ja-JP": "追加可能 {added} 件、スキップ {skipped} 件",
+    "en-US": "{added} to add, {skipped} to skip"
+  },
+  "import.done": {
+    "zh-CN": "已导入 {added} 款游戏，跳过 {skipped} 款",
+    "ja-JP": "{added} 件をインポート、{skipped} 件をスキップしました",
+    "en-US": "Imported {added} games; skipped {skipped}"
+  },
+  "import.ready": {
+    "zh-CN": "将新增",
+    "ja-JP": "追加予定",
+    "en-US": "Will be added"
+  },
+  "import.confirm": {
+    "zh-CN": "确认导入",
+    "ja-JP": "インポートを確定",
+    "en-US": "Confirm import"
+  },
+  "import.error": {
+    "zh-CN": "读取或导入失败：{detail}",
+    "ja-JP": "読み込み・インポートに失敗：{detail}",
+    "en-US": "Could not read or import: {detail}"
+  },
+  "import.format": {
+    "zh-CN": "无法识别此来源的备份格式，请选择对应软件导出的备份。",
+    "ja-JP": "バックアップ形式を認識できません。選択したアプリのバックアップを指定してください。",
+    "en-US": "Backup format not recognized. Select a backup exported by the chosen app."
+  },
+  "import.no_launcher": {
+    "zh-CN": "缺少有效的 EXE 启动路径",
+    "ja-JP": "有効な EXE 起動パスがありません",
+    "en-US": "No valid EXE launch path"
+  },
+  "import.missing_path": {
+    "zh-CN": "本机找不到游戏目录或启动程序",
+    "ja-JP": "ゲームフォルダーまたは起動ファイルが見つかりません",
+    "en-US": "Game folder or executable not found on this PC"
+  },
+  "import.duplicate": {
+    "zh-CN": "已存在或已排除，保留当前资料",
+    "ja-JP": "登録済みまたは除外済みのため、現在の情報を保持します",
+    "en-US": "Already present or excluded; keeping current data"
+  },
+  "import.limit": {
+    "zh-CN": "备份数据超出安全读取限制。",
+    "ja-JP": "バックアップが読み込み上限を超えています。",
+    "en-US": "Backup exceeds safe reading limits."
+  },
+  "import.unsafe_path": {
+    "zh-CN": "备份包含无效路径、链接或重复文件。",
+    "ja-JP": "バックアップに無効なパス、リンク、重複ファイルがあります。",
+    "en-US": "Backup contains invalid paths, links or duplicate files."
+  },
+  "import.luna_format": {
+    "zh-CN": "请在 LunaBox 创建数据库备份或全量 ZIP 备份；不支持直接读取 DuckDB 文件。",
+    "ja-JP": "LunaBox のデータベース／全体 ZIP バックアップを作成してください。DuckDB ファイルの直接読み込みには対応していません。",
+    "en-US": "Create a database or full ZIP backup in LunaBox. Raw DuckDB files cannot be read directly."
+  },
+  "import.expired": {
+    "zh-CN": "导入预览已失效，请重新选择备份。",
+    "ja-JP": "プレビューの有効期限が切れました。バックアップを選び直してください。",
+    "en-US": "Import preview expired. Select the backup again."
   }
 }

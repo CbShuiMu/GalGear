@@ -142,7 +142,14 @@ pub struct Plan {
     pub preview: Preview,
     staging: tempfile::TempDir,
     root: PathBuf,
-    reuse_patch_files: bool,
+    backup: BackupStrategy,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BackupStrategy {
+    PatchFiles,
+    PatchFolder,
+    // Save data originals stay outside the save tree to avoid polluting saves/backups.
+    Record,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Installed {
@@ -178,7 +185,7 @@ pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, M
             preview: info,
             staging,
             root,
-            reuse_patch_files: false,
+            backup: BackupStrategy::PatchFolder,
         });
     }
     let mut total = 0u64;
@@ -246,7 +253,7 @@ pub fn preview(archive: &Path, folder: &Path, game_id: String) -> Result<Plan, M
         preview: info,
         staging,
         root,
-        reuse_patch_files: false,
+        backup: BackupStrategy::PatchFolder,
     })
 }
 
@@ -447,17 +454,19 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
             return Err(error("Files changed since preview; select the patch again"));
         }
     }
-    let mut backup_sources = if plan.reuse_patch_files {
+    let mut backup_sources = if plan.backup == BackupStrategy::PatchFiles {
         folders::matching_backups(&plan.root, &plan.preview.files)?
     } else {
         Default::default()
     };
-    let backup_name = if plan.reuse_patch_files {
+    let backup_name = if plan.backup == BackupStrategy::PatchFiles {
         plan.preview.title.clone()
     } else {
         Path::new(&plan.preview.title).file_stem().unwrap_or_default().to_string_lossy().into_owned()
     };
-    folders::backup_originals(&plan.root, &backup_name, &plan.preview.files, &mut backup_sources)?;
+    if plan.backup != BackupStrategy::Record {
+        folders::backup_originals(&plan.root, &backup_name, &plan.preview.files, &mut backup_sources)?;
+    }
     fs::create_dir_all(data).map_err(error)?;
     let id = format!(
         "{:020}-{:08x}",
@@ -475,6 +484,14 @@ pub fn install(plan: Plan, data: &Path) -> Result<Installed, Message> {
         status: "installing".into(),
         backup_sources,
     };
+    if plan.backup == BackupStrategy::Record {
+        for (i, file) in record.preview.files.iter().enumerate() {
+            if file.before.is_some() {
+                fs::copy(target(&plan.root, &file.path)?, dir.join(format!("{i}.bak"))).map_err(error)?;
+                fs::OpenOptions::new().write(true).open(dir.join(format!("{i}.bak"))).and_then(|f| f.sync_all()).map_err(error)?;
+            }
+        }
+    }
     for (i, file) in record.preview.files.iter().enumerate() {
         if let Some(before) = &file.before
             && file_hash(&backup_path(&dir, &record, &plan.root, i)?)? != *before

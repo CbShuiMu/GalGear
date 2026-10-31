@@ -21,6 +21,10 @@ pub(crate) enum Pending {
     Remove,
     Preferences,
     Tools,
+    MagpieModes,
+    ExportPotato,
+    ImportPreview,
+    ImportCommit,
     Display,
     Background,
     Theme,
@@ -73,7 +77,8 @@ impl Pending {
     fn blocks_ui(&self) -> bool {
         !matches!(
             self,
-            Pending::Ai(_)
+            Pending::MagpieModes
+                | Pending::Ai(_)
                 | Pending::AiRuntime
                 | Pending::Cloud(_)
                 | Pending::SummarySetup(..)

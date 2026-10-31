@@ -24,6 +24,8 @@ struct Report {
 #[derive(Deserialize)]
 struct Entry {
     name: String,
+    #[serde(default)]
+    save_data: bool,
     files: usize,
     replaces_existing: bool,
     error: Option<Message>,
@@ -90,8 +92,8 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 report
                     .patches
                     .iter()
-                    .find(|patch| patch.name == value && patch.error.is_none() && patch.files > 0)
-                    .map(|patch| patch.replaces_existing)
+                    .find(|patch| patch.name == value && patch.error.is_none() && patch.files > 0 && (!patch.save_data || save_ready(app, &id)))
+                    .map(|patch| patch.replaces_existing && !patch.save_data)
             });
             let allowed = app
                 .catalog
@@ -164,6 +166,11 @@ pub(crate) fn resolve(
     true
 }
 
+fn save_ready(app: &App, id: &str) -> bool {
+    app.detail.saves.get(id).is_some_and(|report| report.locations.iter()
+        .filter(|location| location.exists && location.confidence == "confirmed").count() == 1)
+}
+
 pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     let loading = pending(app, &game.id);
     let disabled = app.busy() || loading || !game.available;
@@ -215,8 +222,14 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
                         &[("count", &patch.files.to_string())],
                     )
                 });
-            write!(html, r#"<div class="local-patch-entry"><div class="local-patch-copy"><h4>{}</h4><p>{}</p></div>{}</div>"#,
-                esc(&patch.name), esc(&description), button("local-patch-apply", &patch.name, t(app, if patch.replaces_existing {"local_patches.switch"} else {"local_patches.install"}), "", "secondary", disabled || patch.error.is_some() || patch.files == 0 || app.runtime.get(&game.id).is_some_and(|status| status == "running"))).unwrap();
+            let action = if patch.save_data && !save_ready(app, &game.id) {
+                format!("<small class=\"patch-help\">{}</small>", t(app, "local_patches.confirm_save"))
+            } else {
+                button("local-patch-apply", &patch.name, t(app, if patch.replaces_existing && !patch.save_data {"local_patches.switch"} else {"local_patches.install"}), "", "secondary", disabled || patch.error.is_some() || patch.files == 0 || app.runtime.get(&game.id).is_some_and(|status| status == "running"))
+            };
+            let badge = if patch.save_data { format!("<span class=\"save-resource-badge\">{}</span>", t(app,"local_patches.save_data")) } else { String::new() };
+            write!(html, r#"<div class="local-patch-entry"><div class="local-patch-copy"><h4>{} {badge}</h4><p>{}</p></div>{action}</div>"#,
+                esc(&patch.name), esc(&description)).unwrap();
         }
         if app
             .runtime
@@ -247,6 +260,23 @@ mod tests {
     use galgear_i18n::Language;
 
     #[test]
+    fn save_install_requires_one_existing_confirmed_location() {
+        let mut app = App::default();
+        let game: Game = serde_json::from_value(json!({"id":"save-game","title":"Game","folder":"F:/Game","engine":"unknown","modified":0})).unwrap();
+        app.catalog.games.push(game.clone()); app.detail.selected=Some(game.id.clone());
+        app.local_patches.reports.insert(game.id.clone(),Report {folder:"F:/Game/patch".into(),patches:vec![Entry {name:"Full save".into(),save_data:true,files:1,replaces_existing:true,error:None}]});
+        for (confidence,exists,count,allowed) in [("likely",true,1,false),("confirmed",false,1,false),("confirmed",true,2,false),("confirmed",true,1,true)] {
+            let locations = (0..count).map(|n|crate::models::SaveLocation {path:format!("F:/Saves/{n}"),confidence:confidence.into(),exists,..Default::default()}).collect();
+            app.detail.saves.insert(game.id.clone(),crate::models::SaveReport {locations,limited:false});
+            let mut html=String::new(); render(&mut html,&app,&game);
+            assert!(html.contains(t(&app,"local_patches.save_data")));
+            assert_eq!(html.contains("data-action=\"local-patch-apply\""),allowed);
+            crate::bridge::take_requests(); dispatch(&mut app,"local-patch-apply","Full save");
+            assert_eq!(crate::bridge::take_requests().len(),usize::from(allowed));
+        }
+    }
+
+    #[test]
     fn renders_install_switch_and_empty_patches_with_escaped_names() {
         let mut app = App {
             ..Default::default()
@@ -258,18 +288,21 @@ mod tests {
                 folder: "F:/Game/patch".into(),
                 patches: vec![
                     Entry {
+                        save_data: false,
                         name: "<new>".into(),
                         files: 1,
                         replaces_existing: false,
                         error: None,
                     },
                     Entry {
+                        save_data: false,
                         name: "Existing".into(),
                         files: 2,
                         replaces_existing: true,
                         error: None,
                     },
                     Entry {
+                        save_data: false,
                         name: "Empty".into(),
                         files: 0,
                         replaces_existing: false,
@@ -358,6 +391,7 @@ mod tests {
                 Report {
                     folder: "F:/Game/patch".into(),
                     patches: vec![Entry {
+                        save_data: false,
                         name: "Patch".into(),
                         files: 1,
                         replaces_existing: switching,

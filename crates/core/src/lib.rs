@@ -13,8 +13,10 @@ pub mod fan_account;
 pub mod game_details;
 pub mod game_setup;
 pub mod launcher_icons;
+pub mod library_import;
 pub mod patches;
 pub mod playtime;
+pub mod potatovn;
 pub mod play_sessions;
 pub mod providers;
 pub mod runtime;
@@ -68,6 +70,7 @@ pub struct Settings {
     pub color_theme: String,
     pub background_image: Option<background::BackgroundImage>,
     pub show_patches: bool,
+    pub show_collections: bool,
     pub metadata_provider: String,
     pub ai_models: BTreeMap<String, String>,
     pub ai_provider: String,
@@ -109,6 +112,7 @@ impl Default for Settings {
             color_theme: "pink".into(),
             background_image: None,
             show_patches: true,
+            show_collections: true,
             metadata_provider: "2dfan".into(),
             ai_models: BTreeMap::new(),
             ai_provider: "deepseek".into(),

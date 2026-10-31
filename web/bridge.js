@@ -166,7 +166,7 @@ function placeChoice() {
   if (!anchor) return;
   const box = anchor.getBoundingClientRect();
   const optionWidth=Math.max(0,...[...menu.querySelectorAll('.choice-copy>span')].map(node=>node.scrollWidth+64));
-  const width = Math.min(Math.max(box.width, menu.classList.contains('game-menu') ? 340 : menu.classList.contains('setup-menu') ? Math.min(560, optionWidth) : optionWidth), innerWidth - 16);
+  const width = Math.min(Math.max(box.width, menu.classList.contains('game-menu') ? 340 : (menu.classList.contains('setup-menu') || menu.classList.contains('magpie-menu')) ? Math.min(560, optionWidth) : optionWidth), innerWidth - 16);
   menu.style.width = `${width}px`;
   menu.style.maxHeight = `${Math.min(340, innerHeight - 24)}px`;
   const height = menu.getBoundingClientRect().height;
@@ -357,6 +357,8 @@ function renderFrame(html) {
     syncModalBoundary();
     document.querySelectorAll('.add-menu').forEach(menu => setAddMenuExpanded(menu, menu.dataset.expanded === 'true'));
     const saveDialog = document.querySelector('.snapshot-delete-dialog') || document.querySelector('.restore-dialog') || document.querySelector('.archive-dialog');
+    const importDialog = document.querySelector('.import-dialog');
+    if (importDialog && !importDialog.contains(document.activeElement)) (importDialog.querySelector('[data-action="import-confirm"]:not(:disabled)') || importDialog.querySelector('button:not(:disabled)'))?.focus({preventScroll:true});
     if (saveDialog && !saveDialog.contains(document.activeElement)) saveDialog.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
     if (detailReturnAnimation) document.querySelector('.detail-overlay')?.setAttribute('inert', '');
     // The underlying page must leave inert before its focus can be restored.

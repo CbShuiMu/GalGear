@@ -365,6 +365,8 @@ pub fn parse_account(body: &str) -> Account {
 
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
 pub struct DownloadPreview {
+    #[serde(default)]
+    pub save_data: bool,
     pub ticket: String,
     pub source_url: String,
     pub title: String,
@@ -518,7 +520,14 @@ pub fn parse_download(body: &str, url: Url) -> Result<DownloadPlan, Message> {
     } else {
         Some(Message::new("download.site_required"))
     };
+    let save_data = crate::patches::folders::is_save_name(&title) || doc.select(&sel("main .download-info-item, main .download-card-kind"))
+        .any(|row| {
+            let text = row.text().collect::<String>();
+            (text.contains("类型") || text.contains("分類") || text.contains("分类") || row.value().attr("class").is_some_and(|c| c.contains("download-card-kind")))
+                && crate::patches::folders::is_save_name(&text)
+        });
     let preview = DownloadPreview {
+        save_data,
         source_url: url.to_string(),
         title,
         price,
@@ -885,6 +894,14 @@ mod tests {
                     .preview
                     .can_purchase
             );
+        }
+    }
+    #[test]
+    fn save_resource_kind_is_detected_independently_of_download_filename() {
+        let url=Url::parse("https://2dfmax.top/downloads/1").unwrap();
+        for (title,kind,expected) in [("测试资源","存档",true),("全 CG 存檔","其他",true),("Translation","汉化补丁",false)] {
+            let html=format!("<h1>{title}</h1><main><div class='download-info-item'><span>类型</span><span>{kind}</span></div></main>");
+            assert_eq!(parse_download(&html,url.clone()).unwrap().preview.save_data,expected);
         }
     }
     #[test]

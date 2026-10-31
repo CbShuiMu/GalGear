@@ -61,6 +61,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if matches!(action, "launch-normal" | "open-folder") {
         app.context_menu = None;
     }
+    if crate::tool_preferences::dispatch(app, action, value) { return true; }
     match action {
         "ai-find-save" => {
             if !save_busy(app) && app.catalog.games.iter().any(|game| game.id == value) {
@@ -100,10 +101,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 );
             }
         }
-        "metadata-provider"
-            if preferences::SOURCES
-                .iter()
-                .any(|(source, _)| *source == value) =>
+        "metadata-provider" if preferences::source_available(app, value) =>
         {
             app.detail.metadata_source = value.into();
             if let Some(id) = &app.detail.selected {
@@ -207,6 +205,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         {
             app.settings_section = value.into();
             app.choices.open = None;
+            if value == "paths" { crate::tool_preferences::load(app); }
             if value == "ai" {
                 ai::load(app);
             }
@@ -218,6 +217,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app,
             Pending::Preferences,
             "set_patch_tab",
+            json!({"visible":value=="true"}),
+        ),
+        "collection-tab" => issue(
+            app,
+            Pending::Preferences,
+            "set_collection_tab",
             json!({"visible":value=="true"}),
         ),
         "background-choose" | "background-clear" => {
@@ -292,7 +297,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             } else {
                 detail::Editor::Association
             });
-            app.detail.metadata_source = "vndb".into();
+            app.detail.metadata_source = preferences::available_source(app, "vndb").into();
             if let Some(game) = app
                 .detail
                 .selected
@@ -514,7 +519,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     app,
                     Pending::Tools,
                     "configure_tools",
-                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupRetention":retention}),
+                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupRetention":retention,"magpieMode":crate::tool_preferences::selection(app)}),
                 );
             } else {
                 show_toast(app, Message::new("backup.retention_error"), true);
@@ -777,6 +782,18 @@ pub(crate) fn delete_snapshot_dialog(html: &mut String, app: &App, game: &Game) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_and_tag_editors_fall_back_from_unconfigured_sources() {
+        let mut app = App::default();
+        app.settings.metadata_provider = "ymgal".into();
+        for action in ["metadata-association", "tags-association"] {
+            dispatch(&mut app, action, "");
+            assert_eq!(app.detail.metadata_source, "2dfan");
+            dispatch(&mut app, "metadata-provider", "ymgal");
+            assert_eq!(app.detail.metadata_source, "2dfan");
+        }
+    }
 
     #[test]
     fn default_launch_options_are_checked_and_can_be_switched_off() {

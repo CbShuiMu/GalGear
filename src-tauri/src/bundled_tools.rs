@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 #[cfg(windows)]
 mod process;
+pub(crate) mod modes;
 #[cfg(windows)]
 pub(crate) use process::{
     Child as MagpieProcess, start as start_magpie, stop as stop_magpie,
@@ -136,8 +137,9 @@ fn magpie_config(executable: &Path) -> PathBuf {
 
 /// Replace only the scaling shortcut, keeping all other Magpie settings intact.
 /// The caller stops a running Magpie first, so its pending save cannot overwrite this edit.
-pub(crate) fn write_magpie_hotkey(executable: &Path, hotkey: &str) -> Result<String, Message> {
-    let (config, value, encoded) = hotkey_document(executable, hotkey)?;
+pub(crate) fn write_magpie_hotkey(executable: &Path, hotkey: &str, mode: Option<&str>) -> Result<String, Message> {
+    let (config, mut value, encoded) = hotkey_document(executable, hotkey)?;
+    modes::apply(&mut value, mode)?;
     let mut temporary = tempfile::NamedTempFile::new_in(config.parent().unwrap_or(Path::new(".")))
         .map_err(|e| Message::detail("tools.error", e))?;
     let output =
@@ -155,8 +157,9 @@ pub(crate) fn write_magpie_hotkey(executable: &Path, hotkey: &str) -> Result<Str
     decode_hotkey(encoded).ok_or_else(|| Message::new("tools.magpie_hotkey_invalid"))
 }
 
-pub(crate) fn validate_magpie_hotkey(executable: &Path, hotkey: &str) -> Result<(), Message> {
-    hotkey_document(executable, hotkey).map(|_| ())
+pub(crate) fn validate_magpie_hotkey(executable: &Path, hotkey: &str, mode: Option<&str>) -> Result<(), Message> {
+    let (_, mut value, _) = hotkey_document(executable, hotkey)?;
+    modes::apply(&mut value, mode)
 }
 
 fn hotkey_document(
@@ -196,7 +199,7 @@ mod tests {
         std::fs::write(&config, serde_json::to_vec(&original).unwrap()).unwrap();
         let executable = temp.path().join("Magpie.exe");
         assert_eq!(
-            write_magpie_hotkey(&executable, "shift+alt+b").unwrap(),
+            write_magpie_hotkey(&executable, "shift+alt+b", None).unwrap(),
             "Alt+Shift+B"
         );
         let mut expected = original;
@@ -217,14 +220,14 @@ mod tests {
         let conflict = br#"{"shortcuts":{"scale":3137,"windowedModeScale":3138}}"#;
         std::fs::write(&config, conflict).unwrap();
         assert_eq!(
-            write_magpie_hotkey(&executable, "Alt+Shift+B")
+            write_magpie_hotkey(&executable, "Alt+Shift+B", None)
                 .unwrap_err()
                 .key,
             "tools.magpie_hotkey_conflict"
         );
         assert_eq!(std::fs::read(&config).unwrap(), conflict);
         std::fs::write(&config, b"{partial").unwrap();
-        assert!(write_magpie_hotkey(&executable, "Alt+Shift+B").is_err());
+        assert!(write_magpie_hotkey(&executable, "Alt+Shift+B", None).is_err());
         assert_eq!(std::fs::read(&config).unwrap(), b"{partial");
     }
 

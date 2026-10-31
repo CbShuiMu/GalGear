@@ -1021,3 +1021,21 @@
 @media(max-width:900px) {
   :root .app-shell[data-theme] .button.game-launch-button {min-width:150px}
 }
+
+/* Tool profiles share the searchable, keyboard-accessible choice component. */
+.magpie-mode-field { min-width: 0; }
+.magpie-mode-label { position: relative; padding-right: 90px; }
+.magpie-mode-label .quiet { position: absolute; right: 0; top: -5px; padding: 2px 8px; font-size: .8rem; }
+.magpie-mode-field .choice-control { width: 100%; min-width: 0; }
+.magpie-mode-field .choice-trigger { width: 100%; min-height: 42px; border-radius: 7px; }
+.magpie-mode-field .choice-copy { min-width: 0; }
+.magpie-mode-field .choice-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-popup.magpie-menu { max-width: min(560px, calc(100vw - 16px)); }
+.magpie-menu .choice-copy > span { white-space: normal; overflow-wrap: anywhere; line-height: 1.5; }
+.magpie-menu .choice-option { padding-block: 10px; }
+.config-export-row { display: flex; align-items: center; gap: 16px; justify-content: space-between; }
+.config-export-row .config-note { min-width: 0; overflow-wrap: anywhere; }
+.config-export-row > button { flex-shrink: 0; }
+
+/* A restrained ambient halo keeps poster edges lifted on every side. */
+.app-shell{--poster-shadow:0 0 12px #30263820,0 4px 10px #30263812}.app-shell[data-theme=dark]{--poster-shadow:0 0 13px #0005,0 4px 12px #0003}

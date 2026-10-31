@@ -53,6 +53,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 "sort" | "folder-parent" | "patch-game" | "patch-search-game" | "fan-mode"
             ) || ai::choice_enabled(app, value)
                 || cloud::choice_enabled(app, value)
+                || crate::tool_preferences::enabled(app, value)
                 || game_setup::choice_enabled(app, value) =>
         {
             if app.choices.open.as_deref() == Some(value) {
@@ -91,6 +92,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             {
                 issue(app, Pending::PatchList, "list_patches", json!({}));
             }
+            if value == "settings" && app.settings_section == "paths" { crate::tool_preferences::load(app); }
             if value == "settings" && app.settings_section == "cloud" {
                 cloud::load(app);
             }

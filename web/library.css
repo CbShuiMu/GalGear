@@ -56,7 +56,7 @@
 .library-page .game-grid{--card-width:clamp(var(--library-card-min-width),18vw,312px);grid-template-columns:repeat(auto-fill,min(var(--card-width),100%));gap:24px var(--library-column-gap);justify-content:start}
 .library-page .game-card{position:relative;display:block;border:0;padding:0;background:none;min-width:0;width:100%;aspect-ratio:360/518;max-height:500px;text-align:left;cursor:grab;transform:none;animation:none}
 .game-face,.card-overlay{position:absolute;inset:0;width:100%;height:100%;border-radius:11px}
-.game-face{display:block;border:0;background:none;padding:0;text-align:left;color:inherit}.game-face:focus-visible{outline:3px solid var(--pink);outline-offset:4px}.game-face .poster{height:100%;aspect-ratio:auto;transition:none}.game-face .cover-hint{display:none}.game-face .poster>img,.game-face .poster-fallback{transform:none;transition:filter .18s}
+.game-face{display:block;border:0;background:none;padding:0;text-align:left;color:inherit}.game-face:focus-visible{outline:3px solid var(--pink);outline-offset:4px}.game-face .poster{height:100%;aspect-ratio:auto;transition:none;box-shadow:var(--poster-shadow)}.game-face .cover-hint{display:none}.game-face .poster>img,.game-face .poster-fallback{transform:none;transition:filter .18s}
 /* The overlay lets clicks through to the poster; only its buttons receive clicks. */
 .card-overlay{display:flex;flex-direction:column;gap:18px;padding:24px;background:#17111AB8;color:#FFF;overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .16s,visibility 0s .16s}
 .card-heading{display:flex;gap:8px;align-items:flex-start;min-height:0;max-height:44%;flex-shrink:0}.card-heading h3{min-width:0;overflow:auto;max-height:100%;font-size:calc(var(--ui-font)*1.06);font-weight:600;line-height:1.6;scrollbar-width:thin}.card-title{display:block;width:100%;padding:0;border:0;background:none;text-align:left;color:inherit;font:inherit;overflow-wrap:anywhere;pointer-events:auto}.card-title:hover{color:#FFD6E8}
@@ -121,3 +121,11 @@
 @container toolbar (max-width:640px){.library-stats{display:none}.bar-controls{justify-content:flex-start!important;flex-wrap:wrap!important}.tag-filter-control>[data-action=tag-filter-open]{max-width:100px!important}}
 
 .setup-help{display:flex;align-items:center;justify-content:space-between;gap:16px}.setup-help>span{min-width:0}.setup-help>.button{flex-shrink:0}
+
+.setup-actions { display:flex; gap:10px; align-items:center; flex-shrink:0; }
+.setup-actions .choice-trigger { width:auto; border-radius:999px; white-space:nowrap; }
+.setup-dialog { min-width:0; max-width:calc(100vw - 48px); }
+.setup-table-scroll { min-width:0; max-width:100%; }
+@media(max-width:760px) { .setup-help { flex-wrap:wrap; } .setup-actions { margin-left:auto; } }
+
+.library-settings-actions{display:flex;gap:10px;flex-wrap:wrap}.import-dialog{width:min(760px,100%)}.import-sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}.import-sources .button{width:100%}.import-sources small{display:block;margin-top:7px;color:var(--muted);font-size:.8em;line-height:1.6;overflow-wrap:anywhere}.import-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 16px;padding:12px 0;border-top:1px solid var(--line)}.import-row strong,.import-row small{grid-column:1;overflow-wrap:anywhere}.import-row small{color:var(--muted)}.import-row>span{grid-column:2;grid-row:1/3;align-self:center;max-width:220px;font-size:.85em;overflow-wrap:anywhere}.import-ready{color:var(--pink-dark)}.import-dialog .library-dialog-footer{gap:10px}.import-summary{font-weight:600}@media(max-width:700px){.import-sources{grid-template-columns:1fr}.import-row{grid-template-columns:1fr}.import-row>span{grid-column:1;grid-row:auto;max-width:none}}

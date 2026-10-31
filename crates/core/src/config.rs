@@ -98,6 +98,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn feature_visibility_defaults_on_and_survives_reopening() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(temp.path().join("settings.json"));
+        fs::write(&store.path, r#"{"version":1}"#).unwrap();
+        let mut settings = store.load().unwrap();
+        assert!(settings.show_collections && settings.show_patches);
+        settings.show_collections = false;
+        store.save(&settings).unwrap();
+        let reloaded = store.load().unwrap();
+        assert!(!reloaded.show_collections && reloaded.show_patches);
+    }
+
+    #[test]
     fn launch_defaults_upgrade_untouched_games_and_preserve_saved_opt_outs() {
         let temp = tempfile::tempdir().unwrap();
         let store = ConfigStore::new(temp.path().join("settings.json"));

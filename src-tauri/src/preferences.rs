@@ -37,6 +37,17 @@ pub(crate) fn set_patch_tab(
 }
 
 #[tauri::command]
+pub(crate) fn set_collection_tab(
+    visible: bool,
+    state: State<'_, AppState>,
+) -> Result<Settings, Message> {
+    update(&state, |settings| {
+        settings.show_collections = visible;
+        Ok(())
+    })
+}
+
+#[tauri::command]
 pub(crate) fn set_theme(
     theme: String,
     state: State<'_, AppState>,

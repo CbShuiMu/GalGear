@@ -17,17 +17,17 @@
 .home-backdrop:not([data-layout]) img{visibility:hidden}
 .home-backdrop[data-layout="portrait"] .home-backdrop-cover{inset:0 0 auto auto;width:auto;height:100%;max-width:none;object-fit:contain;object-position:right center;mask-image:linear-gradient(90deg,transparent,rgba(0,0,0,.04) 6%,rgba(0,0,0,.18) 14%,rgba(0,0,0,.5) 24%,rgba(0,0,0,.82) 33%,#000 44%)}
 .home-page::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(90deg,rgb(var(--home-shade)/.78) 0%,rgb(var(--home-shade)/.58) 28%,rgb(var(--home-shade)/.14) 62%,rgb(var(--home-shade)/.03)),linear-gradient(0deg,rgb(var(--home-shade)/.65),transparent 52%,rgb(var(--home-shade)/.15))}
-.home-shelf{position:relative;display:flex;align-items:flex-start;gap:var(--home-gap);min-width:0;height:calc(var(--home-selected-height) + var(--home-ring-space)*2);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;scrollbar-width:none;scroll-padding:var(--home-ring-space);padding:var(--home-ring-space);margin:calc(-1*var(--home-ring-space))}
+.home-shelf{position:relative;display:flex;align-items:flex-start;gap:var(--home-gap);min-width:0;height:calc(var(--home-selected-height) + 28px);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;scrollbar-width:none;scroll-padding:14px;padding:14px;margin:-14px}
 .home-shelf::after{content:"";flex:0 0 max(0px,calc(100% - var(--home-last-width,0px) - var(--home-gap)));height:1px;pointer-events:none}
 .home-shelf::-webkit-scrollbar{display:none}
 :root .app-shell[data-theme] .home-game{
-  position:relative;flex:0 0 auto;width:auto;height:var(--home-poster-height);min-width:0;min-height:0;padding:0;border:0;border-radius:10px;cursor:default;
+  position:relative;flex:0 0 auto;width:auto;height:var(--home-poster-height);min-width:0;min-height:0;padding:0;border:0;border-radius:10px;cursor:pointer;
   background:transparent;box-shadow:none;color:var(--home-text);line-height:0;transition:height calc(var(--home-motion-ms)*1ms) cubic-bezier(.2,.7,.2,1)
 }
 :root .app-shell[data-theme] .home-game.selected{height:var(--home-selected-height)}
 :root .app-shell[data-theme] .home-game:hover:not(:disabled){background:transparent;box-shadow:none}
 /* Image dimensions define the tile. No fixed aspect-ratio, contain bars, padding or theme surface. */
-.home-game>.poster{display:block;position:relative;width:auto;height:100%;aspect-ratio:auto;border-radius:inherit;overflow:hidden;background:transparent;border:0;outline:0;box-shadow:none;transition:none}
+.home-game>.poster{display:block;position:relative;width:auto;height:100%;aspect-ratio:auto;border-radius:inherit;overflow:hidden;background:transparent;border:0;outline:0;box-shadow:var(--poster-shadow);transition:none}
 .home-game>.poster>img{display:block;width:auto;height:100%;max-width:none;object-fit:fill;transform:none;filter:none;transition:none}
 /* Paint outside the image: a transparent 4px gap, without reducing the cover area. */
 .home-game::after{content:"";position:absolute;inset:calc(-1*var(--home-ring-space));border:2px solid transparent;border-radius:calc(10px + var(--home-ring-space));pointer-events:none}

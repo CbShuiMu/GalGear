@@ -39,6 +39,8 @@ pub(crate) struct Settings {
     pub(crate) fan_domain: String,
     #[serde(default = "true_value")]
     pub(crate) show_patches: bool,
+    #[serde(default = "true_value")]
+    pub(crate) show_collections: bool,
     #[serde(default = "default_font")]
     pub(crate) font_size: u32,
     #[serde(default = "default_retention")]

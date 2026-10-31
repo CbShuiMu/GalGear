@@ -34,6 +34,11 @@ impl AppState {
                 }
             });
         let mut play_records = playtime::load(&store.path.with_file_name("playtime.json"))?;
+        // Manual entries also retain imported metadata/time if a derived cache write failed.
+        for game in &settings.manual_games {
+            if !cached.games.iter().any(|g|g.id==game.id) { cached.games.push(game.clone()); }
+            play_records.entry(game.id.clone()).or_insert_with(||playtime::Record::from_game(game));
+        }
         let forgotten = catalog::purge_missing(&mut settings, &mut cached);
         let pending_changed = galgear_core::game_setup::mark_new(&mut settings, &cached.games, &Default::default());
         cached.games.retain(|game| !catalog::is_excluded(game, &settings));

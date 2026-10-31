@@ -60,7 +60,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "cover-picker" => {
             app.detail.editor = Some(detail::Editor::Cover);
             app.cover_picker = State {
-                source: "vndb".into(),
+                source: preferences::available_source(app, "vndb").into(),
                 query: app
                     .detail
                     .selected
@@ -72,7 +72,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             };
             load(app);
         }
-        "cover-provider" if preferences::SOURCES.iter().any(|(id, _)| *id == value) => {
+        "cover-provider" if preferences::source_available(app, value) => {
             if app.cover_picker.source != value {
                 app.cover_picker.source = value.into();
                 search(app);
@@ -205,7 +205,13 @@ mod tests {
 
     #[test]
     fn custom_cover_search_survives_source_changes_without_changing_game_metadata() {
-        let mut app = App::default();
+        let mut app = App {
+            data_sources: serde_json::from_str(r#"[
+                {"source":"vndb","configured":true},
+                {"source":"bangumi","configured":true}
+            ]"#).unwrap(),
+            ..Default::default()
+        };
         app.catalog.games.push(
             serde_json::from_value(json!({
                 "id":"game", "title":"Original title", "folder":"F:/Game",
@@ -253,6 +259,20 @@ mod tests {
             app.catalog.games[0].metadata.as_ref().unwrap().url,
             "https://vndb.org/v1"
         );
+    }
+
+    #[test]
+    fn cover_picker_falls_back_to_public_search_without_credentials() {
+        let mut app = App::default();
+        app.detail.selected = Some("game".into());
+        app.settings.metadata_provider = "ymgal".into();
+        dispatch(&mut app, "cover-picker", "game");
+        let requests = crate::bridge::take_requests();
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(payload["source"], "2dfan");
+        dispatch(&mut app, "cover-provider", "ymgal");
+        assert!(crate::bridge::take_requests().is_empty());
+        assert_eq!(app.cover_picker.source, "2dfan");
     }
 
     #[test]

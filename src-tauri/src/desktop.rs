@@ -108,6 +108,7 @@ pub(crate) fn run() {
                 tauri::Theme::Light
             }));
             app.manage(state);
+            app.manage(crate::import::Imports::default());
             crate::skill_package::start();
             let show = tauri::menu::MenuItem::with_id(
                 app,
@@ -255,6 +256,7 @@ pub(crate) fn run() {
             game_details::save_game_details,
             game_details::set_play_status,
             preferences::set_patch_tab,
+            preferences::set_collection_tab,
             game_details::edit_metadata,
             game_details::edit_tags,
             covers::reset_cover,
@@ -271,6 +273,10 @@ pub(crate) fn run() {
             save_commands::restore_saves,
             save_commands::update_snapshot,
             tools::configure_tools,
+            tools::magpie_modes,
+            crate::export::export_potatovn,
+            crate::import::prepare_library_import,
+            crate::import::confirm_library_import,
             tools::set_game_tools,
             tools::game_runtime,
             tools::upscale_game,

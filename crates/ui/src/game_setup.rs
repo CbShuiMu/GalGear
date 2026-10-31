@@ -111,6 +111,9 @@ pub(crate) fn sync(app: &mut App) {
                         preferences::source_for_url(&url).0.into()
                     }
                 });
+            let available = preferences::available_source(app, &source).to_owned();
+            let url = if source == available { url } else { String::new() };
+            let source = available;
             Draft {
                 id: game.id.clone(),
                 source,
@@ -232,31 +235,23 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         }
         return true;
     }
+    if action == "setup-batch-source" {
+        if !app.setup.busy() && preferences::source_available(app, value) {
+            for row in &mut app.setup.rows { change_source(row, value); }
+        }
+        return true;
+    }
     let pair = serde_json::from_str::<[String; 2]>(value).ok();
     let (id, selected) = pair.as_ref().map_or((value, ""), |[id, selected]| {
         (id.as_str(), selected.as_str())
     });
+    if action == "setup-source" && !preferences::source_available(app, selected) { return true; }
     let Some(row) = app.setup.rows.iter_mut().find(|row| row.id == id) else {
         return true;
     };
-    if row.locked() {
-        return true;
-    }
+    if row.locked() { return true; }
     match action {
-        "setup-source"
-            if preferences::SOURCES
-                .iter()
-                .any(|(source, _)| *source == selected) =>
-        {
-            if row.source != selected {
-                row.source = selected.into();
-                row.url.clear();
-                row.candidates.clear();
-                row.search_request = None;
-                row.searched = false;
-                row.error = None;
-            }
-        }
+        "setup-source" => change_source(row, selected),
         "setup-search" if !row.source.is_empty() && !row.query.trim().is_empty() => {
             row.search_request = Some(app.requests.next_id());
             row.candidates.clear();
@@ -396,6 +391,16 @@ pub(crate) fn resolve(
     true
 }
 
+fn change_source(row: &mut Draft, source: &str) {
+    if row.source == source { return; }
+    row.source = source.into();
+    row.url.clear();
+    row.candidates.clear();
+    row.search_request = None;
+    row.searched = false;
+    row.error = None;
+}
+
 fn choice_row<'a>(app: &'a App, field: &str) -> Option<(&'a Draft, bool)> {
     let (kind, id) = field.split_once(':')?;
     let source = match kind {
@@ -411,6 +416,7 @@ fn choice_row<'a>(app: &'a App, field: &str) -> Option<(&'a Draft, bool)> {
 }
 
 pub(crate) fn choice_enabled(app: &App, field: &str) -> bool {
+    if field == "setup-batch-source" { return app.setup.open && !app.setup.busy(); }
     app.setup.open
         && choice_row(app, field).is_some_and(|(row, source)| {
             !row.locked() && (source || !row.candidates.is_empty() || !row.url.is_empty())
@@ -441,15 +447,20 @@ pub(crate) fn choice_placeholder(app: &App, field: &str) -> Option<&'static str>
     })
 }
 
+fn source_options(app: &App) -> Vec<choices::OptionItem> {
+    preferences::SOURCES.iter().filter(|(source, _)| preferences::source_available(app, source))
+        .map(|(source, name)| choices::item(source, name)).collect()
+}
+
 pub(crate) fn choice_options(app: &App, field: &str) -> Vec<choices::OptionItem> {
+    if field == "setup-batch-source" {
+        return source_options(app);
+    }
     let Some((row, source)) = choice_row(app, field) else {
         return Vec::new();
     };
     if source {
-        return preferences::SOURCES
-            .iter()
-            .map(|(source, name)| choices::item(source, name))
-            .collect();
+        return source_options(app);
     }
     let mut options: Vec<_> = row
         .candidates
@@ -471,7 +482,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
     }
     let busy = app.setup.busy();
     let ready = app.setup.rows.iter().filter(|row| row.can_save()).count();
-    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help"><span>{}</span>{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table"><thead><tr>"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),t(app,"setup.batch_help"),button("setup-auto","",t(app,"setup.auto"),"search","quiet",busy)).unwrap();
+    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help"><span>{}</span>{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table"><thead><tr>"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),t(app,"setup.batch_help"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button("setup-auto","",t(app,"setup.auto"),"search","quiet",busy))).unwrap();
     for key in [
         "setup.game",
         "setup.source",
@@ -545,6 +556,20 @@ pub(crate) fn render(html: &mut String, app: &App) {
 mod tests {
     use super::*;
     use crate::models::GameEdit;
+
+    #[test]
+    fn batch_source_uses_only_verified_sources_and_discards_late_search() {
+        let mut app=app();
+        assert_eq!(source_options(&app).iter().map(|o|o.value.as_str()).collect::<Vec<_>>(),vec!["2dfan","vndb","bangumi"]);
+        let before=app.setup.rows[0].source.clone();
+        dispatch(&mut app,"setup-batch-source","ymgal");
+        assert_eq!(app.setup.rows[0].source,before);
+        dispatch(&mut app,"setup-search","new");
+        let old=app.requests.last_id();
+        dispatch(&mut app,"setup-batch-source","vndb");
+        resolve(&mut app,&Pending::SetupSearch("new".into()),old,true,r#"[{"title":"old","url":"https://2dfmax.top/subjects/1"}]"#);
+        assert!(app.setup.rows.iter().all(|r|r.source=="vndb" && r.url.is_empty() && r.candidates.is_empty()));
+    }
     fn game(id: &str, url: &str) -> serde_json::Value {
         json!({"id":id,"title":id,"folder":"F:/Games/Test","executable":"F:/Games/Test/game.exe","engine":"unknown","cover":null,"modified":0,"metadata":if url.is_empty(){serde_json::Value::Null}else{json!({"url":url})}})
     }
@@ -553,6 +578,7 @@ mod tests {
             initialized: true,
             ..Default::default()
         };
+        app.data_sources = ["vndb", "bangumi"].into_iter().map(|source| preferences::SourceStatus { source: source.into(), configured: true }).collect();
         app.catalog.games = [
             game("cached", "https://vndb.org/v1"),
             game("new", ""),

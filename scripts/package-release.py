@@ -19,6 +19,8 @@ for source, target in (
     (root / 'LICENSE', 'LICENSE'),
     (root / 'docs/bundled-tools.txt', '内置工具说明.txt'),
     (root / 'docs/cloud-storage.md', 'cloud-storage.md'),
+    (root / 'docs/library-import.md', '导入说明.md'),
+    (root / 'docs/settings-and-export-2026-10-31.md', '设置与导出说明.md'),
 ):
     shutil.copy2(source, stage / target)
 (stage / 'portable.flag').touch()
