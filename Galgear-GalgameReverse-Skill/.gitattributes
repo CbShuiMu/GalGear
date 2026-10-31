@@ -1,3 +1,0 @@
-# Preserve CLI runtimes, vendored sources and licenses exactly as hashed in SOURCE.json.
-GalgameResourceExtract/tools/** -text
-GalgameResourcePack/tools/** -text

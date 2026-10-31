@@ -1,2 +1,0 @@
-[console_scripts]
-siglus-ssu = siglus_ssu.__main__:main
