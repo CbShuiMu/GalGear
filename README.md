@@ -14,9 +14,9 @@ Windows x64 · 简体中文 / 日本語 / English
 
 GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加进来，就能看封面、找游戏、整理收藏夹、启动游戏，也能在同一个地方管理存档和补丁。
 
-![GalGear 游戏库：封面列表、搜索、标签筛选和收藏夹入口](assets/readme/library.png)
+![GalGear 首页：最近游戏、作品背景和快捷启动](assets/readme/home.jpg)
 
-<p align="center"><sub>游戏库界面。截图来自 v0.1.0，使用演示条目和占位封面。</sub></p>
+<p align="center"><sub>首页实机截图，来自 v0.3.1（2026-10-31）。</sub></p>
 
 > 当前发行版为 **v0.3.1（2026-10-31）**，修复重新添加游戏库、2DFan 补丁下载和已确认存档位置的候选项显示。
 
@@ -42,6 +42,8 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 游戏可以放在不同目录，不必为了使用 GalGear 重新搬家。支持按名称搜索、组合标签筛选和排序，也可以用多层收藏夹整理正在玩、想玩或已经通关的作品。一款游戏能放进多个收藏夹，支持拖放和批量整理。
 
+![GalGear 游戏库：游戏封面、搜索、标签筛选和排序](assets/readme/library.jpg)
+
 GalGear 会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游戏进程的检测，玩游戏时请保持 GalGear 运行。
 
 ### 自动刮削来自多个数据源
@@ -59,13 +61,13 @@ GalGear 会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游
 <details>
 <summary>看看游戏详情和主题设置</summary>
 
-![GalGear 游戏详情：启动按钮、作品资料、标签和存档位置](assets/readme/detail.png)
+![GalGear 游戏详情：启动按钮、作品资料、标签和存档位置](assets/readme/detail.jpg)
 
-![GalGear 亮色模式下的显示与交互设置](assets/readme/settings-light.png)
+![GalGear 亮色模式下的显示与交互设置](assets/readme/settings-light.jpg)
 
-![GalGear 夜间模式下的显示与交互设置](assets/readme/settings-dark.png)
+![GalGear 夜间模式下的显示与交互设置](assets/readme/settings-dark.jpg)
 
-截图来自 v0.1.0。界面支持粉色、白粉两种主题色，可分别搭配亮色或夜间模式；语言和字号也能在设置中调整。
+以上均为 v0.3.1 的实机截图。界面支持粉色、白粉、白色三种主题色，可分别搭配亮色或夜间模式；语言和字号也能在设置中调整。
 
 </details>
 
