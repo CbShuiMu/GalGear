@@ -34,8 +34,10 @@ pub(crate) struct App {
     pub(crate) data_sources: Vec<preferences::SourceStatus>,
     pub(crate) runtime: BTreeMap<String, String>,
     pub(crate) form: BTreeMap<String, String>,
+    pub(crate) screenshots: crate::screenshots::State,
     pub(crate) local_patches: local_patches::State,
     pub(crate) update: crate::updates::State,
+    pub(crate) skill_update: crate::skill_update::State,
     pub(crate) game_icons: BTreeMap<String, String>,
     pub(crate) enrichment_progress: Option<Message>,
     pub(crate) requests: RequestQueue,
@@ -63,6 +65,8 @@ impl Default for App {
                 card_size: 200,
                 font_size: 16,
                 backup_retention: 10,
+                screenshot_enabled: true,
+                screenshot_hotkey: crate::models::default_screenshot_hotkey(),
                 theme: default_theme(),
                 color_theme: default_color_theme(),
                 sort_by: "title".into(),
@@ -87,8 +91,10 @@ impl Default for App {
             data_sources: Vec::new(),
             runtime: BTreeMap::new(),
             form: BTreeMap::new(),
+            screenshots: Default::default(),
             local_patches: local_patches::State::default(),
             update: crate::updates::State::default(),
+            skill_update: crate::skill_update::State::default(),
             game_icons: BTreeMap::new(),
             enrichment_progress: None,
             requests: RequestQueue::default(),
@@ -111,6 +117,7 @@ impl App {
 thread_local! { pub(crate) static APP: RefCell<App> = RefCell::new(App::default()); }
 
 pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: u32) {
+    app.screenshots.preserve_settings(&app.settings, &mut settings, request_id);
     crate::ai_summary::preserve_completed_setup(&app.summary, &mut settings, request_id);
     if request_id < app.theme_request {
         settings.theme.clone_from(&app.settings.theme);

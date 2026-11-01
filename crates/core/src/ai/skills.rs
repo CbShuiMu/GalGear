@@ -1,7 +1,7 @@
 //! Download a commit-pinned repository snapshot before replacing the installed skills.
 use galgear_i18n::Message;
 use reqwest::blocking::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::{Read, Seek},
@@ -36,9 +36,43 @@ fn valid_package(root: &Path) -> bool {
     })
 }
 
-/// Checks main on each launch; unchanged commits reuse the local installation.
-/// A failed download or validation leaves the installed version intact.
-pub fn sync(home: &Path) -> Result<(), Message> {
+/// 本地安装状态；commit 为仓库完整 SHA，旧的手工安装可能没有版本标记。
+#[derive(Default, Serialize)]
+pub struct Installed {
+    pub installed: bool,
+    pub commit: Option<String>,
+}
+
+/// 仅检查本地资源，不联网、不创建目录或修改安装。
+pub fn status(home: &Path) -> Result<Installed, Message> {
+    let root = home.join(REPOSITORY);
+    if !valid_package(&root) {
+        return Ok(Installed::default());
+    }
+    let commit = match fs::read_to_string(root.join(COMMIT_FILE)) {
+        Ok(sha) => {
+            let sha = sha.trim();
+            (sha.len() == 40 && sha.bytes().all(|c| c.is_ascii_hexdigit())).then(|| sha.to_owned())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(error(e)),
+    };
+    Ok(Installed {
+        installed: true,
+        commit,
+    })
+}
+
+/// 手动检查、安装后的仓库版本及是否实际更换了资源。
+#[derive(Serialize)]
+pub struct Updated {
+    pub commit: String,
+    pub changed: bool,
+}
+
+/// 用户主动检查时同步 main；相同且完整的安装跳过下载。
+/// 下载或校验失败保留原版本。调用方须确保没有任务正在使用资源目录。
+pub fn sync(home: &Path) -> Result<Updated, Message> {
     let client = Client::builder()
         // Skill updates use a direct connection, including the main-commit check.
         .no_proxy()
@@ -54,7 +88,7 @@ fn sync_from(
     client: &Client,
     main_url: &str,
     archive_url: &str,
-) -> Result<(), Message> {
+) -> Result<Updated, Message> {
     // An OS lock also coordinates two app instances and is released after a crash.
     let lock = fs::OpenOptions::new()
         .create(true)
@@ -94,7 +128,10 @@ fn sync_from(
     if valid_package(&installed)
         && fs::read_to_string(installed.join(COMMIT_FILE)).is_ok_and(|sha| sha.trim() == commit.sha)
     {
-        return Ok(());
+        return Ok(Updated {
+            commit: commit.sha,
+            changed: false,
+        });
     }
     let staging = tempfile::Builder::new()
         .prefix(".galgear-skills-")
@@ -122,7 +159,11 @@ fn sync_from(
     archive.rewind().map_err(error)?;
     let unpacked = staging.path().join("repository");
     extract(archive, &unpacked, &commit.sha)?;
-    install(&unpacked, &installed, &previous, &commit.sha)
+    install(&unpacked, &installed, &previous, &commit.sha)?;
+    Ok(Updated {
+        commit: commit.sha,
+        changed: true,
+    })
 }
 
 fn extract(archive: impl Read + Seek, destination: &Path, sha: &str) -> Result<(), Message> {
@@ -261,6 +302,25 @@ mod tests {
     }
 
     #[test]
+    fn local_status_never_creates_or_downloads_and_handles_legacy_installations() {
+        let home = tempfile::tempdir().unwrap();
+        assert!(!status(home.path()).unwrap().installed);
+        assert_eq!(fs::read_dir(home.path()).unwrap().count(), 0);
+        let installed = home.path().join(REPOSITORY);
+        let sha = "a".repeat(40);
+        extract(Cursor::new(archive(&sha, None)), &installed, &sha).unwrap();
+        assert!(status(home.path()).unwrap().installed);
+        assert!(status(home.path()).unwrap().commit.is_none());
+        fs::write(installed.join(COMMIT_FILE), &sha).unwrap();
+        assert_eq!(
+            status(home.path()).unwrap().commit.as_deref(),
+            Some(sha.as_str())
+        );
+        fs::remove_file(installed.join(REQUIRED[0])).unwrap();
+        assert!(!status(home.path()).unwrap().installed);
+    }
+
+    #[test]
     fn downloads_initial_commit_skips_unchanged_and_replaces_new_commit() {
         let home = tempfile::tempdir().unwrap();
         let first = "a".repeat(40);
@@ -273,14 +333,15 @@ mod tests {
             (200, archive(&second, None)),
         ]);
         let client = Client::builder().no_proxy().build().unwrap();
-        for _ in 0..3 {
-            sync_from(
+        for (commit, changed) in [(&first, true), (&first, false), (&second, true)] {
+            let result = sync_from(
                 home.path(),
                 &client,
                 &format!("{url}/main"),
                 &format!("{url}/zip"),
             )
             .unwrap();
+            assert_eq!((&result.commit, result.changed), (commit, changed));
         }
         handle.join().unwrap();
         assert_eq!(

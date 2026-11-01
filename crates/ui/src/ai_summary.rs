@@ -314,7 +314,7 @@ mod tests {
         crate::detail::render(&mut html, &app, &game);
         let option = html.split("<button").find(|tag| tag.contains("data-action=\"toggle-ai-summary\"")).unwrap();
         assert!(option.split('>').next().unwrap().contains("disabled"));
-        assert!(html.contains("Galgear-GalgameReverse-Skill"));
+        assert!(html.contains("设置 → 更新 → Skill"));
         app.settings.game_edits.get_mut(&game.id).unwrap().ai_summary = true;
         dispatch(&mut app, "summary-run", "");
         assert!(take_requests().is_empty());

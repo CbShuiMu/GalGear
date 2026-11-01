@@ -347,6 +347,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     reading(html, app, game);
     saves_card(html, app, game, &edit);
     local_patches::render(html, app, game);
+    crate::screenshots::render_card(html, app, &game.id);
     write!(html,"<section class=\"detail-card official-card\" hidden><h3>{}</h3><p>{}</p>{}<small>{}</small></section></aside></div>",t(app,"official.title"),t(app,"official.help"),button("open-resource","https://www.dlsite.com/",t(app,"official.dlsite"),"arrow","secondary",false),t(app,"official.homepage")).unwrap();
     write!(html,r#"<button class="detail-back-top icon-button" data-action="detail-top" aria-label="{}" title="{}">{}</button>"#,t(app,"detail.back_top"),t(app,"detail.back_top"),icon("top")).unwrap();
     html.push_str("</div></section></div>");

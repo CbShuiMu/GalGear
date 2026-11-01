@@ -29,12 +29,13 @@ pub(crate) fn same_hotkey(left: &str, right: &str) -> bool {
 pub(crate) fn clear_saved_tool_drafts(app: &mut App) {
     for (field, saved) in [
         ("tool-hotkey", app.settings.magpie_hotkey.clone()),
+        ("screenshot-hotkey", app.settings.screenshot_hotkey.clone()),
         ("tool-magpie", app.settings.magpie.clone()),
         ("tool-locale", app.settings.locale_emulator.clone()),
         ("backup-retention", app.settings.backup_retention.to_string()),
     ] {
         if app.form.get(field).is_some_and(|draft| {
-            if field == "tool-hotkey" { same_hotkey(draft, &saved) }
+            if matches!(field, "tool-hotkey" | "screenshot-hotkey") { same_hotkey(draft, &saved) }
             else { draft.trim().eq_ignore_ascii_case(&saved) }
         }) { app.form.remove(field); }
     }
@@ -58,6 +59,7 @@ fn game_tools(app: &mut App, id: &str, mode: Option<&str>, auto: Option<bool>) {
 }
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
+    if crate::screenshots::dispatch(app, action, value) { return true; }
     if matches!(action, "launch-normal" | "open-folder") {
         app.context_menu = None;
     }
@@ -519,7 +521,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     app,
                     Pending::Tools,
                     "configure_tools",
-                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupRetention":retention,"magpieMode":crate::tool_preferences::selection(app)}),
+                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupRetention":retention,"screenshotHotkey":setting(app,"screenshot-hotkey",&settings.screenshot_hotkey),"magpieMode":crate::tool_preferences::selection(app)}),
                 );
             } else {
                 show_toast(app, Message::new("backup.retention_error"), true);

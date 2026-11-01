@@ -21,6 +21,8 @@
 
 存档、补丁与启动流程仍共用 `state::begin_write`，避免功能拆分后失去互斥。新增 Tauri 命令应放在所属业务模块，并在 `desktop.rs` 注册，保持现有命令名和序列化字段兼容。
 
+游戏、存档和补丁目录统一通过 `folders` 打开；各命令保留所属业务的路径校验。Windows 端将目录解析为 Shell 项目再打开，避免 `explorer.exe` 命令行解析路径后跳转到默认目录。
+
 ## 验证
 
 ```powershell
@@ -28,3 +30,23 @@ cargo test --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy -p galgear-ui --target wasm32-unknown-unknown --locked -- -D warnings
 ```
+
+## 游戏截图
+
+`core::screenshots` 维护快捷键校验、游戏内 `screenshots` 路径边界、PNG 原子写入和最近截图读取；桌面端 `screenshots` 的独立线程管理前台游戏识别、Win32 热键、客户区采集和剪贴板。UI 通过 `configure_tools` 统一保存卡片中的工具、保留份数和截图快捷键，通过 `latest_screenshot`、`open_screenshot_folder` 读取预览和打开目录；`screenshot-updated` 只携带游戏 ID，预览响应用游戏 ID 和请求代数隔离迟到结果。
+
+设置位于“路径与备份 → 存档备份与内置工具”，新配置默认启用 `Ctrl+S`，快捷键与保留份数并排，通过卡片右上角保存。只在库中游戏位于前台时注册，离开游戏后释放；快捷键冲突或设置写入失败保留旧配置。游戏识别使用前台进程的真实可执行路径，支持游戏目录内的子启动器。GalGear 退出后快捷键失效。
+
+截图以 UTC 时间命名，PNG 保留客户区实际物理像素，不做缩放或有损压缩；详情卡片的显示预览可以缩小。保存成功后才通知刷新，剪贴板同时提供原始 PNG 和 bottom-up 24 位 CF_DIB（包含 DWORD 行对齐，Windows 可合成 CF_BITMAP / CF_DIBV5），复制失败独立提示并保留已保存图片。截图目录拒绝符号链接和重解析点，读取预览不创建目录；“打开目录”会按需创建。
+
+当前采集为前台客户区的屏幕像素复制，排除标准标题栏和边框；游戏需完整位于屏幕内。Magpie 通过公开的 `Magpie.SrcHWND` 属性（旧版回退到 owner）与游戏关联；全屏截取整个缩放输出客户区，窗口模式优先截取 `Magpie_Renderer` 子窗口。保留缩放后的实际物理像素，不对原游戏截图二次插值。采集前后均校验前台及输出关联。参见 [Magpie ScalingWindow](https://github.com/Blinue/Magpie/blob/v0.13.0/src/Magpie.Core/ScalingWindow.cpp) 和 [Windows 剪贴板格式](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats)。独占全屏、受保护画面、自绘标题栏和第三方覆盖层可能影响结果，建议窗口或无边框模式。不会回退为整张桌面截图。工作线程的短提示不抢游戏焦点，使用应用明暗/配色与游戏所在屏幕的 DPI。热键同时接收 WM_HOTKEY 与后台 Raw Input，补充仅依赖系统热键消息的触发方式；只在已识别的前台游戏中注册原始键盘接收，失焦恢复原注册，不记录按键内容，长按及两种通知去重。
+
+原生隔离验证：`cargo test -p galgear --locked native_client_pixels_clipboard_and_hotkey_conflict -- --ignored --test-threads=1`（需要交互式桌面，会创建测试窗口并将测试图像写入剪贴板）。设置 `GALGEAR_TEST_MAGPIE=1` 时，测试等待手动对测试窗口启动 Magpie 全屏缩放，并校验截图尺寸等于显示器物理分辨率及中心像素。普通测试不启动真实游戏、不操作真实存档。
+
+管理员游戏可能让普通权限进程收不到键盘消息。`screenshots::windows::elevated` 在识别到这种前台窗口后，以系统授权启动同一可执行文件的 `--galgear-screenshot-input` 辅助模式；每次 GalGear 会话只启动一次，取消后可保存快捷键重试。辅助进程验证父进程可执行文件和窗口归属，只接收快捷键并回传目标 HWND 与配置代数，不接收文件路径、不执行截图或写入。主进程再次核对前台游戏后完成原尺寸 PNG、剪贴板和主题提示。失焦或修改设置撤销旧代数，退出销毁消息窗口，辅助进程随之结束；UAC 等待不阻塞设置和消息处理。键盘接收仍遵循 [Windows Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/using-raw-input)，不记录按键文本，也不向游戏注入代码。
+
+## Skill 手动更新
+
+`core::ai::skills::status` 只读本地安装与 commit；`sync` 负责固定仓库 main 的检查、按 commit 下载和原子替换，并返回是否更新。桌面 `skill_package` 不再有启动任务或 OnceCell；只有 `check_skill_update` 命令能同步，`get_ai_runtime` 仅查询本地状态。AI 任务持有资源读取租约，更新持有排他租约，防止替换仍被使用的目录。
+
+UI `skill_update` 在设置 → 更新中复用 GalGear 卡片布局，显示 Skill、本地 commit、固定仓库和检查更新按钮。更新不阻塞本地游戏库，重复点击合并为一次请求；成功后刷新版本和 AI 可用状态，迟到的启动查询不能覆盖更新结果。失败保留本地版本，可重试。

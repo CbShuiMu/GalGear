@@ -51,5 +51,10 @@ AI analysis requires both resources beside the application executable:
 
 If either is missing, the per-game AI option and generation buttons are disabled.
 The backend checks again before starting work. An existing AI option can still be
-turned off. Restart the app after installing resources to refresh availability.
+turned off. Settings → Updates → **Skill** displays the local commit and checks
+`CbShuiMu/Galgear-GalgameReverse-Skill` only when **Check for updates** is clicked.
+The button downloads and installs a missing or changed package, then refreshes
+availability immediately. Startup never checks or downloads Skill updates. Failed
+updates retain the installed resources; running AI jobs block replacement until
+they finish.
 Development builds use the same executable-directory prerequisite for the UI.

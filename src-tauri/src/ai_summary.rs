@@ -35,14 +35,12 @@ impl Jobs {
         Ok(Guard(self.0.clone(), id.into()))
     }
 }
-fn runtime_home() -> Result<PathBuf, Message> {
-    if !crate::skill_package::available() {
-        return Err(Message::new("summary.tools_missing"));
-    }
+fn runtime_home(state: &AppState) -> Result<(PathBuf, crate::skill_package::Lease), Message> {
+    let lease = state.skills.read()?;
     let home = galgear_core::ai::runtime::home()
         .filter(|home| galgear_core::ai::runtime::available(home))
         .ok_or_else(|| Message::new("summary.tools_missing"))?;
-    Ok(home)
+    Ok((home, lease))
 }
 
 #[tauri::command]
@@ -56,9 +54,10 @@ pub async fn set_ai_summary(
     if enabled {
         let settings = snapshot(&state)?;
         let config = state.store.path.clone();
-        let home = runtime_home()?;
+        let (home, resources) = runtime_home(&state)?;
         tauri::async_runtime::spawn_blocking(move || {
             let _guard = guard;
+            let _resources = resources;
             ai_summary::prepare(&game, &settings, &config, &home)
         })
         .await
@@ -78,10 +77,11 @@ pub async fn summarize_game(
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
     let config = state.store.path.clone();
-    let home = runtime_home()?;
+    let (home, resources) = runtime_home(&state)?;
     let guard = state.summaries.begin(&id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
+        let _resources = resources;
         ai_summary::summarize(&game, &settings, &config, &home)
     })
     .await
@@ -89,7 +89,7 @@ pub async fn summarize_game(
 }
 
 async fn generate_route_map(id: String, state: State<'_, AppState>) -> Result<PathBuf, Message> {
-    runtime_home()?;
+    let (_home, resources) = runtime_home(&state)?;
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
     if !settings
@@ -103,6 +103,7 @@ async fn generate_route_map(id: String, state: State<'_, AppState>) -> Result<Pa
     let guard = state.summaries.begin(&id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
+        let _resources = resources;
         ai_summary::route_map(&game, &settings, &config)
     })
     .await

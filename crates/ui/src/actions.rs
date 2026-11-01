@@ -188,6 +188,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
             issue(app, Pending::Saves, "detect_saves", json!({"id":value}));
             local_patches::load(app, value);
+            crate::screenshots::load(app, value);
             issue(
                 app,
                 Pending::Runtime(value.into()),

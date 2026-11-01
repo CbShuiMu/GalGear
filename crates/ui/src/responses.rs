@@ -31,6 +31,14 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         let Some(kind) = app.requests.complete(id) else {
             return;
         };
+        if crate::screenshots::resolve(&mut app, &kind, id, success, payload) {
+            paint(&app);
+            return;
+        }
+        if crate::skill_update::resolve(&mut app, &kind, id, success, payload) {
+            paint(&app);
+            return;
+        }
         if crate::updates::resolve(&mut app, &kind, success, payload) {
             paint(&app);
             return;
@@ -109,7 +117,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         } else {
             let handled: Result<(), String> = (|| {
                 match kind {
-                    Pending::ImportPreview | Pending::ImportCommit | Pending::MagpieModes | Pending::ExportPotato | Pending::FindSave(_)
+                    Pending::Screenshot(..) | Pending::ImportPreview | Pending::ImportCommit | Pending::MagpieModes | Pending::ExportPotato | Pending::FindSave(_)
                     | Pending::Background
                     | Pending::Ai(_)
                     | Pending::Cloud(_)
@@ -123,18 +131,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                     | Pending::CoverOptions
                     | Pending::SetupExecutable(_)
                     | Pending::SetupSave(_) => {}
-                    Pending::AiRuntime => {
-                        #[derive(serde::Deserialize)]
-                        struct Status {
-                            available: bool,
-                            error: Option<Message>,
-                        }
-                        let status: Status = serde_json::from_str(payload).map_err(|e| e.to_string())?;
-                        app.ai_available = status.available;
-                        if let Some(error) = status.error {
-                            show_toast(&mut app, error, true);
-                        }
-                    }
+                    Pending::AiRuntime | Pending::SkillUpdate => {}
                     Pending::CollectionSave => {
                         let settings = serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         apply_settings(&mut app, settings, id);
@@ -405,6 +402,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         if matches!(kind, Pending::Tools) {
                             // Do not let a previous preferences request undo a completed save.
                             app.magpie_observed_through = id.checked_sub(1);
+                            app.screenshots.saved(id);
                             features::clear_saved_tool_drafts(&mut app);
                             show_toast(&mut app, Message::new("notice.saved"), false);
                             issue(&mut app, Pending::Preferences, "get_preferences", json!({}));

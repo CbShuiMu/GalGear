@@ -198,7 +198,7 @@ pub fn dispatch(action: &str, value: &str) {
     APP.with(|state| {
         let mut app = state.borrow_mut();
         let setup_action = action.starts_with("setup-")
-            || matches!(action, "check-update" | "update-confirm" | "update-cancel")
+            || matches!(action, "check-update" | "check-skill-update" | "update-confirm" | "update-cancel")
             || matches!(action, "dismiss-toast" | "choice-close")
             || action == "choice-toggle" && game_setup::choice_enabled(&app, value);
         if app.setup.open && !setup_action {
@@ -217,12 +217,13 @@ pub fn dispatch(action: &str, value: &str) {
                     | "toggle-theme"
                     | "set-theme"
                     | "set-color-theme"
-                    | "check-update" | "update-confirm" | "update-cancel" | "settings-section"
+                    | "check-update" | "check-skill-update" | "update-confirm" | "update-cancel" | "settings-section"
             )
         {
             return;
         }
         if crate::updates::dispatch(&mut app, action)
+            || crate::skill_update::dispatch(&mut app, action)
             || ai::dispatch(&mut app, action, value)
             || cloud::dispatch(&mut app, action, value)
             || crate::ai_summary::dispatch(&mut app, action, value)
@@ -456,6 +457,7 @@ pub fn input_changed(field: &str, value: &str) {
                         | "tag-new"
                         | "locale-profile"
                         | "backup-retention"
+                        | "screenshot-hotkey"
                         | "backup-folder"
                         | "metadata-query"
                         | "patch-query"

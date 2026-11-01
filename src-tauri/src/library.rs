@@ -156,7 +156,7 @@ pub(crate) async fn refresh(
 pub(crate) async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, Message> {
     Ok(Bootstrap {
         update_complete: std::env::args().any(|arg| arg == "--galgear-update-complete"),
-        ai_available: crate::skill_package::available(),
+        ai_available: crate::skill_package::available(&state),
         settings: snapshot(&state)?,
         catalog: state
             .catalog

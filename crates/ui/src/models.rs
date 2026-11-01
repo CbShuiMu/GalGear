@@ -35,6 +35,10 @@ pub(crate) struct Settings {
     pub(crate) release_page: String,
     #[serde(default)]
     pub(crate) download_folder: String,
+    #[serde(default = "true_value")]
+    pub(crate) screenshot_enabled: bool,
+    #[serde(default = "default_screenshot_hotkey")]
+    pub(crate) screenshot_hotkey: String,
     #[serde(default)]
     pub(crate) fan_domain: String,
     #[serde(default = "true_value")]
@@ -388,4 +392,34 @@ mod tests {
             )
         );
     }
+}
+
+pub(crate) fn default_screenshot_hotkey() -> String {
+    "Ctrl+S".into()
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ScreenshotPreview {
+    pub(crate) name: String,
+    pub(crate) image: String,
+}
+
+/// Skill 本地查询与手动更新的桥接响应。旧后端可能不携带 skill 字段。
+#[derive(Default, Deserialize)]
+pub(crate) struct InstalledSkill {
+    pub installed: bool,
+    pub commit: Option<String>,
+}
+#[derive(Deserialize)]
+pub(crate) struct SkillRuntimeStatus {
+    pub available: bool,
+    #[serde(default)]
+    pub skill: InstalledSkill,
+    pub error: Option<galgear_i18n::Message>,
+}
+#[derive(Deserialize)]
+pub(crate) struct SkillUpdateResult {
+    pub commit: String,
+    pub changed: bool,
+    pub available: bool,
 }

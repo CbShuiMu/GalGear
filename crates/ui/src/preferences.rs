@@ -524,10 +524,10 @@ fn paths(html: &mut String, app: &App) {
     crate::tool_preferences::render(html, app);
     write!(
         html,
-        "<label class=\"edit-field\" for=\"backup-retention\"><span>{}</span><input id=\"backup-retention\" data-input=\"backup-retention\" value=\"{}\" type=\"number\" min=\"1\" max=\"1000\"/></label></div><p>{}</p><p>{}</p></section><div class=\"config-export-row\"><p class=\"config-note\">{}<br>{}</p>{}</div><p class=\"muted\">{}</p>",
+        "<label class=\"edit-field\" for=\"backup-retention\"><span>{}</span><input id=\"backup-retention\" data-input=\"backup-retention\" value=\"{}\" type=\"number\" min=\"1\" max=\"1000\"/></label>{}</div><p class=\"tools-help\">{}</p></section><div class=\"config-export-row\"><p class=\"config-note\">{}<br>{}</p>{}</div><p class=\"muted\">{}</p>",
         t(app, "backup.retention"),
         esc(&features::setting(app,"backup-retention",&app.settings.backup_retention.to_string())),
-        t(app, "backup.location_help"),
+        { let mut screenshot = String::new(); crate::screenshots::render(&mut screenshot, app); screenshot },
         t(app, "tools.help"),
         t(app, "settings.config_path"),
         esc(&app.config_path),
@@ -561,6 +561,7 @@ fn about(html: &mut String, app: &App) {
     )
     .unwrap();
     html.push_str("</section>");
+    crate::skill_update::render(html, app);
 }
 
 #[cfg(test)]

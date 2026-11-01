@@ -58,11 +58,7 @@ pub async fn open_game_patch_folder(id: String, state: State<'_, AppState>) -> R
     }
     tauri::async_runtime::spawn_blocking(move || {
         let folder = folders::directory(Path::new(&game.folder))?;
-        std::process::Command::new("explorer.exe")
-            .arg(folder)
-            .spawn()
-            .map_err(|e| Message::detail("error.open_folder", e))?;
-        Ok(())
+        crate::folders::open(&folder)
     })
     .await
     .map_err(|e| Message::detail("error.patch", e))?

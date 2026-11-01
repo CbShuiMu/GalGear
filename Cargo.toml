@@ -4,9 +4,9 @@ default-members = ["crates/core", "src-tauri"]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
-license = "MIT"
+license = "GPL-3.0-only"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

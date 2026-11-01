@@ -27,11 +27,13 @@ mod playtime;
 mod preferences;
 mod tool_preferences;
 mod requests;
+mod screenshots;
 mod responses;
 mod state;
 mod view;
 mod widgets;
 mod updates;
+mod skill_update;
 
 pub use events::{
     cover_enhanced,
@@ -41,3 +43,4 @@ pub use events::{
     runtime_updated, magpie_hotkey_updated, scan_progress, start, tool_failed,
 };
 pub use responses::resolve;
+pub use screenshots::{screenshot_completed, screenshot_updated};

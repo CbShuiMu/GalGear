@@ -177,3 +177,13 @@
 .reference-detail .card-heading-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px}.reference-detail .save-card .utility-heading,.reference-detail .patch-card .utility-heading{flex-wrap:wrap}.reference-detail .official-card[hidden]{display:none}
 
 .save-resource-badge { display:inline-flex; border:1px solid var(--line); padding:2px 7px; border-radius:999px; font-size:.75rem; color:var(--pink); }
+
+.reference-detail .screenshot-card .utility-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.reference-detail .screenshot-card .utility-heading h3{margin:0}
+.reference-detail .screenshot-card .utility-heading .button{margin-left:auto;min-height:32px;padding:6px 10px;font-size:calc(var(--ui-font)*.75)}
+.reference-detail .screenshot-preview{margin:14px 0 0;min-width:0}
+.reference-detail .screenshot-preview img{display:block;width:100%;height:auto;max-height:300px;object-fit:contain;border-radius:8px;background:var(--detail-utility)}
+.reference-detail .screenshot-preview figcaption{margin-top:8px;color:var(--muted);font-size:calc(var(--ui-font)*.6875);overflow-wrap:anywhere}
+.reference-detail .screenshot-empty{margin-top:14px;padding:22px 16px;text-align:center;background:var(--detail-utility);border:1px dashed var(--line);border-radius:8px;color:var(--muted)}
+.reference-detail .screenshot-empty p{white-space:pre-line;margin:0}
+.reference-detail .screenshot-empty p,.reference-detail .screenshot-error{font-size:calc(var(--ui-font)*.75);line-height:1.7;overflow-wrap:anywhere}

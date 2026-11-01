@@ -108,8 +108,8 @@ pub(crate) fn run() {
                 tauri::Theme::Light
             }));
             app.manage(state);
+            crate::screenshots::start(app.handle().clone()).map_err(std::io::Error::other)?;
             app.manage(crate::import::Imports::default());
-            crate::skill_package::start();
             let show = tauri::menu::MenuItem::with_id(
                 app,
                 "show",
@@ -171,7 +171,10 @@ pub(crate) fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             library::bootstrap,
+            crate::screenshots::latest_screenshot,
+            crate::screenshots::open_screenshot_folder,
             crate::skill_package::get_ai_runtime,
+            crate::skill_package::check_skill_update,
             cloud_commands::cloud_status,
             cloud_commands::save_cloud_settings,
             cloud_commands::clear_cloud_settings,
@@ -285,6 +288,7 @@ pub(crate) fn run() {
         .expect("GalGear startup failed")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<crate::screenshots::Service>().stop();
                 if let Err(error) = tools::shutdown_magpie(&app.state::<AppState>()) {
                     eprintln!("Magpie shutdown: {error:?}");
                 }

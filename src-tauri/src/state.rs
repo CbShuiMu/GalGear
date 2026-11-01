@@ -18,6 +18,7 @@ pub(crate) struct AppState {
     pub(crate) saves: save_commands::SaveState,
     pub(crate) tools: tools::RuntimeState,
     pub(crate) summaries: crate::ai_summary::Jobs,
+    pub(crate) skills: crate::skill_package::Access,
     writing: AtomicBool,
     pub(crate) updates: crate::updater::Updates,
 }
@@ -103,6 +104,7 @@ impl AppState {
             saves: save_commands::SaveState::default(),
             tools: tools::RuntimeState::default(),
             summaries: crate::ai_summary::Jobs::default(),
+            skills: crate::skill_package::Access::default(),
             writing: AtomicBool::new(false),
             updates: crate::updater::Updates::default(),
         })

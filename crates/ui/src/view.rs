@@ -11,7 +11,7 @@ pub(crate) fn network_activities(app: &App) -> Vec<String> {
     let mut activities = Vec::new();
     for pending in app.requests.values() {
         let key = match pending {
-            Pending::AiRuntime => "skills.updating",
+            Pending::SkillUpdate => "skills.updating",
             Pending::Cloud(crate::cloud::Request::Upload(_)) => "cloud.upload",
             Pending::Cloud(crate::cloud::Request::Download(_)) => "cloud.download",
             Pending::Cloud(crate::cloud::Request::List(_)) => "cloud.refresh",

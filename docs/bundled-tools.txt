@@ -45,10 +45,11 @@ Locale Emulator：https://github.com/xupefei/Locale-Emulator
 程序默认仍使用 %APPDATA%/com.galgear.desktop 保存游戏库和偏好。
 内置工具的配置随 tools 目录携带。现有工具路径为空或失效时会自动补全。
 
-AI Skills（运行时自动下载）
+AI Skill（手动检查更新）
 Skills 版本检查和压缩包下载使用直连，不经过系统或环境变量代理。
-Skills 不随安装包或便携版打包。每次启动检查以下仓库 main 的最新 commit：
+Skill 不随安装包或便携版打包。设置 → 更新 → Skill 显示本地版本，
+点击“检查更新”才检查以下仓库 main 的最新 commit（启动时不联网检查）：
 https://github.com/CbShuiMu/Galgear-GalgameReverse-Skill
-首次运行或 commit 变化时下载对应 ZIP 并解压，校验成功后替换软件目录中的
+本地缺失或 commit 变化时下载对应 ZIP 并解压，校验成功后替换软件目录中的
 Galgear-GalgameReverse-Skill 文件夹；未变化则复用，更新失败保留已有版本。
 首次下载需要联网和软件目录写入权限。AI 宿主仍随 tools/ai-agent 附带。

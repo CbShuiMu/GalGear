@@ -2230,9 +2230,9 @@
     "en-US": "Current Magpie scaling hotkey"
   },
   "tools.help": {
-    "zh-CN": "默认使用软件 tools 目录中的内置工具，相对路径以 GalGear.exe 所在目录为准。保存缩放快捷键和配置会同步到 Magpie；若 Magpie 已运行，会短暂重启以应用更改，当前缩放会结束。Magpie 中修改的快捷键会自动同步回来，未保存的输入会保留。可在下拉框选择 Magpie 默认配置；算法和倍率在 Magpie 中调整。转区默认使用 Run in Japanese (Admin)，可指定其他配置。",
-    "ja-JP": "既定では GalGear.exe の tools 内のツールを使います。拡大キーと既定の設定を保存すると Magpie に同期し、起動中の場合は再起動して適用するため拡大が終了します。Magpie での変更は自動反映され、未保存の入力は保持されます。ドロップダウンで既定の設定を選択できます。方式と倍率は Magpie で変更できます。ロケールの既定は Run in Japanese (Admin) です。",
-    "en-US": "Tools default to the tools folder beside GalGear.exe. Saving the scaling hotkey and profile syncs them to Magpie. A running Magpie restarts briefly to apply it, ending active scaling. Changes in Magpie sync back automatically while unsaved edits are preserved. Choose the default profile from the dropdown; adjust algorithms and scale in Magpie. Locale launch defaults to Run in Japanese (Admin)."
+    "zh-CN": "存档备份：游戏目录内 .galgear-backups/saves。\n工具路径留空使用内置工具，缩放参数在 Magpie 中调整。\n截图：原尺寸 PNG 存至 screenshots，并复制到剪贴板。",
+    "ja-JP": "セーブの保存先：ゲーム内 .galgear-backups/saves。\nパスが空欄なら内蔵ツールを使用。拡大設定は Magpie で変更。\n画像は元の解像度の PNG で screenshots に保存し、コピーします。",
+    "en-US": "Backups: .galgear-backups/saves in the game folder.\nBlank paths use bundled tools; adjust scaling in Magpie.\nScreenshots: original-size PNGs in screenshots, also copied to clipboard."
   },
   "tools.locale_launch": {
     "zh-CN": "转区启动",
@@ -2415,14 +2415,14 @@
     "en-US": "Back to home"
   },
   "skills.updating": {
-    "zh-CN": "正在检查并更新 Skills",
-    "ja-JP": "Skillsを確認・更新中",
-    "en-US": "Checking and updating skills"
+    "zh-CN": "正在检查并更新 Skill…",
+    "ja-JP": "Skill を確認・更新中…",
+    "en-US": "Checking and updating Skill…"
   },
   "skills.update_failed": {
-    "zh-CN": "Skills 自动更新失败，已有版本会保留；请检查网络和软件目录写入权限后重启重试：{detail}",
-    "ja-JP": "Skillsの自動更新に失敗しました。既存のバージョンは保持されます。接続とアプリフォルダーの書き込み権限を確認して再起動してください：{detail}",
-    "en-US": "Skills update failed; any existing version is retained. Check your connection and app folder write access, then restart to retry: {detail}"
+    "zh-CN": "Skill 更新失败：{detail}。可在设置 → 更新 → Skill 中重试。",
+    "ja-JP": "Skill の更新に失敗しました: {detail}。「設定 → 更新 → Skill」で再試行できます。",
+    "en-US": "Skill update failed: {detail}. Retry in Settings → Updates → Skill."
   },
   "detail.back_collections": {
     "zh-CN": "返回收藏夹",
@@ -3325,9 +3325,9 @@
     "en-US": "AI summary file operation failed: {detail}"
   },
   "summary.tools_missing": {
-    "zh-CN": "AI功能暂不可用：请保留随程序附带的AI宿主。Galgear-GalgameReverse-Skill资源包会在启动时自动检查并下载，请等待下载完成；失败时请检查网络并重启重试。",
-    "ja-JP": "AI機能は現在利用できません。同梱のAIホストを保持してください。Galgear-GalgameReverse-Skillは起動時に自動確認・ダウンロードされます。完了までお待ちください。失敗した場合は接続を確認し、再起動してください。",
-    "en-US": "AI is temporarily unavailable. Keep the bundled AI host. Galgear-GalgameReverse-Skill is checked and downloaded automatically on launch; wait for it to finish. If it fails, check your connection and restart to retry."
+    "zh-CN": "AI 组件或 Skill 资源缺失。请在设置 → 更新 → Skill 中检查更新，并确认内置 AI 组件已安装。",
+    "ja-JP": "AI コンポーネントまたは Skill がありません。「設定 → 更新 → Skill」で更新を確認し、内蔵 AI コンポーネントを確認してください。",
+    "en-US": "AI components or Skill resources are missing. Check Settings → Updates → Skill and ensure the bundled AI components are installed."
   },
   "summary.decode_failed": {
     "zh-CN": "游戏资源或存档解码失败，当前引擎格式需要进一步适配。",
@@ -4008,5 +4008,160 @@
     "zh-CN": "导入预览已失效，请重新选择备份。",
     "ja-JP": "プレビューの有効期限が切れました。バックアップを選び直してください。",
     "en-US": "Import preview expired. Select the backup again."
+  },
+  "screenshot.title": {
+    "zh-CN": "游戏截图",
+    "ja-JP": "ゲームのスクリーンショット",
+    "en-US": "Game screenshots"
+  },
+  "screenshot.hotkey": {
+    "zh-CN": "截图快捷键",
+    "ja-JP": "撮影ショートカット",
+    "en-US": "Screenshot shortcut"
+  },
+  "screenshot.save_hotkey": {
+    "zh-CN": "保存快捷键",
+    "ja-JP": "ショートカットを保存",
+    "en-US": "Save shortcut"
+  },
+  "screenshot.enable": {
+    "zh-CN": "启用截图",
+    "ja-JP": "撮影を有効にする",
+    "en-US": "Enable screenshots"
+  },
+  "screenshot.disable": {
+    "zh-CN": "停用截图",
+    "ja-JP": "撮影を無効にする",
+    "en-US": "Disable screenshots"
+  },
+  "screenshot.help": {
+    "zh-CN": "默认 Ctrl+S，可输入 Ctrl、Alt、Shift、Win 与一个按键的组合。仅在库中游戏位于前台时生效；GalGear 需保持运行。原尺寸 PNG 按 UTC 时间命名，保存至游戏目录的 screenshots 文件夹，并复制到剪贴板。建议使用窗口或无边框模式。",
+    "ja-JP": "初期設定は Ctrl+S。Ctrl、Alt、Shift、Win とキーの組み合わせを入力できます。GalGear の起動中、ライブラリのゲームが前面にあるときのみ有効です。元の解像度の PNG を UTC 時刻の名前でゲームの screenshots フォルダーに保存し、クリップボードにコピーします。ウィンドウまたはボーダーレス表示を推奨します。",
+    "en-US": "Default: Ctrl+S. Enter Ctrl, Alt, Shift or Win with one key. Active only while a library game is in the foreground and GalGear is running. Original-resolution PNGs are named by UTC time, saved in the game’s screenshots folder and copied to the clipboard. Windowed or borderless mode is recommended."
+  },
+  "screenshot.recent": {
+    "zh-CN": "最近截图",
+    "ja-JP": "最新のスクリーンショット",
+    "en-US": "Recent screenshot"
+  },
+  "screenshot.empty": {
+    "zh-CN": "暂无截图。\n在游戏中按截图快捷键，第一张截图会显示在这里。",
+    "ja-JP": "まだスクリーンショットはありません。\nゲーム中に撮影ショートカットを押すと、ここに表示されます。",
+    "en-US": "No screenshots yet.\nPress the screenshot shortcut in the game to see your first image here."
+  },
+  "screenshot.loading": {
+    "zh-CN": "正在读取最近截图…",
+    "ja-JP": "最新の画像を読み込み中…",
+    "en-US": "Loading recent screenshot…"
+  },
+  "screenshot.retry": {
+    "zh-CN": "重新读取",
+    "ja-JP": "再読み込み",
+    "en-US": "Reload"
+  },
+  "screenshot.saved": {
+    "zh-CN": "截图已保存并复制到剪贴板",
+    "ja-JP": "画像を保存し、クリップボードにコピーしました",
+    "en-US": "Screenshot saved and copied to clipboard"
+  },
+  "screenshot.error": {
+    "zh-CN": "截图操作失败：{detail}",
+    "ja-JP": "スクリーンショット操作に失敗しました：{detail}",
+    "en-US": "Screenshot operation failed: {detail}"
+  },
+  "screenshot.invalid_frame": {
+    "zh-CN": "截图尺寸或像素数据无效",
+    "ja-JP": "画像サイズまたは画素データが無効です",
+    "en-US": "Invalid screenshot dimensions or pixel data"
+  },
+  "screenshot.folder_missing": {
+    "zh-CN": "游戏或截图目录不存在",
+    "ja-JP": "ゲームまたは画像フォルダーがありません",
+    "en-US": "Game or screenshot folder does not exist"
+  },
+  "screenshot.unsafe_path": {
+    "zh-CN": "截图路径必须是游戏目录内的普通文件夹，不能是链接或重解析点",
+    "ja-JP": "画像フォルダーはゲーム内の通常のフォルダーである必要があります。リンクや再解析ポイントは使用できません",
+    "en-US": "The screenshot folder must be a regular directory inside the game folder, not a link or reparse point"
+  },
+  "screenshot.input_error": {
+    "zh-CN": "截图按键接收失败：{detail}",
+    "ja-JP": "撮影キーの受信に失敗しました：{detail}",
+    "en-US": "Screenshot keyboard input failed: {detail}"
+  },
+  "screenshot.input_cancelled": {
+    "zh-CN": "已取消管理员游戏的截图授权。可在设置中保存截图快捷键后重试。",
+    "ja-JP": "管理者権限のゲームでの撮影をキャンセルしました。設定で撮影キーを保存すると再試行できます。",
+    "en-US": "Screenshot access for elevated games was cancelled. Save the shortcut in Settings to retry."
+  },
+  "screenshot.hotkey_error": {
+    "zh-CN": "截图快捷键无法注册，可能已被占用：{detail}",
+    "ja-JP": "撮影ショートカットを登録できません。既に使用中の可能性があります：{detail}",
+    "en-US": "Cannot register screenshot shortcut; it may be in use: {detail}"
+  },
+  "screenshot.magpie_conflict": {
+    "zh-CN": "截图快捷键不能与 Magpie 缩放快捷键相同",
+    "ja-JP": "撮影と Magpie 拡大のショートカットは別のキーにしてください",
+    "en-US": "Use different shortcuts for screenshots and Magpie scaling"
+  },
+  "screenshot.invalid_hotkey": {
+    "zh-CN": "请输入修饰键加一个按键，例如 Ctrl+S 或 Alt+F9",
+    "ja-JP": "修飾キーと通常のキーを入力してください（例：Ctrl+S、Alt+F9）",
+    "en-US": "Enter modifiers followed by one key, such as Ctrl+S or Alt+F9"
+  },
+  "screenshot.clipboard_error": {
+    "zh-CN": "截图已保存到 {path}，但复制到剪贴板失败：{detail}",
+    "ja-JP": "画像を {path} に保存しましたが、クリップボードへのコピーに失敗しました：{detail}",
+    "en-US": "Screenshot saved to {path}, but clipboard copy failed: {detail}"
+  },
+  "screenshot.unsupported": {
+    "zh-CN": "截图功能仅支持 Windows",
+    "ja-JP": "スクリーンショット機能は Windows のみ対応しています",
+    "en-US": "Screenshots are supported only on Windows"
+  },
+  "screenshot.open_folder": {
+    "zh-CN": "打开目录",
+    "ja-JP": "フォルダーを開く",
+    "en-US": "Open folder"
+  },
+  "skills.title": {
+    "zh-CN": "Skill",
+    "ja-JP": "Skill",
+    "en-US": "Skill"
+  },
+  "skills.repository": {
+    "zh-CN": "仓库地址",
+    "ja-JP": "リポジトリ",
+    "en-US": "Repository"
+  },
+  "skills.not_installed": {
+    "zh-CN": "未安装",
+    "ja-JP": "未インストール",
+    "en-US": "Not installed"
+  },
+  "skills.local_version": {
+    "zh-CN": "本地版本",
+    "ja-JP": "ローカル版",
+    "en-US": "Local version"
+  },
+  "skills.help": {
+    "zh-CN": "点击检查更新时下载并安装最新 Skill，启动时不自动检查。",
+    "ja-JP": "「更新を確認」を押すと最新の Skill をダウンロードしてインストールします。起動時には確認しません。",
+    "en-US": "Check for updates downloads and installs the latest Skill. No automatic check at startup."
+  },
+  "skills.updated": {
+    "zh-CN": "Skill 已更新。",
+    "ja-JP": "Skill を更新しました。",
+    "en-US": "Skill updated."
+  },
+  "skills.current": {
+    "zh-CN": "Skill 已是最新版本。",
+    "ja-JP": "Skill は最新です。",
+    "en-US": "Skill is up to date."
+  },
+  "skills.busy": {
+    "zh-CN": "Skill 正在更新或被 AI 任务使用，请稍后重试。",
+    "ja-JP": "Skill の更新中、または AI タスクで使用中です。後でもう一度お試しください。",
+    "en-US": "Skill is updating or in use by an AI task. Please try again later."
   }
 }

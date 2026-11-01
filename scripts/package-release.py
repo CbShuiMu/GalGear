@@ -17,12 +17,14 @@ for source, target in (
     (artifacts / 'GalGear.exe', 'GalGear.exe'),
     (artifacts / 'GalGear.sha256', 'GalGear.sha256'),
     (root / 'LICENSE', 'LICENSE'),
+    (root / 'NOTICE', 'NOTICE'),
     (root / 'docs/bundled-tools.txt', '内置工具说明.txt'),
     (root / 'docs/cloud-storage.md', 'cloud-storage.md'),
     (root / 'docs/library-import.md', '导入说明.md'),
     (root / 'docs/settings-and-export-2026-10-31.md', '设置与导出说明.md'),
 ):
     shutil.copy2(source, stage / target)
+shutil.copytree(root / 'LICENSES', stage / 'LICENSES')
 (stage / 'portable.flag').touch()
 (stage / '使用说明.txt').write_text(f'''GalGear v{version}
 
@@ -30,11 +32,12 @@ for source, target in (
 运行环境：Windows 10 / 11 x64、Microsoft Edge WebView2 Runtime。
 便携包数据保存在同目录 data 文件夹；迁移时保留 data。
 账号凭据由本机 Windows 凭据管理器保存，换机需重新配置。
-Skills 启动时按需下载，首次运行需要网络与程序目录写入权限。
+Skill 通过设置 → 更新 → Skill 手动检查和安装，首次安装需要网络与程序目录写入权限。
 AI 宿主随包附带，无需安装 Python。内置工具说明见《内置工具说明.txt》。
 云存储说明见 cloud-storage.md；GalGear.sha256 用于校验主程序。
 ''', encoding='utf-8')
-required = ('GalGear.exe', 'portable.flag', 'LICENSE', 'tools/7zip/7z.exe',
+required = ('GalGear.exe', 'portable.flag', 'LICENSE', 'NOTICE',
+            'LICENSES/MIT-GalGear-prior-to-v0.3.3.txt', 'tools/7zip/7z.exe',
             'tools/7zip/7z.dll', 'tools/7zip/License.txt',
             'tools/ai-agent/GalGear.AiAgent.exe',
             'tools/waifu2x/waifu2x-ncnn-vulkan.exe', 'tools/waifu2x/LICENSE',
@@ -57,6 +60,8 @@ with zipfile.ZipFile(archive) as bundle:
     assert bundle.testzip() is None
     assert set(required).issubset(bundle.namelist())
     assert bundle.read('GalGear.exe') == (stage / 'GalGear.exe').read_bytes()
+    assert bundle.read('LICENSE') == (root / 'LICENSE').read_bytes()
+    assert bundle.read('NOTICE') == (root / 'NOTICE').read_bytes()
     print(f'Portable verified: {len(bundle.namelist())} files, {archive.stat().st_size} bytes')
 installer = artifacts / f'GalGear_{version}_x64-setup.exe'
 shutil.copy2(root / f'target/release/bundle/nsis/{installer.name}', installer)

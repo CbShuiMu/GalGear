@@ -15,11 +15,13 @@ pub(crate) enum Pending {
     SetupSave(String),
     Bootstrap,
     AiRuntime,
+    SkillUpdate,
     Scan,
     Folder,
     Add,
     Remove,
     Preferences,
+    Screenshot(String, u32),
     Tools,
     MagpieModes,
     ExportPotato,
@@ -78,8 +80,10 @@ impl Pending {
         !matches!(
             self,
             Pending::MagpieModes
+                | Pending::Screenshot(..)
                 | Pending::Ai(_)
                 | Pending::AiRuntime
+                | Pending::SkillUpdate
                 | Pending::Cloud(_)
                 | Pending::SummarySetup(..)
                 | Pending::Summary(_)

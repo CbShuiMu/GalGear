@@ -22,6 +22,7 @@ pub mod providers;
 pub mod runtime;
 pub mod saves;
 pub mod scanner;
+pub mod screenshots;
 pub mod snapshots;
 pub mod tags;
 pub mod unlock;
@@ -53,6 +54,11 @@ pub struct Settings {
     pub close_behavior: String,
     pub release_page: String,
     pub download_folder: String,
+    /// 旧版自选截图目录，仅保留配置兼容；新截图固定存入游戏目录。
+    pub screenshot_folder: String,
+    pub screenshot_enabled: bool,
+    /// 游戏前台时生效的全局截图快捷键。
+    pub screenshot_hotkey: String,
     pub fan_domain: String,
     pub metadata_checks: BTreeMap<String, u64>,
     pub metadata_attempt_versions: BTreeMap<String, u32>,
@@ -96,6 +102,9 @@ impl Default for Settings {
             close_behavior: "exit".into(),
             release_page: RELEASE_PAGE.into(),
             download_folder: String::new(),
+            screenshot_folder: String::new(),
+            screenshot_enabled: true,
+            screenshot_hotkey: "Ctrl+S".into(),
             fan_domain: "https://2dfmax.top".into(),
             metadata_checks: BTreeMap::new(),
             metadata_attempt_versions: BTreeMap::new(),

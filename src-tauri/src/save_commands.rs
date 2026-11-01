@@ -150,11 +150,9 @@ pub(crate) async fn open_save_folder(
     if !allowed {
         return Err(Message::new("error.game_folder"));
     }
-    std::process::Command::new("explorer.exe")
-        .arg(path)
-        .spawn()
-        .map_err(|e| Message::detail("error.open_folder", e))?;
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || crate::folders::open(Path::new(&path)))
+        .await
+        .map_err(|e| Message::detail("error.open_folder", e))?
 }
 
 #[tauri::command]

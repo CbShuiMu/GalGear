@@ -8,9 +8,11 @@
 
 Windows x64 · 简体中文 / 日本語 / English
 
+[简体中文](README.md) · [日本語](README.ja.md) · [English](README.en.md)
+
 交流反馈QQ群：607755362
 
-[下载](https://github.com/CbShuiMu/GalGear/releases/latest) · [开始使用](#开始使用) · [功能介绍](#能做些什么) · [反馈问题](https://github.com/CbShuiMu/GalGear/issues)
+[下载](https://github.com/CbShuiMu/GalGear/releases/latest) · [开始使用](#开始使用) · [功能介绍](#介绍) · [反馈问题](https://github.com/CbShuiMu/GalGear/issues)
 
 </div>
 
@@ -20,14 +22,14 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 <p align="center"><sub>以下四张截图均来自运行中的 v0.3.1（2026-10-31），以 2560 × 1392 原始分辨率保存为无损 PNG，点击图片可查看原图。</sub></p>
 
-> 当前发行版为 **v0.3.2（2026-10-31）**，新增游戏库导入与 PotatoVN 格式导出，改进存档资源安装、Magpie 方案和界面交互。
+> 当前发行版为 **v0.3.3（2026-11-01）**，新增游戏截图与手动 Skill 更新，改进封面和目录操作，项目许可证改为 GPL-3.0-only。
 
 ## 开始使用
 
 前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
 
-- **安装版**：下载 `GalGear_0.3.2_x64-setup.exe`，按提示安装。
-- **便携版**：下载 `GalGear-0.3.2-win64-portable.zip`，解压后运行 `GalGear.exe`。
+- **安装版**：下载 `GalGear_0.3.3_x64-setup.exe`，按提示安装。
+- **便携版**：下载 `GalGear-0.3.3-win64-portable.zip`，解压后运行 `GalGear.exe`。
 
 第一次打开，可以按这个顺序来：
 
@@ -46,7 +48,7 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 GalGear 会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游戏进程的检测，玩游戏时请保持 GalGear 运行。
 
-开发版会在后台对封面去噪，并生成经过降噪的首页 4K 背景（保持原比例，长边 3840）。这项功能以 **笔记本 RTX 2060** 为最低配置设计目标，采用小分块、单任务处理；生成成功后才替换，相同封面会复用结果。部署与缓存说明见 [封面增强](docs/cover-enhancement.md)。
+Waifu2x会在后台对封面去噪，并生成经过降噪的首页 4K 背景（保持原比例，长边 3840）。这项功能以 **笔记本 RTX 2060** 为最低配置设计目标，采用小分块、单任务处理；生成成功后才替换，相同封面会复用结果。部署与缓存说明见 [封面增强](docs/cover-enhancement.md)。
 
 ### TAG分类
 
@@ -115,7 +117,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 | 存档备份 | 游戏目录下的 `.galgear-backups/saves/` |
 | AI 准备文件和缓存 | 游戏目录下的 `.galgear-ai-summary/` |
 
-便携版迁移时，一起带上程序目录和 `data/`；游戏目录里的备份也要保留。程序附带的 `tools/` 请一起移动。Skills 不再随安装包或便携版打包：每次启动都会检查 GitHub 仓库 `CbShuiMu/Galgear-GalgameReverse-Skill` 的 `main` commit，首次运行或发现新 commit 时下载对应 ZIP 并解压到程序旁的 `Galgear-GalgameReverse-Skill/`。已下载的目录可一起移动，避免重复下载。
+便携版迁移时，一起带上程序目录和 `data/`，并保留游戏目录中的备份及程序旁的 `tools/`。Skill 不随发行包附带，也不在启动时自动检查：请在“设置 → 更新 → Skill”手动检查和安装。安装后位于程序旁的 `Galgear-GalgameReverse-Skill/`，迁移时可一并携带。
 
 账号 Token、Cookie 和云存储密码保存在本机 Windows 凭据管理器中，换电脑后需要重新配置。从游戏库移除条目只会改变列表，不会删除游戏、存档或备份。（2Dfan需自行抓取Token以及Cookie）
 
@@ -136,6 +138,10 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 ## 更新记录
 
 
+
+### v0.3.3
+
+- 新增截图与手动 Skill 更新，许可证改为 GPL-3.0-only。详见 [发布说明](docs/releases/v0.3.3.md)。
 
 ### v0.3.2
 
@@ -177,4 +183,4 @@ AI功能（测试中）：AI前情提要以及AI路线图，AI路线图涉及剧
 主题切换：暗色模式  
 补丁搜索：补丁tab可设置-系统中关闭，补丁搜索可从游戏库中选取后搜索**2Dfan、KunGal**平台的补丁  
 
-GalGear 使用 [MIT 许可证](LICENSE)。第三方工具、图标和资料遵循各自的许可与使用条款。
+GalGear 使用 [GPL-3.0-only 许可证](LICENSE)。第三方工具、图标和资料遵循各自的许可与使用条款。

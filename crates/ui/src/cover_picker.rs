@@ -23,7 +23,6 @@ struct Cover {
     title: String,
     url: String,
     image_url: String,
-    thumbnail_url: String,
 }
 
 fn load(app: &mut App) {
@@ -166,7 +165,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     } else {
         html.push_str("<div class=\"cover-options\">");
         for cover in &app.cover_picker.covers {
-            write!(html,r#"<button type="button" class="cover-option" data-action="cover-select" data-value="{}" title="{}" aria-label="{}" {}><img src="{}" alt="{}" loading="lazy" referrerpolicy="no-referrer"/><span>{}</span></button>"#,esc(&cover.image_url),esc(&cover.title),f(app,"cover.select",&[("name",&cover.title)]),if app.busy(){"disabled"}else{""},esc(&cover.thumbnail_url),esc(&cover.title),esc(&cover.title)).unwrap();
+            write!(html,r#"<button type="button" class="cover-option" data-action="cover-select" data-value="{}" title="{}" aria-label="{}" {}><div class="cover-option-image"><img src="{}" alt="{}" loading="lazy" referrerpolicy="no-referrer"/><span class="cover-resolution" hidden></span></div><span>{}</span></button>"#,esc(&cover.image_url),esc(&cover.title),f(app,"cover.select",&[("name",&cover.title)]),if app.busy(){"disabled"}else{""},esc(&cover.image_url),esc(&cover.title),esc(&cover.title)).unwrap();
         }
         html.push_str("</div>");
     }

@@ -3,6 +3,7 @@
 import init, * as ui from './pkg/galgear_ui.js';
 import {syncModalBoundary, topLayer, focusable} from './navigation.js';
 import {startGamepad} from './gamepad.js';
+import {installCoverResolutions, syncCoverResolutions} from './cover-picker.js';
 import {installHomeNavigation, syncHomePresentation, captureHomeDetailCover, syncHomeDetailTransition, returnHomeDetail, cancelHomeDetailTransition} from './home.js';
 
 let wasmReady = false;
@@ -366,6 +367,7 @@ function renderFrame(html) {
       (document.getElementById(`home-game-${dialogReturnFocus}`) || document.getElementById(`game-${dialogReturnFocus}`))?.focus({ preventScroll: true });
     }
     syncHomePresentation();
+    syncCoverResolutions();
     syncHomeDetailTransition(homeCover);
     measureLibraryBounds();
     syncSegmentedControls();
@@ -851,6 +853,8 @@ try {
     await window.__TAURI__.event.listen('playtime-updated', event => ui.playtime_updated(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('backup-completed', event => ui.backup_completed(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('tool-failed', event => ui.tool_failed(JSON.stringify(event.payload)));
+    await window.__TAURI__.event.listen('screenshot-updated', event => ui.screenshot_updated(event.payload));
+    await window.__TAURI__.event.listen('screenshot-completed', event => ui.screenshot_completed(JSON.stringify(event.payload)));
   }
 }
 catch (error) {
@@ -861,4 +865,5 @@ catch (error) {
 }
 
 installHomeNavigation(ui.dispatch, () => wasmReady);
+installCoverResolutions();
 startGamepad();
