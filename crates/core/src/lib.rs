@@ -104,7 +104,7 @@ impl Default for Settings {
             download_folder: String::new(),
             screenshot_folder: String::new(),
             screenshot_enabled: true,
-            screenshot_hotkey: "Ctrl+S".into(),
+            screenshot_hotkey: "Shift+S".into(),
             fan_domain: "https://2dfmax.top".into(),
             metadata_checks: BTreeMap::new(),
             metadata_attempt_versions: BTreeMap::new(),

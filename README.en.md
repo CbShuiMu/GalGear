@@ -64,7 +64,7 @@ The interface offers pink, white-pink, and white themes, each with light or dark
 
 ### Game screenshots
 
-Press the default shortcut **Ctrl+S** in a game and the screenshot is **automatically copied to the clipboard**. Switch to a chat window, document, or image editor that supports pasting images and press **Ctrl+V** to paste and share it directly.
+Press the default shortcut **Shift+S** in a game and the screenshot is **automatically copied to the clipboard**. Switch to a chat window, document, or image editor that supports pasting images and press **Ctrl+V** to paste and share it directly.
 
 Screenshots are enabled by default. Under **Settings → Paths and backups → Save backups and bundled tools**, you can enable or disable screenshots and change the shortcut, then save using the button at the top right of the card. The shortcut works only while a library game is in the foreground and GalGear is running. Choose another combination if it conflicts with the game's own shortcuts.
 
@@ -133,6 +133,17 @@ Account tokens, cookies, and cloud storage passwords are stored in the local Win
 To report a problem, include the application version, reproduction steps, and error message in [Issues](https://github.com/CbShuiMu/GalGear/issues). Remove personal information when sharing anything related to saves or accounts.
 
 Developer documentation (in Chinese): [Module structure](docs/architecture.md) · [Data source integration](docs/interface-and-data-sources-2026-10-14.md) · [Requirements](docs/requirements.md)
+
+## Acknowledgments
+
+GalGear uses the following open-source tools for several of its features. Thanks to their developers and maintainers:
+
+- [Locale Emulator (LE)](https://github.com/xupefei/Locale-Emulator): launching games with an emulated locale.
+- [Magpie](https://github.com/Blinue/Magpie): real-time game image scaling and upscaling.
+- [waifu2x-ncnn-vulkan (waifu2x)](https://github.com/nihui/waifu2x-ncnn-vulkan): cover denoising and home background enhancement.
+- [7-Zip](https://github.com/ip7z/7zip): extracting RAR, 7z, and other patch archives.
+
+Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## Release history
 

@@ -27,7 +27,7 @@ test('screenshot settings, preview events and stale responses cross the WASM bri
   reply('scan_library', {games, warnings: []}); reply('get_preferences', settings);
   reply('load_game_icons', {}); reply('enrich_library', null);
   ui.dispatch('page', 'settings'); ui.dispatch('settings-section', 'paths');
-  assert.match(html, /id="screenshot-hotkey"[^>]+value="Ctrl\+S"/);
+  assert.match(html, /id="screenshot-hotkey"[^>]+value="Shift\+S"/);
   ui.input_changed('screenshot-hotkey', 'Alt+F9'); ui.dispatch('configure-tools', '');
   const config = take('configure_tools');
   assert.equal(config.payload.screenshotHotkey, 'Alt+F9');

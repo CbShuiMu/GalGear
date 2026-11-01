@@ -68,7 +68,7 @@ Waifu2x会在后台对封面去噪，并生成经过降噪的首页 4K 背景（
 
 ### 游戏截图
 
-在游戏中按默认快捷键 **Ctrl+S** 截图后，图片会**自动复制到剪贴板**。切换到支持图片粘贴的聊天窗口、文档或图片编辑器，按 **Ctrl+V** 就能直接粘贴分享。
+在游戏中按默认快捷键 **Shift+S** 截图后，图片会**自动复制到剪贴板**。切换到支持图片粘贴的聊天窗口、文档或图片编辑器，按 **Ctrl+V** 就能直接粘贴分享。
 
 截图默认启用。可在“设置 → 路径与备份 → 存档备份与内置工具”中启用或停用截图、修改快捷键，并点击卡片右上角保存。快捷键仅在游戏库中的游戏位于前台时生效，游玩时需保持 GalGear 运行；与游戏自身快捷键冲突时，可以改用其他组合。
 
@@ -147,6 +147,17 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 开发资料：[模块结构](docs/architecture.md) · [数据源接入](docs/interface-and-data-sources-2026-10-14.md) · [需求记录](docs/requirements.md)
 
 
+
+## 致谢
+
+GalGear 的部分功能使用了以下开源工具，感谢各项目的开发者与维护者：
+
+- [Locale Emulator（LE）](https://github.com/xupefei/Locale-Emulator)：提供转区启动能力。
+- [Magpie](https://github.com/Blinue/Magpie)：提供游戏画面的实时缩放与超分。
+- [waifu2x-ncnn-vulkan（waifu2x）](https://github.com/nihui/waifu2x-ncnn-vulkan)：用于封面去噪和首页背景增强。
+- [7-Zip](https://github.com/ip7z/7zip)：用于 RAR、7z 等补丁压缩包的解压。
+
+各工具保留原有许可证和版权声明。内置工具的使用与上游源码链接见 [内置工具说明](docs/bundled-tools.txt)。
 
 ## 更新记录
 

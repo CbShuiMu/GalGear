@@ -395,7 +395,7 @@ mod tests {
 }
 
 pub(crate) fn default_screenshot_hotkey() -> String {
-    "Ctrl+S".into()
+    "Shift+S".into()
 }
 
 #[derive(Deserialize)]

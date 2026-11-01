@@ -171,8 +171,12 @@ mod tests {
     fn defaults_and_shortcuts_are_compatible_and_reject_modifier_only_chords() {
         let settings: crate::Settings = serde_json::from_str("{}").unwrap();
         assert!(settings.screenshot_enabled);
-        assert_eq!(settings.screenshot_hotkey, "Ctrl+S");
+        assert_eq!(settings.screenshot_hotkey, "Shift+S");
+        assert_eq!(hotkey(" shift + s ").unwrap(), "Shift+S");
         assert_eq!(hotkey(" ctrl + s ").unwrap(), "Ctrl+S");
+        let existing: crate::Settings =
+            serde_json::from_str(r#"{"screenshot_hotkey":"Ctrl+S"}"#).unwrap();
+        assert_eq!(existing.screenshot_hotkey, "Ctrl+S");
         assert_eq!(hotkey("Alt+F9").unwrap(), "Alt+F9");
         for invalid in ["", "Ctrl", "Ctrl+Alt", "S", "Ctrl+S+A", "Ctrl+Ctrl+S"] {
             assert!(hotkey(invalid).is_err(), "{invalid}");

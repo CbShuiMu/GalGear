@@ -4035,9 +4035,9 @@
     "en-US": "Disable screenshots"
   },
   "screenshot.help": {
-    "zh-CN": "默认 Ctrl+S，可输入 Ctrl、Alt、Shift、Win 与一个按键的组合。仅在库中游戏位于前台时生效；GalGear 需保持运行。原尺寸 PNG 按 UTC 时间命名，保存至游戏目录的 screenshots 文件夹，并复制到剪贴板。建议使用窗口或无边框模式。",
-    "ja-JP": "初期設定は Ctrl+S。Ctrl、Alt、Shift、Win とキーの組み合わせを入力できます。GalGear の起動中、ライブラリのゲームが前面にあるときのみ有効です。元の解像度の PNG を UTC 時刻の名前でゲームの screenshots フォルダーに保存し、クリップボードにコピーします。ウィンドウまたはボーダーレス表示を推奨します。",
-    "en-US": "Default: Ctrl+S. Enter Ctrl, Alt, Shift or Win with one key. Active only while a library game is in the foreground and GalGear is running. Original-resolution PNGs are named by UTC time, saved in the game’s screenshots folder and copied to the clipboard. Windowed or borderless mode is recommended."
+    "zh-CN": "默认 Shift+S，可输入 Ctrl、Alt、Shift、Win 与一个按键的组合。仅在库中游戏位于前台时生效；GalGear 需保持运行。原尺寸 PNG 按 UTC 时间命名，保存至游戏目录的 screenshots 文件夹，并复制到剪贴板。建议使用窗口或无边框模式。",
+    "ja-JP": "初期設定は Shift+S。Ctrl、Alt、Shift、Win とキーの組み合わせを入力できます。GalGear の起動中、ライブラリのゲームが前面にあるときのみ有効です。元の解像度の PNG を UTC 時刻の名前でゲームの screenshots フォルダーに保存し、クリップボードにコピーします。ウィンドウまたはボーダーレス表示を推奨します。",
+    "en-US": "Default: Shift+S. Enter Ctrl, Alt, Shift or Win with one key. Active only while a library game is in the foreground and GalGear is running. Original-resolution PNGs are named by UTC time, saved in the game’s screenshots folder and copied to the clipboard. Windowed or borderless mode is recommended."
   },
   "screenshot.recent": {
     "zh-CN": "最近截图",
@@ -4105,9 +4105,9 @@
     "en-US": "Use different shortcuts for screenshots and Magpie scaling"
   },
   "screenshot.invalid_hotkey": {
-    "zh-CN": "请输入修饰键加一个按键，例如 Ctrl+S 或 Alt+F9",
-    "ja-JP": "修飾キーと通常のキーを入力してください（例：Ctrl+S、Alt+F9）",
-    "en-US": "Enter modifiers followed by one key, such as Ctrl+S or Alt+F9"
+    "zh-CN": "请输入修饰键加一个按键，例如 Shift+S 或 Alt+F9",
+    "ja-JP": "修飾キーと通常のキーを入力してください（例：Shift+S、Alt+F9）",
+    "en-US": "Enter modifiers followed by one key, such as Shift+S or Alt+F9"
   },
   "screenshot.clipboard_error": {
     "zh-CN": "截图已保存到 {path}，但复制到剪贴板失败：{detail}",
