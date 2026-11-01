@@ -62,6 +62,18 @@ Search for covers separately by name, choose a different cover source, or use a 
 
 The interface offers pink, white-pink, and white themes, each with light or dark mode. You can also adjust the language and font size in Settings.
 
+### Game screenshots
+
+Press the default shortcut **Ctrl+S** in a game and the screenshot is **automatically copied to the clipboard**. Switch to a chat window, document, or image editor that supports pasting images and press **Ctrl+V** to paste and share it directly.
+
+Screenshots are enabled by default. Under **Settings → Paths and backups → Save backups and bundled tools**, you can enable or disable screenshots and change the shortcut, then save using the button at the top right of the card. The shortcut works only while a library game is in the foreground and GalGear is running. Choose another combination if it conflicts with the game's own shortcuts.
+
+Screenshots are also saved as **lossless PNGs at the captured resolution**. For ordinary windows, the capture excludes the standard title bar and borders. With Magpie, it can capture the upscaled image at its actual output resolution. Images are named using UTC time and saved in `screenshots/` inside the game folder.
+
+The **Recent screenshot** card on the game details page shows the latest image, with a button at the top right to open its folder. The preview may be smaller; the PNG on disk retains its original dimensions. If copying to the clipboard fails, the saved image remains available in the screenshot folder.
+
+Windowed or borderless mode is recommended, with the entire game image visible on screen. Exclusive fullscreen, protected content, or third-party overlays may affect capture. Games running as administrator may require a Windows authorization prompt so GalGear can receive the screenshot shortcut.
+
 ### Cloud backups and save management
 
 GalGear searches for saves in the game folder, AppData, Documents, and other locations. You can also specify locations manually.
@@ -105,6 +117,7 @@ These features are experimental. Save and script support varies by game, and gen
 | Configuration and game list for installed / normal runs | `%APPDATA%/com.galgear.desktop` |
 | Configuration and game list in portable mode | `data/` beside the executable, enabled by `portable.flag` in the same folder |
 | Save backups | `.galgear-backups/saves/` inside the game folder |
+| Game screenshots | `screenshots/` inside the game folder (original-resolution PNGs) |
 | AI preparation files and cache | `.galgear-ai-summary/` inside the game folder |
 
 When moving a portable installation, keep the application folder, `data/`, `tools/`, and backups inside game folders. Skills are not bundled or checked at startup. Use Settings → Updates → Skill to check and install manually. The installed `Galgear-GalgameReverse-Skill/` folder beside the executable can also be moved.
