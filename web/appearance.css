@@ -305,6 +305,9 @@
 
 .app-shell[data-theme] .preference-tab.active {
   font-weight: 650;
+}
+
+.app-shell[data-theme] .preference-tab.active > span:first-child {
   text-decoration: underline;
   text-underline-offset: 6px;
 }
@@ -476,8 +479,10 @@
 }
 .cover-option-image {
   position: relative;
-  align-self: center;
-  max-width: 100%;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-width: 0;
 }
 .cover-resolution {
   position: absolute;
@@ -1061,3 +1066,14 @@
 
 .preferences-content #backup-retention{max-width:none}
 .preferences-content .tools-help{white-space:pre-line}
+
+/* 与游戏库封面共用明暗主题阴影。 */
+.app-shell[data-theme] :is(.library-bar, .reference-detail .reading-card, .reference-detail .detail-card, .reference-detail .detail-cover) {
+  box-shadow: var(--poster-shadow);
+}
+
+/* 更新数量按组件计数，版本标记与待更新标记共用样式。 */
+.preferences-nav .preference-tab{display:flex;align-items:center;gap:10px}
+.update-count{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;margin-left:auto;width:1.65em;height:1.65em;border-radius:50%;background:var(--palette-302a35);color:var(--canvas);font-size:.75em;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.update-badges{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.update-badges .version-pill{white-space:nowrap}

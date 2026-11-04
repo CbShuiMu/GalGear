@@ -32,7 +32,7 @@ fn run() -> Result<(), galgear_i18n::Message> {
     }
     let source = args.first().map(String::as_str).unwrap_or("ymgal");
     let query = args.get(2).map(String::as_str).unwrap_or("千恋万花");
-    let credentials = data_sources::load(&config, source)?;
+    let credentials = data_sources::oauth::load_fresh(&config, source)?;
     let resources = data_sources::search(source, "https://2dfmax.top", query, &credentials)?;
     println!("{source}: {} candidates", resources.len());
     if let Some(resource) = resources.first() {

@@ -12,24 +12,20 @@ Windows x64 · 界面语言支持 简体中文 / 日本語 / English
 
 交流反馈QQ群：607755362
 
-[下载](https://github.com/CbShuiMu/GalGear/releases/latest) · [开始使用](#开始使用) · [功能介绍](#介绍) · [反馈问题](https://github.com/CbShuiMu/GalGear/issues)
+[下载](https://github.com/CbShuiMu/GalGear/releases/latest) · [开始使用](#开始使用) · [功能介绍](#功能介绍) · [反馈问题](https://github.com/CbShuiMu/GalGear/issues)
 
 </div>
 
 GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加进来，就能看封面、找游戏、整理收藏夹、启动游戏，也能在同一个地方管理存档和补丁。
 
-[![GalGear 首页：最近游戏、作品背景和快捷启动](assets/readme/home-native.png)](assets/readme/home-native.png)
-
-<p align="center"><sub>以下四张截图均来自运行中的 v0.3.1（2026-10-31），以 2560 × 1392 原始分辨率保存为无损 PNG，点击图片可查看原图。</sub></p>
-
-> 当前发行版为 **v0.3.3（2026-11-01）**，新增游戏截图与手动 Skill 更新，改进封面和目录操作，项目许可证改为 GPL-3.0-only。
+> 当前发行版为 **v0.3.4（2026-11-04）**，新增 NextMoe 补丁下载与浏览器授权，改进存档识别、首页背景和更新提示。
 
 ## 开始使用
 
 前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
 
-- **安装版**：下载 `GalGear_0.3.3_x64-setup.exe`，按提示安装。
-- **便携版**：下载 `GalGear-0.3.3-win64-portable.zip`，解压后运行 `GalGear.exe`。
+- **安装版**：下载 `GalGear_0.3.4_x64-setup.exe`，按提示安装。
+- **便携版**：下载 `GalGear-0.3.4-win64-portable.zip`，解压后运行 `GalGear.exe`。
 
 第一次打开，可以按这个顺序来：
 
@@ -38,13 +34,27 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 3. 打开游戏详情，检查启动配置，点击启动。（自动备份的开启需要启动游戏并进行一次存档）
 4. 找到存档位置并确认，做一份备份。以后换补丁、换电脑或重玩，都方便一些。
 
-## 介绍
+## 功能介绍
+
+| 功能 | 说明 |
+| --- | --- |
+| 游戏管理 | 多目录管理、名称搜索、排序、多层收藏夹、拖放和批量整理，记录游玩时长与最近游玩时间。 |
+| 标签与资料 | 支持组合标签筛选，以及 2DFan、VNDB、Bangumi、月幕 Galgame、未萌 NextMoe、KunGal 资料；封面可单独搜索或选用本地图片。 |
+| 转区与超分 | 通过 Locale Emulator 转区启动，使用 Magpie 实时缩放游戏画面。 |
+| 封面与主题 | waifu2x 后台去噪并生成长边 3840 的首页背景；支持主题、明暗模式、语言与字号设置。[封面增强说明](docs/cover-enhancement.md)。 |
+| 游戏截图 | **Shift+S 截图 → 自动复制到剪贴板 → Ctrl+V 粘贴分享**。同时保存原尺寸无损 PNG，支持 Magpie 输出和最近截图预览。 |
+| 存档备份 | 寻找或手动确认存档位置，支持多目录备份、备注、锁定、恢复预览和退出后自动备份；WebDAV 上传下载需手动操作。[云存储说明](docs/cloud-storage.md)。 |
+| 补丁管理 | NextMoe 托管下载需配置具备 `moyu:files` 权限的应用密钥。 搜索 2DFan、鲲 Gal、NextMoe，支持本地补丁、ZIP / RAR / 7z 解压、冲突预览和备份恢复；2DFan 下载需配置代理。 |
+| AI 辅助（测试中） | 补充存档路径搜索，提供前情提要与 DeepSeek 路线图；需自备 API Token，会发送必要游戏文本并产生 API 费用，路线图可能包含剧透。[AI 设置](docs/ai-settings.md)。 |
+| 浏览器授权 | Bangumi、NextMoe 支持内置应用 OAuth 登录，用户令牌保存在本机 Windows 凭据管理器。[授权说明](docs/oauth-callback.md)。 |
+| 更新提示 | 启动后后台检查 GalGear 与 Skill 版本，显示待更新提示；点击更新才下载安装。 |
+
+<details>
+<summary>功能使用说明与限制</summary>
 
 ### Galgame管理
 
 游戏可以放在不同目录，不必为了使用 GalGear 重新搬家。支持按名称搜索、组合标签筛选和排序，也可以用多层收藏夹整理正在玩、想玩或已经通关的作品。一款游戏能放进多个收藏夹，支持拖放和批量整理。
-
-[![GalGear 游戏库：游戏封面、搜索、标签筛选和排序](assets/readme/library-native.png)](assets/readme/library-native.png)
 
 GalGear 会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游戏进程的检测，玩游戏时请保持 GalGear 运行。
 
@@ -61,8 +71,6 @@ Waifu2x会在后台对封面去噪，并生成经过降噪的首页 4K 背景（
 封面可以单独按名称搜索、换来源挑选，或使用本地图片，不影响已经关联的作品资料。点击详情里的标签、制作组或制作人员，就能回到游戏库找相关作品。已经缓存的资料和本地游戏库可以离线浏览。  
 
 
-
-[![GalGear ATRI 游戏详情：启动按钮、作品资料、标签、存档和补丁管理](assets/readme/detail-native.png)](assets/readme/detail-native.png)
 
 界面支持粉色、白粉、白色三种主题色，可分别搭配亮色或夜间模式；语言和字号也能在设置中调整。
 
@@ -92,11 +100,9 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 ### 补丁搜索与管理
 
-可以搜索 **2DFan、鲲 Gal** 的补丁资源，查看原站说明，下载网站提供的可用直链；也可以直接导入本地补丁。需要登录或付费的资源，仍受原站账号和权限限制。（**2DFan资源下载需要配置代理**）
+可以搜索 **2DFan、鲲 Gal、NextMoe** 的补丁资源，查看原站说明，下载网站提供的可用直链；也可以直接导入本地补丁。需要登录或付费的资源，仍受原站账号和权限限制。（**2DFan资源下载需要配置代理**）
 
-可直接从游戏库选择作品来搜索补丁。下图以库中的 **ATRI -My Dear Moments-** 为例，展示两个来源的补丁和存档结果。
-
-[![GalGear 补丁页：联动游戏库中的 ATRI，展示 2DFan 与鲲 Gal 搜索结果](assets/readme/patches-native.png)](assets/readme/patches-native.png)
+可直接从游戏库选择作品来搜索补丁。“界面预览”中的补丁截图以库中的 **ATRI -My Dear Moments-** 为例，展示两个来源的补丁和存档结果。
 
 本地 ZIP 可直接预览；RAR / 7z 使用随程序附带的 7-Zip。覆盖文件前会列出冲突并保留备份，之后可以恢复。EXE 补丁则使用它自己的安装流程。
 
@@ -118,7 +124,24 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 这部分还在实验中，能否读取存档和脚本取决于具体游戏，无法保证每款都能用，生成的总结和路线也可能有误。启用时，分析所需的游戏台词、存档信息和作品资料会发给相应的 AI 服务，调用费用由你的 API 账号承担。更详细的用法见 [AI 设置](docs/ai-settings.md) 和 [前情提要说明](docs/ai-summary.md)。
 
+</details>
 
+## 界面预览
+
+截图来自 v0.3.1（2026-10-31），原始分辨率 2560 × 1392；点击图片可查看原图。
+
+[![GalGear 首页：最近游戏、作品背景和快捷启动](assets/readme/home-native.png)](assets/readme/home-native.png)
+
+[![GalGear 游戏库：游戏封面、搜索、标签筛选和排序](assets/readme/library-native.png)](assets/readme/library-native.png)
+
+<details>
+<summary>更多界面截图：游戏详情与补丁管理</summary>
+
+[![GalGear ATRI 游戏详情：启动按钮、作品资料、标签、存档和补丁管理](assets/readme/detail-native.png)](assets/readme/detail-native.png)
+
+[![GalGear 补丁页：联动游戏库中的 ATRI，展示 2DFan 与鲲 Gal 搜索结果](assets/readme/patches-native.png)](assets/readme/patches-native.png)
+
+</details>
 
 ## 数据存放位置
 
@@ -130,7 +153,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 | 游戏截图 | 游戏目录下的 `screenshots/`（原尺寸 PNG） |
 | AI 准备文件和缓存 | 游戏目录下的 `.galgear-ai-summary/` |
 
-便携版迁移时，一起带上程序目录和 `data/`，并保留游戏目录中的备份及程序旁的 `tools/`。Skill 不随发行包附带，也不在启动时自动检查：请在“设置 → 更新 → Skill”手动检查和安装。安装后位于程序旁的 `Galgear-GalgameReverse-Skill/`，迁移时可一并携带。
+便携版迁移时，一起带上程序目录和 `data/`，并保留游戏目录中的备份及程序旁的 `tools/`。启动后会在后台检查 GalGear 和 Skill 版本并显示待更新提示，不自动安装。Skill 不随发行包附带，请在“设置 → 更新 → Skill”点击“更新”安装。已安装的 `Galgear-GalgameReverse-Skill/` 可随程序迁移。
 
 账号 Token、Cookie 和云存储密码保存在本机 Windows 凭据管理器中，换电脑后需要重新配置。从游戏库移除条目只会改变列表，不会删除游戏、存档或备份。（2Dfan需自行抓取Token以及Cookie）
 
@@ -162,6 +185,10 @@ GalGear 的部分功能使用了以下开源工具，感谢各项目的开发者
 ## 更新记录
 
 
+
+### v0.3.4
+
+- 新增 NextMoe 补丁下载和内置 OAuth 授权，改进存档识别、首页与更新提示。[发布说明](docs/releases/v0.3.4.md)。
 
 ### v0.3.3
 

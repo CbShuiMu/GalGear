@@ -9,6 +9,7 @@ pub mod collections;
 pub mod config;
 pub mod credentials;
 pub mod data_sources;
+pub mod downloads;
 pub mod fan_account;
 pub mod game_details;
 pub mod game_setup;
@@ -122,7 +123,7 @@ impl Default for Settings {
             background_image: None,
             show_patches: true,
             show_collections: true,
-            metadata_provider: "2dfan".into(),
+            metadata_provider: "nextmoe".into(),
             ai_models: BTreeMap::new(),
             ai_provider: "deepseek".into(),
         }

@@ -10,7 +10,7 @@ use reqwest::{
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::{Read, Write},
+    io::Read,
     path::Path,
     sync::{
         Arc,
@@ -565,15 +565,7 @@ fn allowed_file(file: &Url, source: &Url) -> bool {
             .contains(&file.host_str().unwrap_or_default()))
 }
 
-#[derive(Clone, Default, Serialize, Deserialize, Debug)]
-pub struct Transfer {
-    pub phase: String,
-    pub title: String,
-    pub received: u64,
-    pub total: Option<u64>,
-    pub path: Option<String>,
-    pub error: Option<Message>,
-}
+pub use crate::downloads::Transfer;
 pub fn download(
     plan: &DownloadPlan,
     directory: &Path,
@@ -604,128 +596,17 @@ pub fn download(
     finish_download(response, plan, directory, cancel, progress)
 }
 
-fn finish_download(
-    mut response: reqwest::blocking::Response,
-    plan: &DownloadPlan,
-    directory: &Path,
-    cancel: &AtomicBool,
-    progress: &mut dyn FnMut(Transfer),
-) -> Result<String, Message> {
-    if !response.status().is_success() {
-        return Err(Message::new("download.network"));
-    }
+fn finish_download(response: reqwest::blocking::Response, plan: &DownloadPlan, directory: &Path, cancel: &AtomicBool, progress: &mut dyn FnMut(Transfer)) -> Result<String, Message> {
     let url = response.url().clone();
-    if response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .is_some_and(|s| s.contains("text/html"))
-    {
-        return Err(Message::new("download.not_file"));
-    }
-    let total = response.content_length();
-    if total.is_some_and(|n| n > 8 * 1024 * 1024 * 1024) {
-        return Err(Message::new("download.too_large"));
-    }
-    std::fs::create_dir_all(directory).map_err(|_| Message::new("download.write"))?;
-    let mut file =
-        tempfile::NamedTempFile::new_in(directory).map_err(|_| Message::new("download.write"))?;
-    let mut received = 0;
-    let mut buf = [0u8; 64 * 1024];
-    let mut last = std::time::Instant::now() - Duration::from_secs(1);
-    loop {
-        if cancel.load(Ordering::Relaxed) {
-            return Err(Message::new("download.cancelled"));
-        }
-        let n = response
-            .read(&mut buf)
-            .map_err(|_| Message::new("download.network"))?;
-        if n == 0 {
-            break;
-        }
-        received += n as u64;
-        if received > 8 * 1024 * 1024 * 1024 {
-            return Err(Message::new("download.too_large"));
-        }
-        file.write_all(&buf[..n])
-            .map_err(|_| Message::new("download.write"))?;
-        if last.elapsed() > Duration::from_millis(180) {
-            progress(Transfer {
-                phase: "downloading".into(),
-                title: plan.preview.title.clone(),
-                received,
-                total,
-                ..Default::default()
-            });
-            last = std::time::Instant::now();
-        }
-    }
-    if received == 0 || total.is_some_and(|n| n != received) {
-        return Err(Message::new("download.incomplete"));
-    }
-    if cancel.load(Ordering::Relaxed) {
-        return Err(Message::new("download.cancelled"));
-    }
-    file.as_file()
-        .sync_all()
-        .map_err(|_| Message::new("download.write"))?;
-    let extension = url
-        .path()
-        .rsplit('.')
-        .next()
-        .filter(|s| ["zip", "rar", "7z", "exe"].contains(s))
-        .unwrap_or("bin");
-    let name: String = plan
-        .preview
-        .title
-        .chars()
-        .filter(|c| !"<>:\"/\\|?*".contains(*c) && !c.is_control())
-        .take(100)
-        .collect();
-    let name = name.trim_matches([' ', '.']);
-    let name = if name.is_empty() {
-        "2DFan".to_owned()
-    } else {
-        let root = name
-            .split('.')
-            .next()
-            .unwrap_or_default()
-            .to_ascii_uppercase();
-        if [
-            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
-            "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-        ]
-        .contains(&root.as_str())
-        {
-            format!("_{name}")
-        } else {
-            name.to_owned()
-        }
-    };
-    let mut path = directory.join(format!("{name}.{extension}"));
-    for index in 1..1000 {
-        if !path.exists() {
-            break;
-        }
-        path = directory.join(format!("{name} ({index}).{extension}"));
-    }
-    file.persist_noclobber(&path)
-        .map_err(|_| Message::new("download.write"))?;
-    let path = crate::config::display_path(&path);
-    progress(Transfer {
-        phase: "complete".into(),
-        title: plan.preview.title.clone(),
-        received,
-        total,
-        path: Some(path.clone()),
-        ..Default::default()
-    });
-    Ok(path)
+    crate::downloads::receive(response, &crate::downloads::FileInfo {
+        url: &url, referer: &plan.preview.source_url, title: &plan.preview.title, filename: None, bytes: None,
+    }, directory, cancel, progress)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
 
     #[test]
     fn downloads_use_configured_proxy_for_site_and_cdn_files() {

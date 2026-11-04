@@ -141,6 +141,18 @@ pub(crate) fn bytes(value: u64) -> String {
     }
 }
 
+/// 与版本标签共用外观；没有新版本时不输出占位元素。
+pub(crate) fn pending_update_badge(label: &str, available: bool) -> String {
+    if available {
+        format!(
+            r#"<span class="version-pill update-pending">{}</span>"#,
+            esc(label)
+        )
+    } else {
+        String::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

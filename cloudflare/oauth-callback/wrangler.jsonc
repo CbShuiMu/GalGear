@@ -1,0 +1,18 @@
+{
+  "name": "galgear-oauth-callback",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "galgear.cbshuimu.net", "custom_domain": true }],
+  "logpush": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    // 回调 URL 带授权码：禁用自动请求日志，并对异常日志/追踪去除查询串。
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": false },
+    "traces": { "enabled": false }
+  }
+}

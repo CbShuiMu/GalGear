@@ -117,7 +117,7 @@ mod tests {
         let reloaded = store.load().unwrap();
         assert_eq!(reloaded.game_edits[&game.id].metadata_provider, "vndb");
         assert_eq!(reloaded.game_edits["other"].metadata_provider, "bangumi");
-        assert_eq!(reloaded.metadata_provider, "2dfan");
+        assert_eq!(reloaded.metadata_provider, "nextmoe");
         assert!(reloaded.game_edits[&game.id].setup_confirmed);
     }
 

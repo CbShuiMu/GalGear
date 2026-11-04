@@ -18,7 +18,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub mod moyu;
 mod nextmoe;
+pub mod oauth;
 
 pub const SOURCES: [&str; 5] = ["2dfan", "vndb", "bangumi", "ymgal", "nextmoe"];
 
@@ -100,6 +102,16 @@ pub struct Credentials {
     pub token: String,
     pub client_id: String,
     pub client_secret: String,
+    /// 用户自备的 NextMoe 应用密钥，仅用于联邦补丁接口。
+    pub patch_key: String,
+    /// OAuth 轮换凭据，和其他密钥一起保存在系统凭据库。
+    pub refresh_token: String,
+    /// OAuth 访问令牌的 Unix 到期秒数；手动令牌为 0。
+    pub expires_at: u64,
+    /// 授权时使用的回调地址；旧凭据为空时沿用旧环回地址。
+    pub oauth_redirect_uri: String,
+    /// 内置 Bangumi 应用由服务端保管密钥，旧自建应用仍直接刷新。
+    pub oauth_exchange: oauth::Exchange,
 }
 impl std::fmt::Debug for Credentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -110,6 +122,8 @@ impl std::fmt::Debug for Credentials {
 pub struct SourceStatus {
     pub source: String,
     pub configured: bool,
+    /// 仅返回补丁密钥是否存在，不暴露密钥内容。
+    pub patch_configured: bool,
 }
 pub fn validate_source(source: &str) -> Result<(), Message> {
     if SOURCES.contains(&source) {
@@ -128,18 +142,26 @@ pub fn credential_target(config: &Path, source: &str) -> Result<String, Message>
 }
 pub fn load(config: &Path, source: &str) -> Result<Credentials, Message> {
     let saved = credentials::load(&credential_target(config, source)?)?;
-    if saved.cookie.is_empty() {
-        Ok(Credentials {
-            token: saved.token,
-            ..Default::default()
-        })
-    } else {
-        let mut value: Credentials =
-            serde_json::from_str(&saved.cookie).map_err(|_| Message::new("auth.store_error"))?;
-        value.token = saved.token;
-        Ok(value)
-    }
+    decode_credentials(source, saved)
 }
+fn decode_credentials(source: &str, saved: FanCredentials) -> Result<Credentials, Message> {
+    let mut value: Credentials = if saved.cookie.is_empty() {
+        Credentials::default()
+    } else {
+        serde_json::from_str(&saved.cookie).map_err(|_| Message::new("auth.store_error"))?
+    };
+    value.token = saved.token;
+    // 旧版应用密钥迁移到补丁字段，目录恢复匿名；绝不把用户令牌发给补丁接口。
+    if source == "nextmoe" && value.token.starts_with("nmk_") {
+        if value.patch_key.is_empty() {
+            value.patch_key = std::mem::take(&mut value.token);
+        } else {
+            value.token.clear();
+        }
+    }
+    Ok(value)
+}
+
 pub fn save(config: &Path, source: &str, value: &Credentials) -> Result<(), Message> {
     let mut rest = value.clone();
     rest.token.clear();
@@ -157,7 +179,9 @@ pub fn statuses(config: &Path) -> Result<Vec<SourceStatus>, Message> {
             let value = load(config, source)?;
             Ok(SourceStatus {
                 source: source.into(),
-                configured: !value.token.is_empty() || !value.client_id.is_empty(),
+                configured: !value.token.is_empty()
+                    || (source == "ymgal" && !value.client_id.is_empty()),
+                patch_configured: !value.patch_key.is_empty(),
             })
         })
         .collect()
@@ -288,7 +312,8 @@ pub fn check(source: &str, credentials: &Credentials) -> Result<(), Message> {
             return Err(Message::new("auth.invalid"));
         }
     }
-    if credentials.client_id.is_empty() != credentials.client_secret.is_empty() {
+    if source == "ymgal" && credentials.client_id.is_empty() != credentials.client_secret.is_empty()
+    {
         return Err(Message::new("auth.invalid"));
     }
     let client = providers::client()?;
@@ -790,5 +815,36 @@ mod tests {
         let value = json!({"game":{"gid":"1","name":"Game","staff":[{"emp_name":"Producer","job_name":"制作总指挥"}]}});
         let meta = parse_ymgal(&value, "https://www.ymgal.games/ga1").unwrap();
         assert_eq!(meta.tag_names(), vec!["Producer"]);
+    }
+}
+
+#[cfg(test)]
+mod credential_migration_tests {
+    use super::*;
+    #[test]
+    fn legacy_application_key_moves_to_patch_access_without_losing_user_tokens() {
+        for cookie in ["", "{}"] {
+            let migrated = decode_credentials(
+                "nextmoe",
+                FanCredentials {
+                    token: "nmk_test_fixture".into(),
+                    cookie: cookie.into(),
+                    mode: "bearer".into(),
+                },
+            )
+            .unwrap();
+            assert!(migrated.token.is_empty());
+            assert_eq!(migrated.patch_key, "nmk_test_fixture");
+        }
+        let value = decode_credentials(
+            "nextmoe",
+            FanCredentials {
+                token: "user-token".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(value.token, "user-token");
+        assert!(value.patch_key.is_empty());
     }
 }

@@ -23,6 +23,12 @@
 
 游戏、存档和补丁目录统一通过 `folders` 打开；各命令保留所属业务的路径校验。Windows 端将目录解析为 Shell 项目再打开，避免 `explorer.exe` 命令行解析路径后跳转到默认目录。
 
+`core::downloads` 封装文件流接收、进度、取消、体积检查及不覆盖已有文件的落盘；`fan_account` 和 `data_sources::moyu` 分别负责各自的授权与文件获取规则。桌面 `downloads` 共用任务互斥和进度事件，UI 的 NextMoe 下载请求不触发无关的 2DFan 账号刷新。NextMoe 的下载 ID 与展示用网页 URL 分开传输，签名下载 URL 不进入持久化配置或前端。
+
+## OAuth HTTPS 回调
+
+`core::data_sources::oauth` 负责内置应用授权、PKCE、本机监听和令牌轮换；桌面命令负责打开系统浏览器、取消与结果保存。`cloudflare/oauth-callback` 是独立部署的无状态 Worker，绑定 `galgear.cbshuimu.net`：NextMoe 仅中继授权码，Bangumi 则保管发布版 App Secret，签发短期会话及加密换码票据，并调用上游换码/刷新。用户令牌只在桌面凭据库持久化，不保存在 Worker。协议与旧令牌兼容见 [OAuth 回调服务](oauth-callback.md)，取舍见 [ADR 0002](adr/0002-builtin-oauth-applications.md)。
+
 ## 验证
 
 ```powershell
@@ -45,8 +51,8 @@ cargo clippy -p galgear-ui --target wasm32-unknown-unknown --locked -- -D warnin
 
 管理员游戏可能让普通权限进程收不到键盘消息。`screenshots::windows::elevated` 在识别到这种前台窗口后，以系统授权启动同一可执行文件的 `--galgear-screenshot-input` 辅助模式；每次 GalGear 会话只启动一次，取消后可保存快捷键重试。辅助进程验证父进程可执行文件和窗口归属，只接收快捷键并回传目标 HWND 与配置代数，不接收文件路径、不执行截图或写入。主进程再次核对前台游戏后完成原尺寸 PNG、剪贴板和主题提示。失焦或修改设置撤销旧代数，退出销毁消息窗口，辅助进程随之结束；UAC 等待不阻塞设置和消息处理。键盘接收仍遵循 [Windows Raw Input](https://learn.microsoft.com/en-us/windows/win32/inputdev/using-raw-input)，不记录按键文本，也不向游戏注入代码。
 
-## Skill 手动更新
+## 更新检查与 Skill 手动安装
 
-`core::ai::skills::status` 只读本地安装与 commit；`sync` 负责固定仓库 main 的检查、按 commit 下载和原子替换，并返回是否更新。桌面 `skill_package` 不再有启动任务或 OnceCell；只有 `check_skill_update` 命令能同步，`get_ai_runtime` 仅查询本地状态。AI 任务持有资源读取租约，更新持有排他租约，防止替换仍被使用的目录。
+`core::ai::skills::status` 只读本地安装与 commit；`latest_commit` 只查询远端 main 的 SHA，与 `sync` 共用查询及校验逻辑，不写目录、不下载资源包；`sync` 负责固定仓库 main 的检查、按 commit 下载和原子替换，并返回是否更新。桌面 `skill_package` 不再有启动任务或 OnceCell；只有 `check_skill_update` 命令能同步，`get_ai_runtime` 仅查询本地状态，`check_skill_version` 在后台线程只读查询远端版本，无需独占资源租约。AI 任务持有资源读取租约，更新持有排他租约，防止替换仍被使用的目录。
 
-UI `skill_update` 在设置 → 更新中复用 GalGear 卡片布局，显示 Skill、本地 commit、固定仓库和检查更新按钮。更新不阻塞本地游戏库，重复点击合并为一次请求；成功后刷新版本和 AI 可用状态，迟到的启动查询不能覆盖更新结果。失败保留本地版本，可重试。
+UI `skill_update` 在设置 → 更新中复用 GalGear 卡片布局，显示 Skill、本地 commit、固定仓库和“更新”按钮。每次启动完成初始化后，UI 并发后台检查 GalGear 和 Skill 版本，不阻塞本地功能、不自动安装、不弹出确认；失败信息显示在更新卡片中。检测到新版本时，在版本标记左侧显示同样式的“待更新”，设置左侧“更新”入口显示圆形数量提示，GalGear 和 Skill 各计一项，最多为 2。关闭 GalGear 更新弹窗保留通知，Skill 安装成功后清除对应通知；迟到的后台检查不能恢复旧通知。更新不阻塞本地游戏库，重复点击合并为一次请求；成功后刷新版本和 AI 可用状态，迟到的启动查询不能覆盖更新结果。失败保留本地版本，可重试。

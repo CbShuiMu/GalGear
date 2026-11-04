@@ -55,7 +55,7 @@ pub async fn complete_game_setup(
     let game = find_game(&state, &id)?;
     game_setup::validate(&source, &url, &executable, confirmed)?;
     let domain = snapshot(&state)?.fan_domain;
-    let credentials = data_sources::credentials_for(&state, &source)?;
+    let credentials = data_sources::credentials_for(&state, &source).await?;
     let metadata = tauri::async_runtime::spawn_blocking(move || {
         galgear_core::data_sources::metadata(&domain, &url, &credentials)
     })

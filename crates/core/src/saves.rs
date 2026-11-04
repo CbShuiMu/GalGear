@@ -1,5 +1,6 @@
 //! Read-only, bounded save discovery. A matching name is evidence, not certainty.
 mod kirikiri;
+mod paths;
 mod steam;
 pub mod ai_find;
 
@@ -95,6 +96,14 @@ fn key(value: &str) -> String {
         .filter(|c| c.is_alphanumeric())
         .collect()
 }
+fn game_key(value: &str) -> String {
+    let mut normalized = key(value);
+    // 保留 HD/FHD 版本标识，避免把重制版与原版混为一谈。
+    if normalized.ends_with("hd版") {
+        normalized.truncate(normalized.len() - "版".len());
+    }
+    normalized
+}
 fn save_name(name: &str) -> bool {
     let normalized = key(name);
     matches!(
@@ -107,30 +116,15 @@ fn save_name(name: &str) -> bool {
     })
 }
 
-/// File activity is more useful than a directory timestamp changed by copying it.
+/// 只比较目录直属存档文件；复制目录、日志或说明文件的更新时间不是游玩证据。
 pub(crate) fn latest_modified(folder: &Path) -> Option<std::time::SystemTime> {
-    let mut pending = vec![(folder.to_path_buf(), 0)];
-    let mut remaining = 2048;
-    let mut latest = None;
-    while let Some((path, depth)) = pending.pop() {
-        let Ok(metadata) = fs::symlink_metadata(&path) else { continue };
-        if metadata.is_symlink() { continue; }
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::MetadataExt;
-            if metadata.file_attributes() & 0x400 != 0 { continue; }
-        }
-        if metadata.is_file() {
-            latest = latest.max(metadata.modified().ok());
-        } else if metadata.is_dir() && depth < 4 {
-            for entry in fs::read_dir(path).into_iter().flatten().filter_map(Result::ok) {
-                if remaining == 0 { break; }
-                remaining -= 1;
-                pending.push((entry.path(), depth + 1));
-            }
-        }
-    }
-    latest.or_else(|| fs::metadata(folder).ok()?.modified().ok())
+    fs::read_dir(folder)
+        .ok()?
+        .take(2048)
+        .filter_map(Result::ok)
+        .filter(save_file)
+        .filter_map(|entry| entry.metadata().ok()?.modified().ok())
+        .max()
 }
 
 fn sort_recent(report: &mut SaveReport) {
@@ -145,9 +139,12 @@ fn select_recent_ai(report: &mut SaveReport, selected: &Path, game: &Game) {
     add(report, selected.to_path_buf(), "ai", "confirmed");
     let selected = display_path(selected);
     let game_root = Path::new(&game.folder).canonicalize().ok();
-    report.locations.retain(|location| location.exists
-        && Path::new(&location.path).canonicalize().ok() != game_root
-        && (location.readable || location.path.eq_ignore_ascii_case(&selected)));
+    report.locations.retain(|location| {
+        location.exists
+            && Path::new(&location.path).canonicalize().ok() != game_root
+            && !paths::has_placeholder(Path::new(&location.path))
+            && location.readable
+    });
     // Keep the AI choice on ties, but prefer a more recently written save directory.
     report.locations.sort_by_key(|location| !location.path.eq_ignore_ascii_case(&selected));
     report.locations.sort_by_cached_key(|location| std::cmp::Reverse(latest_modified(Path::new(&location.path))));
@@ -167,18 +164,30 @@ fn save_files(folder: &Path) -> bool {
     fs::read_dir(folder)
         .into_iter()
         .flatten()
-        .take(100)
+        .take(2048)
         .filter_map(Result::ok)
-        .any(|e| {
-            let name = e.file_name().to_string_lossy().to_lowercase();
-            e.file_type().is_ok_and(|t| t.is_file())
-                && (name.starts_with("save")
-                    || [".dat", ".sav", ".ksd", ".asd", ".rpgsave", ".rmmzsave"]
-                        .iter()
-                        .any(|suffix| name.ends_with(suffix))
-                    || (name.ends_with(".bmp") && classify(&e.path()) == SaveKind::Progress))
-                && fs::File::open(e.path()).is_ok()
-        })
+        .any(|e| save_file(&e))
+}
+fn save_file(e: &fs::DirEntry) -> bool {
+    let Ok(metadata) = e.metadata() else {
+        return false;
+    };
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 {
+            return false;
+        }
+    }
+    let name = e.file_name().to_string_lossy().to_lowercase();
+    metadata.is_file()
+        && !metadata.is_symlink()
+        && (name.starts_with("save")
+            || [".dat", ".sav", ".ksd", ".asd", ".rpgsave", ".rmmzsave"]
+                .iter()
+                .any(|suffix| name.ends_with(suffix))
+            || (name.ends_with(".bmp") && classify(&e.path()) == SaveKind::Progress))
+        && fs::File::open(e.path()).is_ok()
 }
 fn add(report: &mut SaveReport, path: PathBuf, source: &str, confidence: &str) {
     let path = display_path(&path).replace('/', std::path::MAIN_SEPARATOR_STR);
@@ -308,20 +317,24 @@ pub fn discover_in(
         }
     }
     let mut aliases: BTreeSet<String> = [
-        key(&game.title),
-        key(folder
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .as_ref()),
+        game_key(&game.title),
+        game_key(
+            folder
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .as_ref(),
+        ),
     ]
     .into();
     if let Some(exe) = &game.executable {
-        let value = key(Path::new(exe)
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .as_ref());
+        let value = game_key(
+            Path::new(exe)
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .as_ref(),
+        );
         if !["advhd", "advhdnew", "game", "launcher", "siglusengine"].contains(&value.as_str()) {
             aliases.insert(value);
         }
@@ -329,7 +342,17 @@ pub fn discover_in(
     aliases.retain(|s| s.chars().count() >= 4);
     search_local_game_folders(folder, &aliases, 0, false, &mut 0, &mut report);
     for value in configured {
-        let normalized = value.replace('\\', "/");
+        let Some(resolved) = paths::expand(&value, |variable| match variable {
+            "CURRENT" => Some(folder.to_path_buf()),
+            "APPDATA" => roots
+                .iter()
+                .find(|(source, _)| source == "roaming")
+                .map(|(_, path)| path.clone()),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let normalized = resolved.to_string_lossy().replace('\\', "/");
         if let Some(base) = &configured_base {
             for (source, root) in roots {
                 let token = match source.as_str() {
@@ -349,14 +372,7 @@ pub fn discover_in(
                 }
             }
         }
-        if normalized.contains("$(CURRENT)") {
-            add(
-                &mut report,
-                folder.join(normalized.replace("$(CURRENT)", "").trim_start_matches('/')),
-                "config",
-                "configured",
-            );
-        } else if Path::new(&normalized).is_absolute() {
+        if Path::new(&normalized).is_absolute() {
             add(
                 &mut report,
                 PathBuf::from(normalized),
@@ -365,7 +381,7 @@ pub fn discover_in(
             );
         } else if !normalized.contains("..") && !normalized.contains('$') {
             if let Some(first) = normalized.split('/').next() {
-                aliases.insert(key(first));
+                aliases.insert(game_key(first));
             }
             let local = folder.join(&normalized);
             if local.is_dir() {
@@ -416,7 +432,7 @@ fn search(
     visited: &mut usize,
     report: &mut SaveReport,
 ) {
-    if depth > 4 {
+    if depth > 4 || paths::has_placeholder(path) {
         return;
     }
     if *visited >= 5000 {
@@ -424,7 +440,7 @@ fn search(
         return;
     }
     *visited += 1;
-    let name = key(&path.file_name().unwrap_or_default().to_string_lossy());
+    let name = game_key(&path.file_name().unwrap_or_default().to_string_lossy());
     let matches = matched
         || aliases
             .iter()
@@ -501,12 +517,13 @@ fn search_local_game_folders(
         }
         *visited += 1;
         let name = entry.file_name().to_string_lossy().to_lowercase();
-        if name.starts_with(".galgear-")
+        if paths::has_placeholder(&entry.path())
+            || name.starts_with(".galgear-")
             || ["cache", "logs", ".git", "node_modules", "patch"].contains(&name.as_str())
         {
             continue;
         }
-        let normalized = key(&name);
+        let normalized = game_key(&name);
         let matches = matched
             || save_name(&name)
             || aliases.iter().any(|alias| {
@@ -541,6 +558,9 @@ fn local_save_evidence(folder: &Path) -> bool {
                     || kirikiri::recognizable(&entry.path()))
         })
 }
+
+#[cfg(test)]
+mod discovery_tests;
 
 #[cfg(test)]
 mod tests {

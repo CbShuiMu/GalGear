@@ -14,7 +14,7 @@ pub(crate) async fn search_metadata(
 ) -> Result<Vec<providers::Resource>, Message> {
     let settings = snapshot(&state)?;
     let source = source.unwrap_or(settings.metadata_provider);
-    let credentials = data_sources::credentials_for(&state, &source)?;
+    let credentials = data_sources::credentials_for(&state, &source).await?;
     tauri::async_runtime::spawn_blocking(move || {
         galgear_core::data_sources::search(&source, &settings.fan_domain, &query, &credentials)
     })
@@ -33,7 +33,7 @@ pub(crate) async fn select_metadata(
     find_game(&state, &id)?;
     let domain = snapshot(&state)?.fan_domain;
     let (source, _) = galgear_core::data_sources::source_for_url(&url)?;
-    let credentials = data_sources::credentials_for(&state, source)?;
+    let credentials = data_sources::credentials_for(&state, source).await?;
     let metadata = tauri::async_runtime::spawn_blocking(move || {
         galgear_core::data_sources::metadata(&domain, &url, &credentials)
     })

@@ -16,18 +16,14 @@ Windows x64 · 简体中文 / 日本語 / English
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-[![GalGear home: recent games, game artwork, and quick launch](assets/readme/home-native.png)](assets/readme/home-native.png)
-
-<p align="center"><sub>All four screenshots below were captured from v0.3.1 running on October 31, 2026, and saved as lossless PNGs at their original resolution of 2560 × 1392. Click an image to view the original.</sub></p>
-
-> The current release is **v0.3.3 (November 1, 2026)**, adding game screenshots and manual Skill updates, improving cover and folder actions, and switching the project license to GPL-3.0-only.
+> The current release is **v0.3.4 (November 4, 2026)**, adding NextMoe patch downloads and browser authorization, with improved save discovery, home backgrounds, and update notices.
 
 ## Getting started
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.3.3_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.3.3-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.3.4_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.3.4-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -38,11 +34,25 @@ For your first launch:
 
 ## Features
 
+| Feature | Description |
+| --- | --- |
+| Library | Manage multiple folders, search, sort, organize nested favorites, drag and drop, and track playtime and last played dates. |
+| Tags and metadata | Combine tag filters and choose metadata from 2DFan, VNDB, Bangumi, 月幕 Galgame, 未萌 NextMoe, or KunGal. Search covers independently or use local images. |
+| Locale and scaling | Launch through Locale Emulator and scale game images in real time with Magpie. |
+| Covers and themes | waifu2x denoises covers and creates home backgrounds with a 3840-pixel long edge. Customize themes, light/dark mode, language, and font size. [Details](docs/cover-enhancement.md). |
+| Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, with Magpie output and recent screenshot previews. |
+| Backups | Find or confirm save locations; back up multiple folders, add notes, lock backups, preview restores, and enable backups after game exit. WebDAV transfers are manual. [Cloud storage](docs/cloud-storage.md). |
+| Patches | NextMoe hosted downloads require an application key with `moyu:files` permission. Search 2DFan, KunGal, and NextMoe, import local patches, extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy. |
+| AI (experimental) | Supplement save discovery, generate recaps and DeepSeek route maps. Requires your own API token, sends necessary game text, and incurs API costs. Route maps may contain spoilers. [AI settings](docs/ai-settings.md). |
+| Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
+| Update notices | Checks GalGear and Skill versions in the background at startup. Downloads and installation start only when you choose to update. |
+
+<details>
+<summary>Usage details and limitations</summary>
+
 ### Galgame management
 
 Games can stay in different folders; there is no need to move them to use GalGear. Search by name, combine tag filters, sort your library, and use nested favorites folders to organize games you are playing, plan to play, or have finished. A game can belong to multiple favorites folders, with drag-and-drop and batch organization supported.
-
-[![GalGear library: game covers, search, tag filters, and sorting](assets/readme/library-native.png)](assets/readme/library-native.png)
 
 GalGear records playtime and when you last played. Tracking relies on detecting the game process, so keep GalGear running while you play.
 
@@ -57,8 +67,6 @@ Filter by tags covering everything from game attributes to voice actors listed i
 Choose metadata from **2DFan, VNDB, Bangumi, 月幕 Galgame, 未萌 NextMoe, and KunGal**, with a different source available for each game. Synopses, developers, staff, and tags are stored locally and can also be edited manually. **Thanks to all these platforms.**
 
 Search for covers separately by name, choose a different cover source, or use a local image without changing the linked game metadata. Click a tag, developer, or staff member in the details to find related games in your library. Cached metadata and your local library remain available offline.
-
-[![GalGear ATRI details: launch button, metadata, tags, save management, and patches](assets/readme/detail-native.png)](assets/readme/detail-native.png)
 
 The interface offers pink, white-pink, and white themes, each with light or dark mode. You can also adjust the language and font size in Settings.
 
@@ -88,11 +96,9 @@ Uploads and downloads must be started manually; background automatic synchroniza
 
 ### Patch search and management
 
-Search for patch resources on **2DFan and KunGal**, read the original site's instructions, and download available direct links provided by the site. You can also import local patches. Resources requiring login or payment remain subject to the original site's account and access requirements. **Downloading resources from 2DFan requires a configured proxy.**
+Search for patch resources on **2DFan, KunGal, and NextMoe**, read the original site's instructions, and download available direct links provided by the site. You can also import local patches. Resources requiring login or payment remain subject to the original site's account and access requirements. **Downloading resources from 2DFan requires a configured proxy.**
 
-Select a game directly from your library to search for patches. The example below uses **ATRI -My Dear Moments-** from the library and shows patch and save results from both sources.
-
-[![GalGear patches: ATRI selected from the library, with results from 2DFan and KunGal](assets/readme/patches-native.png)](assets/readme/patches-native.png)
+Select a game directly from your library to search for patches. The patch screenshot under Interface preview uses **ATRI -My Dear Moments-** from the library and shows patch and save results from both sources.
 
 Local ZIP archives can be previewed directly; RAR and 7z archives use the bundled 7-Zip. File conflicts are listed before overwriting, and backups are kept for later restoration. EXE patches use their own installation process.
 
@@ -110,6 +116,25 @@ An **AI route map** opens a generated map of branches and endings in your defaul
 
 These features are experimental. Save and script support varies by game, and generated summaries and routes may be inaccurate. When enabled, the dialogue, save information, and game metadata needed for analysis are sent to the corresponding AI service. API usage is billed to your own account. See [AI settings](docs/ai-settings.md) and [Story recaps](docs/ai-summary.md) for details (in Chinese).
 
+</details>
+
+## Interface preview
+
+Screenshots are from v0.3.1 (October 31, 2026), saved at 2560 × 1392. Click an image to view the original.
+
+[![GalGear home: recent games, game artwork, and quick launch](assets/readme/home-native.png)](assets/readme/home-native.png)
+
+[![GalGear library: game covers, search, tag filters, and sorting](assets/readme/library-native.png)](assets/readme/library-native.png)
+
+<details>
+<summary>More screenshots: game details and patch management</summary>
+
+[![GalGear ATRI details: launch button, metadata, tags, save management, and patches](assets/readme/detail-native.png)](assets/readme/detail-native.png)
+
+[![GalGear patches: ATRI selected from the library, with results from 2DFan and KunGal](assets/readme/patches-native.png)](assets/readme/patches-native.png)
+
+</details>
+
 ## Data locations
 
 | Data | Location |
@@ -120,7 +145,7 @@ These features are experimental. Save and script support varies by game, and gen
 | Game screenshots | `screenshots/` inside the game folder (original-resolution PNGs) |
 | AI preparation files and cache | `.galgear-ai-summary/` inside the game folder |
 
-When moving a portable installation, keep the application folder, `data/`, `tools/`, and backups inside game folders. Skills are not bundled or checked at startup. Use Settings → Updates → Skill to check and install manually. The installed `Galgear-GalgameReverse-Skill/` folder beside the executable can also be moved.
+Keep the application folder, `data/`, `tools/`, game backups, and installed `Galgear-GalgameReverse-Skill/` when moving a portable installation. GalGear checks application and Skill versions in the background at startup and shows update notices without installing automatically. Skills are not bundled; install them with Update under Settings → Updates → Skill.
 
 Account tokens, cookies, and cloud storage passwords are stored in the local Windows Credential Manager and must be configured again on another computer. Removing a game from the library only changes the list; it does not delete the game, saves, or backups. For 2DFan, you need to obtain the token and cookies yourself.
 
@@ -146,6 +171,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## Release history
+
+### v0.3.4
+
+- Added NextMoe downloads and built-in OAuth login; improved saves, home backgrounds, and update notices. [Release notes](docs/releases/v0.3.4.md).
 
 ### v0.3.3
 

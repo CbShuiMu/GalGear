@@ -18,7 +18,7 @@ pub async fn source_covers(
     galgear_core::data_sources::validate_source(&source)?;
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
-    let credentials = data_sources::credentials_for(&state, &source)?;
+    let credentials = data_sources::credentials_for(&state, &source).await?;
     tauri::async_runtime::spawn_blocking(move || {
         let query = query
             .as_deref()

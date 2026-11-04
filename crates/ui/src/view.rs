@@ -146,7 +146,7 @@ pub(crate) fn paint(app: &App) {
     html.push_str("</main>");
     if let Some((message, error)) = &app.toast {
         write!(html, r#"<div class="toast {} {}" role="{}">{}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
-            if *error { "error" } else { "" }, if message.key.starts_with("save.ai_") || message.key.starts_with("local_patches.") || message.key.starts_with("update.") { "save-ai-toast" } else { "" }, if *error { "alert" } else { "status" },
+            if *error { "error" } else { "" }, if message.key.starts_with("save.ai_") || message.key.starts_with("local_patches.") || message.key.starts_with("update.") || matches!(message.key.as_str(), "patches.nextmoe_download_key" | "patches.nextmoe_file_missing") { "save-ai-toast" } else { "" }, if *error { "alert" } else { "status" },
             if matches!(message.key.as_str(), "local_patches.installing" | "local_patches.switching") { r#"<span class="network-spinner" aria-hidden="true"></span>"#.into() } else { icon(if *error { "error" } else { "check" }) }, esc(&message.render(app.settings.language)), t(app,"common.close"), icon("close")).unwrap();
     }
     network_popup(&mut html, app);
@@ -163,7 +163,6 @@ pub(crate) fn nav(html: &mut String, app: &App, value: &str, label: &str) {
         if active { "active" } else { "" },
         if active { "page" } else { "false" },
         icon(match value {
-            "home" => "gamepad",
             "games" => "playstation-shapes",
             "collections" => "star",
             _ => value,

@@ -81,6 +81,8 @@ function reconcile(current, next) {
     if (current !== document.activeElement && current.value !== next.value) current.value = next.value;
     return;
   }
+  // Home owns these temporary image layers so ordinary renders cannot cut a fade short.
+  if (current.matches('.home-backdrop')) return;
   reconcileChildren(current, next);
   if (current instanceof HTMLSelectElement && current.value !== next.value) current.value = next.value;
 }
@@ -166,9 +168,14 @@ function placeChoice() {
   const anchor = menu && document.getElementById(menu.dataset.choiceAnchor);
   if (!anchor) return;
   const box = anchor.getBoundingClientRect();
-  const optionWidth=Math.max(0,...[...menu.querySelectorAll('.choice-copy>span')].map(node=>node.scrollWidth+64));
-  const width = Math.min(Math.max(box.width, menu.classList.contains('game-menu') ? 340 : (menu.classList.contains('setup-menu') || menu.classList.contains('magpie-menu')) ? Math.min(560, optionWidth) : optionWidth), innerWidth - 16);
-  menu.style.width = `${width}px`;
+  // CSS 计算内容固有宽度；flex 容器的 scrollWidth 会在刷新时重复累加留白。
+  const availableWidth = Math.max(0, innerWidth - 16);
+  const minimumWidth = Math.min(Math.max(box.width, menu.classList.contains('game-menu') ? 340 : 0), availableWidth);
+  const limited = menu.classList.contains('setup-menu') || menu.classList.contains('magpie-menu');
+  menu.style.minWidth = `${minimumWidth}px`;
+  menu.style.maxWidth = `${limited ? Math.max(minimumWidth, Math.min(560, availableWidth)) : availableWidth}px`;
+  menu.style.width = 'max-content';
+  const width = menu.getBoundingClientRect().width;
   menu.style.maxHeight = `${Math.min(340, innerHeight - 24)}px`;
   const height = menu.getBoundingClientRect().height;
   const below = innerHeight - box.bottom - 12;
@@ -245,6 +252,7 @@ function renderFrame(html) {
     const setupScroll = setupTable ? { top: setupTable.scrollTop, left: setupTable.scrollLeft } : null;
     const treeScroll = document.getElementById('collection-tree')?.scrollTop || 0;
     const treeLeft = document.getElementById('collection-tree')?.scrollLeft || 0;
+    const closingTagRemoval = !!document.querySelector('.tag-remove-dialog') && !html.includes('tag-remove-dialog');
     const hasEditor = html.includes('class="editor-overlay"');
     if (hasEditor && !previousEditor) editorReturnFocus = active ? {id:active.id,action:active.dataset.action,value:active.dataset.value} : null;
     const editorScroll = document.querySelector('.editor-body')?.scrollTop || 0;
@@ -303,6 +311,9 @@ function renderFrame(html) {
       }
     }
     previousDialog = hasDialog;
+    // Removing an earlier chip moves retained siblings; browsers blur a focused moved node.
+    if (!closingDetail && active?.matches('.detail-tag-chip button') && active.isConnected &&
+        document.activeElement !== active && !active.disabled) active.focus({preventScroll:true});
     const choice = document.querySelector('.choice-popup');
     const choiceId = choice?.dataset.choiceAnchor || null;
     if (choice) {
@@ -332,7 +343,13 @@ function renderFrame(html) {
     const editorBody = document.querySelector('.editor-body');
     if (editorBody) editorBody.scrollTop = editorScroll;
     if (hasEditor && !previousEditor) document.querySelector('.editor-body input,.editor-body textarea,.editor-dialog button')?.focus({preventScroll:true});
-    else if (!hasEditor && previousEditor && editorReturnFocus) (document.getElementById(editorReturnFocus.id) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===editorReturnFocus.action && node.dataset.value===editorReturnFocus.value))?.focus({preventScroll:true});
+    else if (!hasEditor && previousEditor && editorReturnFocus) {
+      let target = document.getElementById(editorReturnFocus.id) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===editorReturnFocus.action && node.dataset.value===editorReturnFocus.value);
+      if (closingTagRemoval && (!target || target.disabled)) {
+        target = [...document.querySelectorAll('.hero-tags [data-action="detail-tag"]')].find(node => node.dataset.value !== editorReturnFocus.value) || document.getElementById('close-detail');
+      }
+      target?.focus({preventScroll:true});
+    }
     if (details) details.scrollTop = detailsScroll;
     previousEditor = hasEditor;
     const setup = document.querySelector('.setup-dialog');
@@ -584,7 +601,7 @@ document.addEventListener('keydown', event => {
   const choice = event.target.closest('.choice-popup,.choice-trigger');
   if (choice && ui.choice_key(choice.dataset.choiceAnchor || choice.id, event.key)) { event.preventDefault(); return; }
   if (event.key === 'Escape') {
-    const action = document.querySelector('.snapshot-delete-dialog') ? 'cancel-action' : document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.archive-dialog') ? 'close-archive' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
+    const action = document.querySelector('.tag-remove-dialog') ? 'detail-tag-remove-cancel' : document.querySelector('.snapshot-delete-dialog') ? 'cancel-action' : document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.archive-dialog') ? 'close-archive' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
     if (action === 'close-detail') closeDetail();
     else ui.dispatch(action, '');
     event.preventDefault();

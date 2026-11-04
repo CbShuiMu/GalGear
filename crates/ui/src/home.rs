@@ -32,18 +32,21 @@ pub(crate) fn render(html: &mut String, app: &App) {
         t(app, "nav.home")
     );
     if let Some(game) = selected {
-        // Keep the shelf's siblings stable so changing artwork never remounts its animations.
-        html.push_str(r#"<div class="home-backdrop" data-render-key="home-backdrop" aria-hidden="true">"#);
-        if let Some(cover) = &game.cover {
-            let background = game.cover_artwork.as_ref()
-                .map(|art| format!("http://galgear-cover.localhost/{}", art.background));
-            let _ = write!(
-                html,
-                r#"<img class="home-backdrop-bleed" src="{0}" alt="" decoding="async"/><img class="home-backdrop-soft" src="{0}" alt="" decoding="async"/><img class="home-backdrop-cover" src="{0}" alt="" decoding="async"/>"#,
-                esc(background.as_deref().unwrap_or(cover)),
-            );
-        }
-        html.push_str("</div>");
+        let background = game
+            .cover_artwork
+            .as_ref()
+            .map(|art| format!("http://galgear-cover.localhost/{}", art.background));
+        let cover = game
+            .cover
+            .as_deref()
+            .map(|cover| background.as_deref().unwrap_or(cover))
+            .unwrap_or("");
+        // Rust supplies the target; JavaScript retains decoded layers until their transitions finish.
+        let _ = write!(
+            html,
+            r#"<div class="home-backdrop" data-render-key="home-backdrop" data-cover="{}" aria-hidden="true"></div>"#,
+            esc(cover)
+        );
         let _ = write!(
             html,
             r#"<div class="home-shelf" data-render-key="home-shelf" data-focus-scroll="managed" aria-label="{}">"#,
@@ -133,11 +136,11 @@ mod tests {
         for game in &app.catalog.games { app.settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
         let mut html = String::new();
         render(&mut html, &app);
-        assert!(html.contains("class=\"home-backdrop-cover\" src=\"http://galgear-cover.localhost/background\""));
+        assert!(html.contains("data-cover=\"http://galgear-cover.localhost/background\""));
         assert!(html.contains("src=\"http://galgear-cover.localhost/cover\""));
         app.catalog.games[0].cover_artwork = None;
         html.clear(); render(&mut html, &app);
-        assert!(html.contains("class=\"home-backdrop-cover\" src=\"http://galgear-cover.localhost/cover\""));
+        assert!(html.contains("data-cover=\"http://galgear-cover.localhost/cover\""));
     }
     #[test]
     fn home_uses_recent_play_and_ignores_library_filters() {

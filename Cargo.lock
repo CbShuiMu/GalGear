@@ -1144,7 +1144,7 @@ dependencies = [
 
 [[package]]
 name = "galgear"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "base64 0.22.1",
  "galgear-core",
@@ -1164,7 +1164,7 @@ dependencies = [
 
 [[package]]
 name = "galgear-core"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "base64 0.22.1",
  "csv",
@@ -1172,6 +1172,7 @@ dependencies = [
  "flate2",
  "galgear-i18n",
  "galgear-tags",
+ "getrandom 0.3.4",
  "image",
  "regex",
  "reqwest 0.12.28",
@@ -1191,7 +1192,7 @@ dependencies = [
 
 [[package]]
 name = "galgear-i18n"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -1199,11 +1200,11 @@ dependencies = [
 
 [[package]]
 name = "galgear-tags"
-version = "0.3.3"
+version = "0.3.4"
 
 [[package]]
 name = "galgear-ui"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "galgear-i18n",
  "galgear-tags",

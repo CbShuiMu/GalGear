@@ -48,7 +48,7 @@ Locale Emulator：https://github.com/xupefei/Locale-Emulator
 AI Skill（手动检查更新）
 Skills 版本检查和压缩包下载使用直连，不经过系统或环境变量代理。
 Skill 不随安装包或便携版打包。设置 → 更新 → Skill 显示本地版本，
-点击“检查更新”才检查以下仓库 main 的最新 commit（启动时不联网检查）：
+启动后会后台检查以下仓库 main 的最新 commit，显示待更新提示，但不会自动安装；点击“更新”才下载安装：
 https://github.com/CbShuiMu/Galgear-GalgameReverse-Skill
 本地缺失或 commit 变化时下载对应 ZIP 并解压，校验成功后替换软件目录中的
 Galgear-GalgameReverse-Skill 文件夹；未变化则复用，更新失败保留已有版本。

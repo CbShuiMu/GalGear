@@ -4,6 +4,21 @@
     "ja-JP": "AI",
     "en-US": "AI"
   },
+  "settings.update": {
+    "zh-CN": "更新",
+    "ja-JP": "更新",
+    "en-US": "Update"
+  },
+  "update.pending": {
+    "zh-CN": "待更新",
+    "ja-JP": "更新あり",
+    "en-US": "Update available"
+  },
+  "update.pending_count": {
+    "zh-CN": "{count} 项待更新",
+    "ja-JP": "更新可能な項目：{count} 件",
+    "en-US": "{count} updates available"
+  },
   "ai.help": {
     "zh-CN": "配置服务商的 Token，并从接口获取当前可用模型。",
     "ja-JP": "プロバイダーの Token を設定し、API から利用可能なモデルを取得します。",
@@ -1729,11 +1744,6 @@
     "ja-JP": "すべて",
     "en-US": "All sources"
   },
-  "patches.kun": {
-    "zh-CN": "鲲 Gal",
-    "ja-JP": "Kun Gal",
-    "en-US": "Kun Gal"
-  },
   "patches.searching": {
     "zh-CN": "正在查找资源…",
     "ja-JP": "検索中…",
@@ -1745,9 +1755,9 @@
     "en-US": "Find patches for your games"
   },
   "patches.resource_help": {
-    "zh-CN": "输入游戏名称，查看 2DFan 与鲲 Gal 的补丁、汉化及存档资源。",
-    "ja-JP": "ゲーム名から 2DFan と Kun Gal のパッチやセーブを検索できます。",
-    "en-US": "Search a game name for patches, translations and saves from 2DFan and Kun Gal."
+    "zh-CN": "输入游戏名称，查看 NextMoe 与 2DFan 的补丁、汉化及存档资源。",
+    "ja-JP": "ゲーム名から NextMoe と 2DFan のパッチやセーブを検索できます。",
+    "en-US": "Search a game name for patches, translations and saves from NextMoe and 2DFan."
   },
   "patches.try_query": {
     "zh-CN": "尝试原名、日文名或更短的关键词，也可切换资源来源。",
@@ -1795,9 +1805,9 @@
     "en-US": "Fetching 2DFan resource details and cost…"
   },
   "network.patches": {
-    "ja-JP": "2DFan と Kun Gal のパッチ情報を検索中…",
-    "zh-CN": "正在搜索 2DFan 与鲲 Gal 补丁信息…",
-    "en-US": "Searching 2DFan and Kun Gal patch information…"
+    "ja-JP": "NextMoe と 2DFan のパッチ情報を検索中…",
+    "zh-CN": "正在搜索 NextMoe 与 2DFan 补丁信息…",
+    "en-US": "Searching NextMoe and 2DFan patch information…"
   },
   "network.metadata_fetch": {
     "ja-JP": "ゲーム情報とカバーを取得中…",
@@ -2954,6 +2964,21 @@
     "ja-JP": "確認後、選択したすべてのタグを含むゲームを表示します。",
     "en-US": "Confirm to show games matching all selected tags."
   },
+  "tags.remove_title": {
+    "zh-CN": "删除标签",
+    "ja-JP": "タグを削除",
+    "en-US": "Delete tag"
+  },
+  "tags.remove_label": {
+    "zh-CN": "删除标签“{tag}”",
+    "ja-JP": "タグ「{tag}」を削除",
+    "en-US": "Delete tag “{tag}”"
+  },
+  "tags.remove_confirm": {
+    "zh-CN": "确定从此游戏中删除标签“{tag}”吗？",
+    "ja-JP": "このゲームからタグ「{tag}」を削除しますか？",
+    "en-US": "Delete the tag “{tag}” from this game?"
+  },
   "tags.restore": {
     "zh-CN": "恢复网站标签",
     "ja-JP": "サイトのタグを復元",
@@ -3114,6 +3139,11 @@
     "ja-JP": "アップデート",
     "en-US": "Updates"
   },
+  "sources.logged_in": {
+    "zh-CN": "已登录",
+    "ja-JP": "ログイン済み",
+    "en-US": "Signed in"
+  },
   "sources.saved": {
     "zh-CN": "凭据已保存",
     "ja-JP": "認証情報を保存済み",
@@ -3128,11 +3158,6 @@
     "zh-CN": "留空即可使用月幕的公共客户端；也可填写自己的客户端凭据。",
     "ja-JP": "空欄で月幕の公開クライアントを使用できます。独自の認証情報も設定できます。",
     "en-US": "Leave blank to use the YMGal public client, or enter your own client credentials."
-  },
-  "sources.nextmoe_help": {
-    "zh-CN": "汇集多平台作品资料。可留空使用公开接口，或填写自己的 API Key 提高请求额度。",
-    "ja-JP": "複数のサイトの作品情報をまとめて取得します。空欄で公開APIを利用でき、自分のAPI Keyを設定すると利用枠が増えます。",
-    "en-US": "Unified work metadata from multiple platforms. Leave blank for public access, or enter your own API Key for a higher request quota."
   },
   "sources.api_docs": {
     "zh-CN": "API 文档",
@@ -4145,9 +4170,9 @@
     "en-US": "Local version"
   },
   "skills.help": {
-    "zh-CN": "点击检查更新时下载并安装最新 Skill，启动时不自动检查。",
-    "ja-JP": "「更新を確認」を押すと最新の Skill をダウンロードしてインストールします。起動時には確認しません。",
-    "en-US": "Check for updates downloads and installs the latest Skill. No automatic check at startup."
+    "zh-CN": "启动时自动检查版本，点击“更新”下载并安装最新 Skill。",
+    "ja-JP": "起動時にバージョンを自動確認します。「更新」を押すと最新の Skill をダウンロードしてインストールします。",
+    "en-US": "Versions are checked automatically at startup. Click Update to download and install the latest Skill."
   },
   "skills.updated": {
     "zh-CN": "Skill 已更新。",
@@ -4163,5 +4188,95 @@
     "zh-CN": "Skill 正在更新或被 AI 任务使用，请稍后重试。",
     "ja-JP": "Skill の更新中、または AI タスクで使用中です。後でもう一度お試しください。",
     "en-US": "Skill is updating or in use by an AI task. Please try again later."
+  },
+  "sources.patch_key": {
+    "zh-CN": "补丁应用密钥",
+    "ja-JP": "パッチ用アプリケーションキー",
+    "en-US": "Patch application key"
+  },
+  "patches.nextmoe_key": {
+    "zh-CN": "NextMoe 补丁搜索需要应用密钥，请在设置 → 数据源 → NextMoe 中配置。",
+    "ja-JP": "NextMoe パッチ検索にはアプリケーションキーが必要です。設定 → データソース → NextMoe で設定してください。",
+    "en-US": "NextMoe patch search requires an application key in Settings → Data sources → NextMoe."
+  },
+  "patches.download_site": {
+    "zh-CN": "前往补丁站下载",
+    "ja-JP": "パッチサイトでダウンロード",
+    "en-US": "Download on patch site"
+  },
+  "patches.token_settings": {
+    "zh-CN": "令牌配置",
+    "ja-JP": "トークン設定",
+    "en-US": "Token settings"
+  },
+  "sources.user_token_required": {
+    "zh-CN": "此处需要用户访问令牌，请将 nmk_ 应用密钥填入补丁应用密钥输入框。",
+    "ja-JP": "ユーザーアクセストークンを入力してください。nmk_ キーはパッチ用キー欄に入力してください。",
+    "en-US": "Enter a user access token here. Put nmk_ keys in the patch application key field."
+  },
+  "sources.oauth_login": {
+    "zh-CN": "OAuth登录",
+    "ja-JP": "OAuthログイン",
+    "en-US": "OAuth login"
+  },
+  "sources.oauth_cancel": {
+    "zh-CN": "取消登录",
+    "ja-JP": "ログインをキャンセル",
+    "en-US": "Cancel login"
+  },
+  "sources.oauth_help": {
+    "zh-CN": "使用 GalGear 应用在系统浏览器中登录，无需填写应用配置。",
+    "ja-JP": "GalGear アプリとしてシステムブラウザーでログインします。アプリ設定の入力は不要です。",
+    "en-US": "Sign in through GalGear in your system browser. No application setup is needed."
+  },
+  "sources.oauth_error": {
+    "zh-CN": "OAuth 授权失败，请重新登录。",
+    "ja-JP": "OAuth認証に失敗しました。再度ログインしてください。",
+    "en-US": "OAuth authorization failed. Please sign in again."
+  },
+  "sources.oauth_port": {
+    "zh-CN": "无法监听 OAuth 回调端口，请检查端口是否被其他应用占用。",
+    "ja-JP": "OAuthコールバックのポートを開けません。他のアプリの使用状況を確認してください。",
+    "en-US": "Cannot open the OAuth callback port. Check whether another application is using it."
+  },
+  "sources.oauth_timeout": {
+    "zh-CN": "OAuth 登录超时，请重试。",
+    "ja-JP": "OAuthログインがタイムアウトしました。再試行してください。",
+    "en-US": "OAuth login timed out. Please retry."
+  },
+  "sources.oauth_cancelled": {
+    "zh-CN": "已取消 OAuth 登录。",
+    "ja-JP": "OAuthログインをキャンセルしました。",
+    "en-US": "OAuth login cancelled."
+  },
+  "sources.oauth_pending": {
+    "zh-CN": "已有 OAuth 登录正在进行。",
+    "ja-JP": "OAuthログインが進行中です。",
+    "en-US": "An OAuth login is already in progress."
+  },
+  "sources.oauth_unsupported": {
+    "zh-CN": "此数据源不支持用户 OAuth 登录。",
+    "ja-JP": "このデータソースはユーザーOAuthログインに対応していません。",
+    "en-US": "This source does not support user OAuth login."
+  },
+  "sources.oauth_return": {
+    "zh-CN": "已收到授权回调，请返回 GalGear 查看登录结果。可以关闭此页面。",
+    "ja-JP": "認証応答を受信しました。GalGear でログイン結果を確認してください。このページは閉じて構いません。",
+    "en-US": "Authorization callback received. Return to GalGear to check the login result. You can close this page."
+  },
+  "patches.nextmoe_download_key": {
+    "zh-CN": "请先在“设置 → 数据源 → NextMoe”填写具有 moyu:files 下载权限的应用密钥，再点击下载；此权限需向 NextMoe 运营申请。",
+    "ja-JP": "「設定 → データソース → NextMoe」に moyu:files 権限のあるアプリキーを入力してから再度ダウンロードしてください。この権限は NextMoe 運営への申請が必要です。",
+    "en-US": "Enter an application key with moyu:files download permission in Settings → Data sources → NextMoe, then retry. Request this permission from NextMoe operators."
+  },
+  "patches.nextmoe_file_missing": {
+    "zh-CN": "此资源未提供可直接下载的托管文件，请使用“前往补丁站下载”。",
+    "ja-JP": "直接ダウンロードできるファイルがありません。パッチサイトからダウンロードしてください。",
+    "en-US": "No hosted file is available for direct download. Use the patch website instead."
+  },
+  "download.archive_password": {
+    "zh-CN": "解压密码",
+    "ja-JP": "解凍パスワード",
+    "en-US": "Archive password"
   }
 }

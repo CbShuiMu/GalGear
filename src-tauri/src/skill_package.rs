@@ -1,4 +1,4 @@
-//! 只读查询本地 Skill；联网同步仅由更新卡片显式触发。
+//! 查询本地和远端 Skill 版本；资源下载与替换仅由更新卡片显式触发。
 use crate::state::AppState;
 use galgear_core::ai::{runtime, skills};
 use galgear_i18n::Message;
@@ -89,6 +89,14 @@ pub(crate) struct Update {
     #[serde(flatten)]
     version: skills::Updated,
     available: bool,
+}
+
+#[tauri::command]
+pub(crate) async fn check_skill_version() -> Result<String, Message> {
+    // 只读远端 commit，无需独占资源租约，后台检查不影响正在运行的 AI 任务。
+    tauri::async_runtime::spawn_blocking(skills::latest_commit)
+        .await
+        .map_err(|e| Message::detail("skills.update_failed", e))?
 }
 
 #[tauri::command]

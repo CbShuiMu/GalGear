@@ -1,6 +1,10 @@
 //! Read-only verification: never purchases or executes downloads.
-use galgear_core::{catalog, providers};
+use galgear_core::{catalog, data_sources, providers};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let credentials = galgear_core::data_sources::Credentials {
+        patch_key: std::env::var("GALGEAR_NEXTMOE_PATCH_KEY").unwrap_or_default(),
+        ..Default::default()
+    };
     let query = std::env::args().nth(1).unwrap_or_else(|| "千恋".into());
     let subjects = providers::search_fan("https://2dfmax.top", &query)?;
     println!("2DFan subjects: {}", subjects.len());
@@ -26,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             providers::fan_patches("https://2dfmax.top", &format!("{}/downloads", subject.url))?;
         println!("2DFan resource pages: {}", patches.len());
     }
-    let combined = providers::search_patch_sites("https://2dfmax.top", &query)?;
+    let combined = providers::search_patch_sites("https://2dfmax.top", &query, &credentials)?;
     let fan = combined
         .resources
         .iter()
@@ -41,10 +45,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for resource in fan.iter().take(2) {
         println!("2DFan patch: {} / {}", resource.title, resource.description);
     }
-    let kun = providers::search_kun(&query)?;
-    println!("Kun public search resources: {}", kun.len());
+    let kun = data_sources::moyu::search(&query, &credentials)?;
+    println!("NextMoe patch resources: {}", kun.len());
     for resource in kun.iter().take(2) {
-        println!("Kun: {} / {}", resource.title, resource.url);
+        println!("NextMoe: {} / {}", resource.title, resource.url);
     }
     if subjects.is_empty() || kun.is_empty() {
         return Err("Expected nonempty site results".into());

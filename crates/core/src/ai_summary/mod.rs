@@ -406,7 +406,7 @@ pub fn background(game: &Game, settings: &Settings, config: &Path) -> Result<Bac
         let credentials = if *source == "2dfan" {
             data_sources::Credentials::default()
         } else {
-            data_sources::load(config, source)?
+            data_sources::oauth::load_fresh(config, source)?
         };
         for identity in background_identity::queries(game) {
             let query: String = identity.chars().take(95).collect();

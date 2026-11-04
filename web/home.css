@@ -9,13 +9,14 @@
   color:var(--home-text);background:var(--canvas)
 }
 [data-theme="dark"] .home-page{--home-shade:9 11 17;--home-text:#f7f7fb;--home-muted:#c9cbd6;--home-ring:#f1f2f7}
-.home-backdrop{position:absolute;inset:0;overflow:hidden;z-index:-2;pointer-events:none;animation:home-art-reveal .3s ease-out both}
+.home-backdrop{position:absolute;inset:0;overflow:hidden;z-index:-2;pointer-events:none}
+.home-backdrop-layer{position:absolute;inset:0;will-change:opacity,transform}
 .home-backdrop-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:none}
 .home-backdrop-bleed{position:absolute;inset:-60px;width:calc(100% + 120px);height:calc(100% + 120px);max-width:none;object-fit:fill;filter:blur(40px);opacity:.85}
 .home-backdrop-soft{position:absolute;inset:0 0 auto auto;width:auto;height:100%;max-width:none;filter:blur(36px);mask-image:linear-gradient(90deg,transparent,#000 10%)}
-.home-backdrop[data-layout="landscape"] :is(.home-backdrop-bleed,.home-backdrop-soft){display:none}
-.home-backdrop:not([data-layout]) img{visibility:hidden}
-.home-backdrop[data-layout="portrait"] .home-backdrop-cover{inset:0 0 auto auto;width:auto;height:100%;max-width:none;object-fit:contain;object-position:right center;mask-image:linear-gradient(90deg,transparent,rgba(0,0,0,.04) 6%,rgba(0,0,0,.18) 14%,rgba(0,0,0,.5) 24%,rgba(0,0,0,.82) 33%,#000 44%)}
+.home-backdrop-layer[data-layout="landscape"] :is(.home-backdrop-bleed,.home-backdrop-soft){display:none}
+/* Keep the original layered blend; move its clear endpoint slightly left, from 44% to 38%. */
+.home-backdrop-layer[data-layout="portrait"] .home-backdrop-cover{inset:0 0 auto auto;width:auto;height:100%;max-width:none;object-fit:contain;object-position:right center;mask-image:linear-gradient(90deg,transparent,rgba(0,0,0,.04) 5%,rgba(0,0,0,.18) 12%,rgba(0,0,0,.5) 20%,rgba(0,0,0,.82) 28%,#000 38%)}
 .home-page::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(90deg,rgb(var(--home-shade)/.78) 0%,rgb(var(--home-shade)/.58) 28%,rgb(var(--home-shade)/.14) 62%,rgb(var(--home-shade)/.03)),linear-gradient(0deg,rgb(var(--home-shade)/.65),transparent 52%,rgb(var(--home-shade)/.15))}
 .home-shelf{position:relative;display:flex;align-items:flex-start;gap:var(--home-gap);min-width:0;height:calc(var(--home-selected-height) + 28px);overflow-x:auto;overflow-y:hidden;overflow-anchor:none;scrollbar-width:none;scroll-padding:14px;padding:14px;margin:-14px}
 .home-shelf::after{content:"";flex:0 0 max(0px,calc(100% - var(--home-last-width,0px) - var(--home-gap)));height:1px;pointer-events:none}
@@ -49,11 +50,10 @@
 .home-detail-flight{position:fixed;left:0;top:0;z-index:21;display:block;margin:0;max-width:none;max-height:none;aspect-ratio:auto;overflow:hidden;pointer-events:none;transform-origin:0 0;will-change:transform,width,height}
 .home-detail-flight>img{display:block;width:100%;height:100%;max-width:none;object-fit:cover;object-position:center;transform:none}
 .home-detail-flight .cover-hint{display:none}
-@keyframes home-art-reveal{from{opacity:.35}to{opacity:1}}
 @media(max-width:900px){.home-page{padding-inline:28px;--home-gap:14px}.home-copy{width:min(560px,78%)}.home-actions{gap:10px}}
 @media(max-height:760px){.home-page{--home-poster-height:116px;--home-selected-height:180px}.home-copy h2{font-size:32px;margin-bottom:12px}.home-description{margin-bottom:16px}}
 @media(max-height:640px){.home-page{--home-poster-height:100px;--home-selected-height:154px;gap:12px}.home-copy h2{font-size:28px}}
-@media(prefers-reduced-motion:reduce){.home-backdrop{animation:none}:root .app-shell[data-theme] .home-game{transition:none}}
+@media(prefers-reduced-motion:reduce){:root .app-shell[data-theme] .home-game{transition:none}}
 
 .modal-scroll-locked{overflow:hidden!important;scrollbar-gutter:stable}
 .editor-body,.library-dialog-body,.detail-scroll,.page-scroll,.cover-results{overscroll-behavior:contain;overflow-anchor:none}

@@ -321,14 +321,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         ));
     } else {
         for tag in &game.tags {
-            html.push_str(&button(
-                "detail-tag",
-                tag,
-                &esc(tag),
-                "",
-                "tag-button",
-                false,
-            ));
+            crate::detail_tags::render_tag(html, app, tag);
         }
         if game.tags.is_empty() {
             write!(html, "<p class=\"muted\">{}</p>", t(app, "detail.no_tags")).unwrap();
@@ -336,11 +329,9 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     }
     html.push_str("</div></section></div></div>");
     if app.detail.editor.is_none()
-        && app
-            .detail
-            .confirmation
-            .as_ref()
-            .is_none_or(|(action, _)| action != "snapshot-delete")
+        && app.detail.confirmation.as_ref().is_none_or(|(action, _)| {
+            !matches!(action.as_str(), "snapshot-delete" | "detail-tag-remove")
+        })
     {
         features::confirmation(html, app);
     }
@@ -359,6 +350,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         features::history(html, app, game);
     }
     features::delete_snapshot_dialog(html, app, game);
+    crate::detail_tags::render_dialog(html, app);
     crate::ai_summary::render(html, app, game);
 }
 

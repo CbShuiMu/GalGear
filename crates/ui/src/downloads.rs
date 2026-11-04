@@ -17,7 +17,7 @@ pub(crate) struct State {
 pub(crate) fn busy(requests: &RequestQueue) -> bool {
     requests
         .values()
-        .any(|p| matches!(p, Pending::DownloadPreview | Pending::Download))
+        .any(|p| matches!(p, Pending::DownloadPreview | Pending::Download | Pending::NextMoeDownload))
 }
 
 pub(crate) fn folder(config_path: &str, settings: &Settings) -> String {
@@ -46,6 +46,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> Option<bool>
             "open_download_folder",
             json!({"lastDownload":true}),
         ),
+        "nextmoe-download" if !busy(&app.requests) => {
+            if let Some(resource) = app.patches.resources.iter().find(|r| r.download_id.as_deref() == Some(value) && r.source == "NextMoe") {
+                app.downloads.transfer = Some(Transfer { phase: "preparing".into(), title: resource.title.clone(), ..Default::default() });
+                issue(app, Pending::NextMoeDownload, "start_nextmoe_download", json!({"resourceId":value,"gameId":app.patches.resources_game}));
+            }
+        }
         "inspect-download" if !busy(&app.requests) => {
             app.downloads.preview = None;
             let game_id = app
@@ -109,6 +115,23 @@ mod tests {
         )
         .unwrap();
         app
+    }
+
+    #[test]
+    fn nextmoe_download_keeps_result_game_binding_and_blocks_duplicate_clicks() {
+        let mut app = app();
+        app.patches.resources = serde_json::from_value(json!([{"source":"NextMoe","download_id":"7","title":"Patch","url":"https://www.moyu.moe/resource/7"}])).unwrap();
+        app.patches.resources_game = Some("game".into());
+        crate::bridge::take_requests();
+        dispatch(&mut app, "nextmoe-download", "7");
+        dispatch(&mut app, "nextmoe-download", "7");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "start_nextmoe_download");
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(payload, json!({"resourceId":"7","gameId":"game"}));
+        assert!(busy(&app.requests));
+        assert!(!app.busy());
     }
 
     #[test]

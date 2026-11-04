@@ -44,6 +44,22 @@ selection. Existing settings files default to an empty AI configuration.
 
 Per-game setup and recap caching are described in [AI前情提要](ai-summary.md).
 
+## AI 查找存档
+
+AI 搜索使用本地候选目录与存档文件修改时间；候选独立于有大小上限的目录列表，
+目录清单被截断时也不会丢掉已经发现的存档证据。名称匹配兼容 `FHD版` / `FHD`
+及 `HD版` / `HD`，同时保留版本标识，不把 FHD 版降为原版名称匹配。
+
+返回路径必须位于允许搜索的范围内，且直接包含可读的存档候选文件。支持路径
+开头的 `%APPDATA%`、`%LOCALAPPDATA%`、`%USERPROFILE%` 及 `$(NAME)` 写法；
+不会将游戏包内字面名为 `$(APPDATA)` 的目录视为当前用户存档。目录存在、非空
+或最近复制过，都不足以验证存档位置。候选仍是文件特征判断，不代表所有引擎
+都已经验证实际游戏写入；无法确定时应手动指定。
+
+自动选择按直属存档文件的修改时间比较，不使用目录、说明文件或日志时间。
+旧 AI 自动选择会重新检查，排除占位目录和没有存档文件的父目录；用户手动
+指定的位置保持优先，不自动覆盖。所有发现与校验均只读，不修改游戏存档。
+
 AI analysis requires both resources beside the application executable:
 
 - `tools/ai-agent/GalGear.AiAgent.exe` (or `ai-agent/GalGear.AiAgent.exe`).
@@ -51,10 +67,10 @@ AI analysis requires both resources beside the application executable:
 
 If either is missing, the per-game AI option and generation buttons are disabled.
 The backend checks again before starting work. An existing AI option can still be
-turned off. Settings → Updates → **Skill** displays the local commit and checks
-`CbShuiMu/Galgear-GalgameReverse-Skill` only when **Check for updates** is clicked.
-The button downloads and installs a missing or changed package, then refreshes
-availability immediately. Startup never checks or downloads Skill updates. Failed
+turned off. Settings → Updates → **Skill** displays the local commit. Each launch
+checks the remote main commit in the background and marks a newer or missing package
+as **Update available**. Only clicking **Update** downloads and installs the package,
+then refreshes availability and clears its pending-update count. Failed
 updates retain the installed resources; running AI jobs block replacement until
 they finish.
 Development builds use the same executable-directory prerequisite for the UI.

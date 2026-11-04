@@ -16,6 +16,8 @@ pub(crate) enum Pending {
     Bootstrap,
     AiRuntime,
     SkillUpdate,
+    SkillCheck,
+    BackgroundUpdate,
     Scan,
     Folder,
     Add,
@@ -37,6 +39,7 @@ pub(crate) enum Pending {
     Open,
     History(String),
     DataSources(String),
+    SourceOAuth(String),
     RestorePreview,
     Runtime(String),
     CollectionSave,
@@ -72,6 +75,7 @@ pub(crate) enum Pending {
     FanCache,
     DownloadPreview,
     Download,
+    NextMoeDownload,
     GameIcons,
 }
 
@@ -79,11 +83,14 @@ impl Pending {
     fn blocks_ui(&self) -> bool {
         !matches!(
             self,
-            Pending::MagpieModes
+            Pending::SourceOAuth(_)
+                | Pending::MagpieModes
                 | Pending::Screenshot(..)
                 | Pending::Ai(_)
                 | Pending::AiRuntime
                 | Pending::SkillUpdate
+                | Pending::SkillCheck
+                | Pending::BackgroundUpdate
                 | Pending::Cloud(_)
                 | Pending::SummarySetup(..)
                 | Pending::Summary(_)
@@ -107,6 +114,7 @@ impl Pending {
                 | Pending::FanCache
                 | Pending::DownloadPreview
                 | Pending::Download
+                | Pending::NextMoeDownload
                 | Pending::History(_)
                 | Pending::RestorePreview
                 | Pending::Runtime(_)
@@ -168,7 +176,7 @@ pub(crate) fn issue(app: &mut App, kind: Pending, command: &str, payload: serde_
     if matches!(kind, Pending::Enrich) {
         app.enrichment_progress = None;
     }
-    if matches!(kind, Pending::Download) {
+    if matches!(kind, Pending::Download | Pending::NextMoeDownload) {
         app.downloads.notice = None;
     }
     if matches!(kind, Pending::Resources(_)) {

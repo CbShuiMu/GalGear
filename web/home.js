@@ -1,5 +1,6 @@
 // Home-specific presentation and shelf navigation; selection remains in Rust.
 import {topLayer} from './navigation.js';
+import {syncHomeBackdrop} from './home-backdrop.js';
 
 let selectedGame = null;
 let observedShelf = null;
@@ -176,10 +177,6 @@ function alignSelection(game, animate) {
 }
 
 export function syncHomePresentation() {
-  const image = document.querySelector('.home-backdrop-cover');
-  if (image?.complete && image.naturalWidth && image.naturalHeight) {
-    image.parentElement.dataset.layout = image.naturalWidth < image.naturalHeight ? 'portrait' : 'landscape';
-  }
   const shelf = document.querySelector('.home-shelf');
   if (shelf !== observedShelf) {
     shelfObserver?.disconnect();
@@ -188,6 +185,10 @@ export function syncHomePresentation() {
     if (shelf) shelfObserver?.observe(shelf);
   }
   const game = shelf?.querySelector('.home-game.selected') || null;
+  const games = shelf ? [...shelf.children] : [];
+  const direction = game && selectedGame?.isConnected
+    ? Math.sign(games.indexOf(game) - games.indexOf(selectedGame)) : 0;
+  syncHomeBackdrop(document.querySelector('.home-backdrop'), direction);
   if (game !== selectedGame) {
     const animate = !!selectedGame?.isConnected;
     selectedGame = game;
@@ -211,7 +212,6 @@ export function installHomeNavigation(dispatch, ready) {
   });
   if (observedShelf) shelfObserver.observe(observedShelf);
   document.addEventListener('load', event => {
-    if (event.target.matches?.('.home-backdrop-cover')) syncHomePresentation();
     if (event.target.matches?.('.home-game img') && !alignmentFrame) alignSelection(selectedGame, false);
   }, true);
   document.addEventListener('focusin', event => {

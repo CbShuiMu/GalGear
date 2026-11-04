@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-test('Skill stays local at startup and only the card starts synchronization', async () => {
+test('startup checks versions quietly, counts components, and installs only after a click', async () => {
   const requests=[]; let html='';
   globalThis.GalGearBridge={request(id,command,payload){requests.push({id,command,payload:JSON.parse(payload)});},render(value){html=value;},reset_scroll(){},schedule_toast_expiry(){},schedule_download_notice_expiry(){},local_date(){return '';},local_date_time(){return '';}};
   const ui=await import('../dist/pkg/galgear_ui.js');
@@ -11,10 +11,23 @@ test('Skill stays local at startup and only the card starts synchronization', as
   const reply=(command,value)=>{const request=take(command);ui.resolve(request.id,true,JSON.stringify(value));};
   const settings={library_folders:[],card_size:200,sort_by:'title'};
   reply('bootstrap',{settings,catalog:{games:[],warnings:[]},config_path:'fixture',version:'0.3.2'});
+  assert.equal(requests.filter(r=>r.command==='check_update').length,1);
+  assert.equal(requests.filter(r=>r.command==='check_skill_version').length,1);
+  assert(!requests.some(r=>r.command==='check_skill_update'||r.command==='install_update'));
   reply('get_ai_runtime',{available:true,skill:{installed:true,commit:'a'.repeat(40)}});
   reply('get_data_sources',[]);reply('get_fan_status_cache',{status:'idle'});
   reply('scan_library',{games:[],warnings:[]});reply('get_preferences',settings);reply('load_game_icons',{});reply('enrich_library',null);
   ui.dispatch('page','settings');ui.dispatch('settings-section','about');
+  // Both background requests remain pending while local navigation is usable.
+  assert.match(html,/<h2>Skill<\/h2>/);
+  ui.dispatch('dismiss-toast',''); // Clear the earlier scan-completed notification.
+  reply('check_update',{version:'v9.0.0',available:true,asset:{name:'GalGear.exe'}});
+  reply('check_skill_version','b'.repeat(40));
+  assert.doesNotMatch(html,/update-overlay/);
+  assert.doesNotMatch(html,/class="toast/);
+  assert.equal((html.match(/class="version-pill update-pending"/g)||[]).length,2);
+  assert.match(html,/class="update-count"[^>]*>2<\/span>/);
+  assert.equal((html.match(/<span>更新<\/span>/g)||[]).length,3); // Navigation and both cards.
   assert.match(html,/<h2>Skill<\/h2>/);assert.match(html,/aaaaaaaa/);
   assert.match(html,/https:\/\/github.com\/CbShuiMu\/Galgear-GalgameReverse-Skill/);
   assert(!requests.some(r=>r.command==='check_skill_update'));
@@ -23,6 +36,18 @@ test('Skill stays local at startup and only the card starts synchronization', as
   assert.match(html,/正在检查并更新 Skill/);
   reply('check_skill_update',{available:true,changed:true,commit:'b'.repeat(40)});
   assert.match(html,/bbbbbbbb/);assert.match(html,/Skill 已更新/);
+  assert.match(html,/class="update-count"[^>]*>1<\/span>/);
+  ui.dispatch('check-update','');
+  reply('check_update',{version:'v9.0.0',available:true,asset:{name:'GalGear.exe'}});
+  assert.match(html,/update-overlay/);
+  ui.dispatch('update-cancel','');
+  assert.match(html,/class="update-count"[^>]*>1<\/span>/);
+  assert(!requests.some(r=>r.command==='install_update'));
+  ui.dispatch('check-update','');
+  reply('check_update',{version:'v0.3.2',available:false,asset:null});
+  ui.dispatch('update-cancel','');
+  assert.doesNotMatch(html,/class="update-count"/);
+  assert.doesNotMatch(html,/class="version-pill update-pending"/);
   ui.dispatch('check-skill-update','');
   const failed=take('check_skill_update');ui.resolve(failed.id,false,JSON.stringify({key:'skills.update_failed',args:{detail:'offline fixture'}}));
   assert.match(html,/bbbbbbbb/);assert.match(html,/offline fixture/);

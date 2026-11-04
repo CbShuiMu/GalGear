@@ -11,6 +11,7 @@ mod context_menu;
 mod cover_picker;
 mod detail;
 mod detail_form;
+mod detail_tags;
 mod downloads;
 mod events;
 mod features;

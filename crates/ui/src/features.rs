@@ -59,6 +59,9 @@ fn game_tools(app: &mut App, id: &str, mode: Option<&str>, auto: Option<bool>) {
 }
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
+    if crate::detail_tags::dispatch(app, action, value) {
+        return true;
+    }
     if crate::screenshots::dispatch(app, action, value) { return true; }
     if matches!(action, "launch-normal" | "open-folder") {
         app.context_menu = None;
@@ -116,11 +119,22 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             "set_data_source",
             json!({"source":value}),
         ),
-        "source-save" => {
+        "source-oauth-cancel" => issue(app, Pending::Open, "cancel_data_source_login", json!({})),
+        "source-oauth"
+            if matches!(value, "nextmoe" | "bangumi") && !preferences::oauth_busy(app) =>
+        {
+            issue(
+                app,
+                Pending::SourceOAuth(value.into()),
+                "login_data_source",
+                json!({"source":value}),
+            )
+        }
+        "source-save" if !preferences::oauth_busy(app) => {
             let (client_id, client_secret) = if value == "ymgal" {
                 (
-                    form(app, "source-ymgal-client-id"),
-                    form(app, "source-ymgal-client-secret"),
+                    form(app, &format!("source-{value}-client-id")),
+                    form(app, &format!("source-{value}-client-secret")),
                 )
             } else {
                 (String::new(), String::new())
@@ -129,10 +143,10 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 app,
                 Pending::DataSources(value.into()),
                 "save_data_source",
-                json!({"source":value,"token":form(app,&format!("source-{value}-token")),"clientId":client_id,"clientSecret":client_secret}),
+                json!({"source":value,"token":if value == "nextmoe" {String::new()} else {form(app,&format!("source-{value}-token"))},"clientId":client_id,"clientSecret":client_secret,"patchKey":if value == "nextmoe" {form(app,"source-nextmoe-patch-key")} else {String::new()}}),
             );
         }
-        "source-clear" => issue(
+        "source-clear" if !preferences::oauth_busy(app) => issue(
             app,
             Pending::DataSources(value.into()),
             "clear_data_source",
@@ -791,9 +805,9 @@ mod tests {
         app.settings.metadata_provider = "ymgal".into();
         for action in ["metadata-association", "tags-association"] {
             dispatch(&mut app, action, "");
-            assert_eq!(app.detail.metadata_source, "2dfan");
+            assert_eq!(app.detail.metadata_source, "nextmoe");
             dispatch(&mut app, "metadata-provider", "ymgal");
-            assert_eq!(app.detail.metadata_source, "2dfan");
+            assert_eq!(app.detail.metadata_source, "nextmoe");
         }
     }
 
@@ -936,6 +950,26 @@ mod tests {
     }
 
     #[test]
+    fn saving_patch_key_preserves_login_and_oauth_does_not_block_navigation() {
+        let mut app = App::default();
+        app.form
+            .insert("source-nextmoe-patch-key".into(), "nmk_test_fixture".into());
+        crate::bridge::take_requests();
+        dispatch(&mut app, "source-save", "nextmoe");
+        let requests = crate::bridge::take_requests();
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert!(payload.get("anonymous").is_none());
+        assert_eq!(payload["token"], "");
+        assert_eq!(payload["patchKey"], "nmk_test_fixture");
+        let mut app = App::default();
+        dispatch(&mut app, "source-oauth", "nextmoe");
+        assert!(!app.busy());
+        let last = app.requests.last_id();
+        dispatch(&mut app, "source-oauth", "nextmoe");
+        assert_eq!(app.requests.last_id(), last);
+    }
+
+    #[test]
     fn saving_nextmoe_keeps_other_source_credentials_out_of_the_request() {
         let mut app = App::default();
         app.form
@@ -952,7 +986,7 @@ mod tests {
         assert_eq!(requests[0].1, "save_data_source");
         let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
         assert_eq!(payload["source"], "nextmoe");
-        assert_eq!(payload["token"], "nextmoe-key");
+        assert_eq!(payload["token"], "");
         assert_eq!(payload["clientId"], "");
         assert_eq!(payload["clientSecret"], "");
     }

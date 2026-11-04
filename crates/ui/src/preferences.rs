@@ -9,11 +9,11 @@ use serde::Deserialize;
 use std::fmt::Write;
 
 pub(crate) const SOURCES: [(&str, &str); 5] = [
-    ("2dfan", "2DFan"),
+    ("nextmoe", "未萌NextMoe"),
     ("vndb", "VNDB"),
     ("bangumi", "Bangumi"),
     ("ymgal", "月幕 Galgame"),
-    ("nextmoe", "未萌NextMoe"),
+    ("2dfan", "2DFan"),
 ];
 
 pub(crate) fn source_icon(source: &str) -> &'static str {
@@ -38,11 +38,19 @@ pub(crate) fn background_url(image: &BackgroundImage) -> Option<String> {
 pub(crate) struct SourceStatus {
     pub source: String,
     pub configured: bool,
+    #[serde(default)]
+    pub patch_configured: bool,
+}
+
+pub(crate) fn oauth_busy(app: &App) -> bool {
+    app.requests
+        .values()
+        .any(|request| matches!(request, Pending::SourceOAuth(_)))
 }
 
 pub(crate) fn source_available(app: &App, source: &str) -> bool {
-    // Non-public credentials are saved only after a successful validation.
-    source == "2dfan"
+    // NextMoe catalog 与 2DFan 默认公开可用；其余沿用已验证凭据的显示策略。
+    matches!(source, "2dfan" | "nextmoe")
         || (SOURCES.iter().any(|(id, _)| *id == source)
             && app.data_sources.iter().any(|status| status.source == source && status.configured))
 }
@@ -53,7 +61,7 @@ pub(crate) fn available_source<'a>(app: &'a App, preferred: &'a str) -> &'a str 
     } else if source_available(app, &app.settings.metadata_provider) {
         &app.settings.metadata_provider
     } else {
-        "2dfan"
+        "nextmoe"
     }
 }
 pub(crate) fn source_for_url(url: &str) -> (&'static str, &'static str) {
@@ -93,7 +101,21 @@ pub(crate) fn render(html: &mut String, app: &App) {
         ("paths", "settings.section_paths"),
         ("about", "settings.section_update"),
     ] {
-        write!(html,r#"<button class="preference-tab {}" data-action="settings-section" data-value="{}" aria-current="{}">{}</button>"#,if app.settings_section==section{"active"}else{""},section,if app.settings_section==section{"page"}else{"false"},t(app,key)).unwrap();
+        write!(html,r#"<button class="preference-tab {}" data-action="settings-section" data-value="{}" aria-current="{}"><span>{}</span>"#,if app.settings_section==section{"active"}else{""},section,if app.settings_section==section{"page"}else{"false"},t(app,key)).unwrap();
+        let count = crate::updates::pending_count(app);
+        if section == "about" && count > 0 {
+            write!(
+                html,
+                r#"<span class="update-count" aria-label="{}">{count}</span>"#,
+                crate::view::f(
+                    app,
+                    "update.pending_count",
+                    &[("count", &count.to_string())]
+                )
+            )
+            .unwrap();
+        }
+        html.push_str("</button>");
     }
     let section_label = match app.settings_section.as_str() {
         "ai" => "settings.section_ai",
@@ -182,6 +204,14 @@ fn account(html: &mut String, app: &App) {
         );
     }
     html.push_str("</div></section>");
+    source_card(html, app, "nextmoe", "未萌NextMoe");
+    fan_account_card(html, app);
+    for (source, name) in SOURCES.into_iter().filter(|(source, _)| !matches!(*source, "nextmoe" | "2dfan")) {
+        source_card(html, app, source, name);
+    }
+}
+
+fn fan_account_card(html: &mut String, app: &App) {
     write!(html,r#"<section class="account-panel"><div class="panel-heading"><h2>{}</h2><span class="connection-status {}">{}</span></div><div class="account-summary"><div><strong>{}</strong><small>{}</small></div><div class="account-balance"><span>{}</span><strong>{}</strong></div></div>"#,t(app,"auth.title"),if app.account.status.status=="authenticated"{"connected"}else{""},account_label(app),esc(app.account.status.username.as_deref().unwrap_or(t(app,"auth.account"))),esc(&app.settings.fan_domain),t(app,"auth.points"),app.account.status.balance.map(|balance|balance.to_string()).unwrap_or_else(||t(app,"auth.unknown").into())).unwrap();
     if let Some(reason) = &app.account.status.reason {
         write!(
@@ -210,64 +240,112 @@ fn account(html: &mut String, app: &App) {
     }
 
     html.push_str("</section>");
-    for (source, name) in SOURCES.into_iter().filter(|(source, _)| *source != "2dfan") {
-        let configured = app
-            .data_sources
-            .iter()
-            .any(|status| status.source == source && status.configured);
-        write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source_icon(source),name,if configured{"connected"}else{""},t(app,if configured{"sources.saved"}else{"sources.public"})).unwrap();
-        if source == "ymgal" {
-            write!(
-                html,
-                "<p class=\"field-help\">{}</p>",
-                t(app, "sources.ymgal_help")
-            )
-            .unwrap();
-            for (field, label, password) in [
-                ("client-id", "Client ID", false),
-                ("client-secret", "Client Secret", true),
-            ] {
-                source_field(html, app, source, field, label, password, configured);
-            }
-        } else if source == "nextmoe" {
-            write!(
-                html,
-                "<p class=\"field-help\">{}</p>",
-                t(app, "sources.nextmoe_help")
-            )
-            .unwrap();
-            source_field(html, app, source, "token", "API Key", true, configured);
-            write!(
-                html,
-                "<p class=\"field-help vault-note\">{}</p>",
-                t(app, "auth.vault")
-            )
-            .unwrap();
-        } else {
-            source_field(html, app, source, "token", "Token", true, configured);
-        }
+}
+
+fn source_card(html: &mut String, app: &App, source: &str, name: &str) {
+    let configured = app
+        .data_sources
+        .iter()
+        .any(|status| status.source == source && status.configured);
+    let status = match (source, configured) {
+        ("nextmoe", true) => "sources.logged_in",
+        (_, true) => "sources.saved",
+        _ => "sources.public",
+    };
+    write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source_icon(source),name,if configured{"connected"}else{""},t(app,status)).unwrap();
+    if source == "ymgal" {
         write!(
             html,
-            "<div class=\"account-actions\">{}{}</div></section>",
-            button(
-                "source-save",
-                source,
-                t(app, "auth.save_check"),
-                "save",
-                "primary",
-                app.busy()
-            ),
-            button(
-                "source-clear",
-                source,
-                t(app, "auth.clear"),
-                "close",
-                "quiet",
-                app.busy()
-            )
+            "<p class=\"field-help\">{}</p>",
+            t(app, "sources.ymgal_help")
+        )
+        .unwrap();
+        for (field, label, password) in [
+            ("client-id", "Client ID", false),
+            ("client-secret", "Client Secret", true),
+        ] {
+            source_field(html, app, source, field, label, password, configured);
+        }
+    } else if source == "nextmoe" {
+        let patch_configured = app
+            .data_sources
+            .iter()
+            .any(|s| s.source == source && s.patch_configured);
+        source_field(
+            html,
+            app,
+            source,
+            "patch-key",
+            t(app, "sources.patch_key"),
+            true,
+            patch_configured,
+        );
+        write!(
+            html,
+            "<p class=\"field-help vault-note\">{}</p>",
+            t(app, "auth.vault")
+        )
+        .unwrap();
+    } else {
+        source_field(html, app, source, "token", "Token", true, configured);
+    }
+    if matches!(source, "nextmoe" | "bangumi") {
+        write!(
+            html,
+            "<p class=\"field-help\">{}</p>",
+            t(app, "sources.oauth_help")
         )
         .unwrap();
     }
+    write!(
+        html,
+        "<div class=\"account-actions\">{}{}{}</div></section>",
+        button(
+            "source-save",
+            source,
+            t(app, "auth.save_check"),
+            "save",
+            "primary",
+            app.busy() || oauth_busy(app)
+        ),
+        if matches!(source, "nextmoe" | "bangumi") {
+            if app
+                .requests
+                .values()
+                .any(|r| matches!(r, Pending::SourceOAuth(s) if s == source))
+            {
+                button(
+                    "source-oauth-cancel",
+                    source,
+                    t(app, "sources.oauth_cancel"),
+                    "close",
+                    "quiet",
+                    false,
+                )
+            } else {
+                button(
+                    "source-oauth",
+                    source,
+                    t(app, "sources.oauth_login"),
+                    "link",
+                    "secondary",
+                    app.busy() || oauth_busy(app),
+                )
+            }
+        } else {
+            String::new()
+        },
+        button(
+            "source-clear",
+            source,
+            t(app, "auth.clear"),
+            "close",
+            "quiet",
+            app.busy() || oauth_busy(app)
+        )
+    )
+    .unwrap();
+
 }
 
 fn source_field(
@@ -280,7 +358,7 @@ fn source_field(
     saved: bool,
 ) {
     let key = format!("source-{source}-{field}");
-    write!(html,r#"<label class="edit-field" for="{}"><span>{}</span><input id="{}" data-input="{}" type="{}" value="{}" autocomplete="off" spellcheck="false" placeholder="{}"/></label>"#,key,label,key,key,if password{"password"}else{"text"},esc(&features::form(app,&key)),t(app,if saved{"sources.keep_saved"}else{"sources.optional"})).unwrap();
+    write!(html,r#"<label class="edit-field" for="{}"><span>{}</span><input id="{}" data-input="{}" type="{}" value="{}" autocomplete="off" spellcheck="false" placeholder="{}"/></label>"#,key,label,key,key,if password{"password"}else{"text"},esc(&features::form(app,&key)),if field == "patch-key" && !saved {"nmk_live_…"} else {t(app,if saved{"sources.keep_saved"}else{"sources.optional"})}).unwrap();
 }
 fn library(html: &mut String, app: &App) {
     write!(html,r#"<section class="settings-card"><div class="panel-heading"><div><h2>{}</h2><p>{}</p></div><div class="library-settings-actions">{}{}</div></div>"#,t(app,"settings.folders"),t(app,"settings.folders_help"),button("import-open","",t(app,"import.button"),"database","secondary",app.busy()),button("choose-folder","",t(app,"settings.add_folder"),"create_new_folder","primary",app.busy())).unwrap();
@@ -537,7 +615,7 @@ fn paths(html: &mut String, app: &App) {
     .unwrap();
 }
 fn about(html: &mut String, app: &App) {
-    write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>GalGear</h2><span class="version-pill">v{}</span></div>"#,esc(&app.version)).unwrap();
+    write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>GalGear</h2><div class="update-badges">{}<span class="version-pill">v{}</span></div></div>"#,crate::widgets::pending_update_badge(t(app, "update.pending"), crate::updates::update_available(app)),esc(&app.version)).unwrap();
     write!(html,r#"<label class="edit-field" for="release-page"><span>{}</span><input id="release-page" data-input="release-page" value="{}" placeholder="https://github.com/CbShuiMu/GalGear/releases"/></label>"#,t(app,"settings.release_page"),esc(&features::setting(app,"release-page",&app.settings.release_page))).unwrap();
     write!(
         html,
@@ -553,13 +631,14 @@ fn about(html: &mut String, app: &App) {
         button(
             "check-update",
             "",
-            t(app, "settings.check_update"),
+            t(app, "settings.update"),
             "update",
             "quiet",
             crate::updates::checking(app) || app.update.installing
         )
     )
     .unwrap();
+    crate::updates::render_check_error(html, app);
     html.push_str("</section>");
     crate::skill_update::render(html, app);
 }
@@ -569,12 +648,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn source_pickers_only_offer_verified_credentials_and_public_2dfan() {
+    fn source_pickers_only_offer_verified_credentials_and_public_sources() {
         let app = App {
             data_sources: serde_json::from_str(r#"[
                 {"source":"vndb","configured":true},
                 {"source":"ymgal","configured":false},
-                {"source":"nextmoe","configured":true}
+                {"source":"nextmoe","configured":false}
             ]"#).unwrap(),
             ..Default::default()
         };
@@ -584,6 +663,10 @@ mod tests {
             for source in ["2dfan", "vndb", "nextmoe"] {
                 assert!(html.contains(&format!("data-value=\"{source}\"")));
             }
+            assert!(
+                html.find("data-value=\"nextmoe\"").unwrap()
+                    < html.find("data-value=\"2dfan\"").unwrap()
+            );
             for source in ["bangumi", "ymgal"] {
                 assert!(!html.contains(&format!("data-value=\"{source}\"")));
             }

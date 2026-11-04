@@ -30,3 +30,21 @@
 - [月幕 Galgame 开放 API](https://www.ymgal.games/developer)
 
 接口结果受来源站点的资料范围、账号权限和请求限制影响。月幕 API 用于非商业项目；本项目在说明中标明数据来源。
+
+
+## 2026-11-04：NextMoe 补丁与用户授权
+
+- NextMoe 目录默认匿名访问，在标签、资料和图片的数据源胶囊中始终可选；新配置及缺少来源时默认使用 NextMoe，已有明确选择继续生效。设置中的 NextMoe 卡片位于 2DFan 前。所有共享胶囊中 NextMoe 与 2DFan 位置互换。
+- 设置 → 数据源的 NextMoe 卡片仅保留补丁应用密钥输入框；通过 OAuth 登录取得用户令牌后，右上角显示绿色“已登录”。有已存用户令牌时自动使用令牌，无令牌时匿名访问。旧版 `nmk_` 目录凭据迁移到补丁字段，不再当作用户令牌。保存补丁密钥不会改动已有用户令牌及刷新令牌；密钥留空保留已存值，清除删除该数据源全部凭据。
+- 补丁名称先经公开 catalog 解析为作品 ID，再以 `refs=catalog:<id>` 查询 `/v2/moyu/patches`，按补丁 ID 逐页读取资源。NextMoe 结果排在 2DFan 前。一个来源失败保留另一来源结果并显示失败提示，搜索栏不再放置补丁站入口，腾出的宽度交给搜索框；结果行仍保留对应资源的网页入口。“令牌配置”直接跳转设置的数据源页。
+- NextMoe 结果提供“下载文件”，使用列表返回的资源 ID 调用资源详情，再调用 `/v2/moyu/resources/{id}/file`，不从展示网页 URL 推测 API ID。仅 `storage=s3` 托管文件可直下；缺少密钥或返回 401/403 时在右下角提示填写具有运营授予的 `moyu:files` 权限的应用密钥。外链或文件不存在时提示使用补丁站入口。只在点击时获取直链，不缓存、不自动重试，也不把应用密钥发送给下载主机。
+- 文件传输复用 core 的进度、取消、8 GiB 上限和原子落盘规则，校验实际字节数与接口声明值，保留原压缩包并避免覆盖已有文件；不会宣称已验证 BLAKE3。按游戏搜索的资源下载到该游戏的补丁目录，手动搜索下载到配置的下载目录。返回解压密码时在完成通知中显示，通知保留至手动关闭。后续安装继续走本地补丁导入与预览。
+- 下拉菜单使用 CSS 内容固有宽度及视口边界布局，不再以已撑开的 flex 容器宽度反推内容宽度；连续刷新、字体调整和长启动器名称均不会逐次撑宽菜单。回归检查：`node --test scripts/test-choice-layout.cjs`，另有真实浏览器布局检查。
+- NextMoe 与 Bangumi 卡片的保存按钮右侧提供 OAuth 登录，使用 GalGear 发布版内置应用，无需填写应用配置。两者均使用 `https://galgear.cbshuimu.net/oauth/<provider>/callback`，中继到动态本机端口。NextMoe 本机 PKCE S256 换码，仅申请 `catalog:read`（无需注册该 scope，`openid` 自动授予）。Bangumi 的 App Secret 仅保存在 Worker Secret，服务端处理换码和刷新；协议与兼容规则见 [OAuth 回调服务](oauth-callback.md)。
+- 授权使用系统浏览器，后台环回监听验证路径和随机 state，三分钟超时，可取消，不阻塞页面导航。令牌与刷新令牌保存在 Windows 凭据库，不回填前端。刷新在后台执行，串行轮换并原地保存；失败明确报错，不退回匿名。旧版手动输入的短期令牌过期后，可通过 OAuth 重新登录。
+- `getrandom 0.3` 直接复用锁文件已有版本，仅用于操作系统安全随机数；标准库没有密码学随机数接口，现有 SHA-256 和 Base64 继续用于 PKCE，不新增 OAuth 框架依赖。
+- VNDB 官方接口只公开手动 Token；月幕只有客户端凭据模式，明确尚未提供用户授权码模式；2DFan 未找到可接入的公开 OAuth 契约，因此不添加误导性的用户登录按钮。
+
+- 详情页封面复用游戏库卡片的 `--poster-shadow`，随明暗主题同步。
+
+契约依据：[NextMoe 鉴权](https://developer.nextmoe.dev/docs/authentication)、[原生客户端](https://developer.nextmoe.dev/docs/native-app)、[moyu 联邦补丁](https://developer.nextmoe.dev/docs/moyu-patches)、[受限文件接口](https://developer.nextmoe.dev/docs/moyu/getResourceFile)、[Bangumi OAuth](https://github.com/bangumi/api/blob/master/docs-raw/How-to-Auth.md)、[VNDB Token](https://api.vndb.org/kana#authentication)、[月幕开放 API](https://www.ymgal.games/developer)。

@@ -73,14 +73,44 @@ pub struct Updated {
 /// 用户主动检查时同步 main；相同且完整的安装跳过下载。
 /// 下载或校验失败保留原版本。调用方须确保没有任务正在使用资源目录。
 pub fn sync(home: &Path) -> Result<Updated, Message> {
-    let client = Client::builder()
+    sync_from(home, &client()?, MAIN_URL, ARCHIVE_URL)
+}
+
+fn client() -> Result<Client, Message> {
+    Client::builder()
         // Skill updates use a direct connection, including the main-commit check.
         .no_proxy()
         .user_agent(concat!("GalGear/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(20))
         .build()
+        .map_err(error)
+}
+
+/// 只查询远端 main 的 commit，不下载资源包，也不读取或修改本地安装。
+pub fn latest_commit() -> Result<String, Message> {
+    fetch_commit(&client()?, MAIN_URL)
+}
+
+fn fetch_commit(client: &Client, url: &str) -> Result<String, Message> {
+    #[derive(Deserialize)]
+    struct Commit {
+        sha: String,
+    }
+    let commit: Commit = client
+        .get(url)
+        .timeout(Duration::from_secs(30))
+        .header("Accept", "application/vnd.github+json")
+        .header("Cache-Control", "no-cache")
+        .send()
+        .map_err(error)?
+        .error_for_status()
+        .map_err(error)?
+        .json()
         .map_err(error)?;
-    sync_from(home, &client, MAIN_URL, ARCHIVE_URL)
+    if commit.sha.len() != 40 || !commit.sha.bytes().all(|c| c.is_ascii_hexdigit()) {
+        return Err(error("Invalid main commit SHA"));
+    }
+    Ok(commit.sha)
 }
 
 fn sync_from(
@@ -107,29 +137,12 @@ fn sync_from(
             fs::remove_dir_all(&previous).map_err(error)?;
         }
     }
-    #[derive(Deserialize)]
-    struct Commit {
-        sha: String,
-    }
-    let commit: Commit = client
-        .get(main_url)
-        .timeout(Duration::from_secs(30))
-        .header("Accept", "application/vnd.github+json")
-        .header("Cache-Control", "no-cache")
-        .send()
-        .map_err(error)?
-        .error_for_status()
-        .map_err(error)?
-        .json()
-        .map_err(error)?;
-    if commit.sha.len() != 40 || !commit.sha.bytes().all(|c| c.is_ascii_hexdigit()) {
-        return Err(error("Invalid main commit SHA"));
-    }
+    let commit = fetch_commit(client, main_url)?;
     if valid_package(&installed)
-        && fs::read_to_string(installed.join(COMMIT_FILE)).is_ok_and(|sha| sha.trim() == commit.sha)
+        && fs::read_to_string(installed.join(COMMIT_FILE)).is_ok_and(|sha| sha.trim() == commit)
     {
         return Ok(Updated {
-            commit: commit.sha,
+            commit,
             changed: false,
         });
     }
@@ -139,7 +152,7 @@ fn sync_from(
         .map_err(error)?;
     let mut archive = tempfile::tempfile_in(staging.path()).map_err(error)?;
     let response = client
-        .get(format!("{archive_url}/{}", commit.sha))
+        .get(format!("{archive_url}/{}", commit))
         .timeout(Duration::from_secs(1800))
         .send()
         .map_err(error)?
@@ -158,10 +171,10 @@ fn sync_from(
     }
     archive.rewind().map_err(error)?;
     let unpacked = staging.path().join("repository");
-    extract(archive, &unpacked, &commit.sha)?;
-    install(&unpacked, &installed, &previous, &commit.sha)?;
+    extract(archive, &unpacked, &commit)?;
+    install(&unpacked, &installed, &previous, &commit)?;
     Ok(Updated {
-        commit: commit.sha,
+        commit,
         changed: true,
     })
 }
@@ -299,6 +312,30 @@ mod tests {
             }
         });
         (url, handle, requests)
+    }
+
+    #[test]
+    fn remote_check_only_fetches_the_commit_and_validates_the_response() {
+        let sha = "b".repeat(40);
+        for (status, body, expected) in [
+            (200, format!(r#"{{"sha":"{sha}"}}"#), true),
+            (200, r#"{"sha":"invalid"}"#.into(), false),
+            (503, "unavailable".into(), false),
+        ] {
+            let (url, handle, requests) = server(vec![(status, body.into_bytes())]);
+            let result = fetch_commit(
+                &Client::builder().no_proxy().build().unwrap(),
+                &format!("{url}/main"),
+            );
+            handle.join().unwrap();
+            assert_eq!(result.is_ok(), expected);
+            if expected {
+                assert_eq!(result.unwrap(), sha);
+            }
+            let requests = requests.lock().unwrap();
+            assert_eq!(requests.len(), 1);
+            assert!(requests[0].starts_with("GET /main "));
+        }
     }
 
     #[test]

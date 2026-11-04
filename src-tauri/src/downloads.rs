@@ -302,6 +302,62 @@ pub(crate) async fn start_fan_download(
     result
 }
 
+/// NextMoe 使用同一下载互斥、进度事件及取消入口，直接保存原始压缩包。
+#[tauri::command]
+pub(crate) async fn start_nextmoe_download(
+    resource_id: String,
+    game_id: Option<String>,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<Transfer, Message> {
+    if state.downloads.active.swap(true, Ordering::SeqCst) {
+        return Err(Message::new("download.busy"));
+    }
+    state.downloads.cancel.store(false, Ordering::SeqCst);
+    let result = async {
+        let directory = if let Some(id) = game_id {
+            let game = find_game(&state, &id)?;
+            if !game.available {
+                return Err(Message::new("error.game_folder"));
+            }
+            galgear_core::patches::folders::directory(std::path::Path::new(&game.folder))?
+        } else {
+            download_directory(&state, &snapshot(&state)?)
+        };
+        *state
+            .downloads
+            .destination
+            .lock()
+            .map_err(|_| Message::new("error.catalog_state"))? = Some(directory.clone());
+        let config = state.store.path.clone();
+        let cancel = state.downloads.cancel.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let credentials = galgear_core::data_sources::load(&config, "nextmoe")?;
+            galgear_core::data_sources::moyu::download(
+                &resource_id,
+                &credentials,
+                &directory,
+                &cancel,
+                &mut |progress| {
+                    let _ = app.emit("fan-download-progress", progress);
+                },
+            )
+        })
+        .await
+        .map_err(|_| Message::new("download.network"))?
+    }
+    .await;
+    state.downloads.active.store(false, Ordering::SeqCst);
+    if let Ok(transfer) = &result {
+        *state
+            .downloads
+            .downloaded
+            .lock()
+            .map_err(|_| Message::new("error.catalog_state"))? = transfer.path.clone();
+    }
+    result
+}
+
 #[tauri::command]
 pub(crate) fn cancel_fan_download(state: State<'_, AppState>) {
     state.downloads.cancel.store(true, Ordering::SeqCst);

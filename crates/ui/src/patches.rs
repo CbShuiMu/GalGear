@@ -45,7 +45,7 @@ pub(crate) fn resource_row(html: &mut String, app: &App, result: &Resource) {
     let logo = if fan {
         "./assets/2dfan.png"
     } else {
-        "./assets/kun.webp"
+        "./assets/nextmoe.webp"
     };
     write!(html,r#"<article class="resource-row resource-entry"><span class="resource-logo"><img src="{logo}" alt="{}" width="28" height="28"/></span><div class="resource-copy"><div class="resource-origin"><span class="resource-source">{}</span>"#,esc(&result.source),esc(&result.source)).unwrap();
     if !result.game_title.is_empty() {
@@ -130,13 +130,22 @@ pub(crate) fn resource_row(html: &mut String, app: &App, result: &Resource) {
                 "secondary",
                 downloads::busy(&app.requests),
             )
+        } else if result.source == "NextMoe" && result.download_id.is_some() {
+            button("nextmoe-download", result.download_id.as_deref().unwrap_or_default(), t(app, "download.start"), "download", "secondary", downloads::busy(&app.requests))
         } else {
             String::new()
         },
         button(
             "open-resource",
             &result.url,
-            t(app, "patches.open"),
+            t(
+                app,
+                if fan {
+                    "patches.open"
+                } else {
+                    "patches.download_site"
+                }
+            ),
             "arrow",
             "quiet",
             false
@@ -159,9 +168,9 @@ pub(crate) fn patches_page(html: &mut String, app: &App) {
             .any(|p| matches!(p, Pending::Resources(_))),
     ));
     html.push_str(&button(
-        "page",
-        "settings",
-        t(app, "auth.title"),
+        "patch-token-settings",
+        "",
+        t(app, "patches.token_settings"),
         "settings",
         "quiet",
         false,
@@ -184,8 +193,8 @@ pub(crate) fn patches_page(html: &mut String, app: &App) {
     .unwrap();
     for (source, label) in [
         ("all", t(app, "patches.all_sources")),
+        ("nextmoe", "NextMoe"),
         ("2DFan", "2DFan"),
-        ("kun", t(app, "patches.kun")),
     ] {
         let count = app
             .patches
@@ -194,7 +203,7 @@ pub(crate) fn patches_page(html: &mut String, app: &App) {
             .filter(|r| {
                 source == "all"
                     || (source == "2DFan" && r.source == "2DFan")
-                    || (source == "kun" && r.source != "2DFan")
+                    || (source == "nextmoe" && r.source != "2DFan")
             })
             .count();
         write!(html,r#"<button class="source-filter {}" data-action="patch-source" data-value="{source}" aria-pressed="{}">{}<span>{count}</span></button>"#,if app.patches.patch_source==source{"selected"}else{""},app.patches.patch_source==source,label).unwrap();
@@ -217,7 +226,7 @@ pub(crate) fn patches_page(html: &mut String, app: &App) {
         .filter(|r| {
             app.patches.patch_source == "all"
                 || (app.patches.patch_source == "2DFan" && r.source == "2DFan")
-                || (app.patches.patch_source == "kun" && r.source != "2DFan")
+                || (app.patches.patch_source == "nextmoe" && r.source != "2DFan")
         })
         .collect();
     for result in &results {
@@ -238,7 +247,12 @@ pub(crate) fn download_notice(html: &mut String, app: &App) {
     let Some(transfer) = &app.downloads.notice else {
         return;
     };
-    write!(html,r#"<aside class="download-notice" role="status" aria-live="polite"><div class="download-notice-heading"><span>{}<strong>{}</strong></span><button class="icon-button" data-action="dismiss-download-notice" aria-label="{}">{}</button></div><p title="{}">{}</p><div class="download-notice-actions">{}</div></aside>"#,icon("check"),t(app,"download.complete"),t(app,"common.close"),icon("close"),esc(&transfer.title),esc(&transfer.title),button("open-download-result","",t(app,"download.open_folder"),"folder","quiet",app.busy())).unwrap();
+    write!(html,r#"<aside class="download-notice" role="status" aria-live="polite"><div class="download-notice-heading"><span>{}<strong>{}</strong></span><button class="icon-button" data-action="dismiss-download-notice" aria-label="{}">{}</button></div><p title="{}">{}</p><div class="download-notice-actions">{}</div>"#,icon("check"),t(app,"download.complete"),t(app,"common.close"),icon("close"),esc(&transfer.title),esc(&transfer.title),button("open-download-result","",t(app,"download.open_folder"),"folder","quiet",app.busy())).unwrap();
+    if let Some(password) = &transfer.archive_password {
+        // 密码属于下载结果，按外部文本转义后显示。
+        write!(html, "<p>{}: <code>{}</code></p>", t(app, "download.archive_password"), esc(password)).unwrap();
+    }
+    html.push_str("</aside>");
 }
 
 pub(crate) fn download_panel(html: &mut String, app: &App) {
@@ -352,7 +366,7 @@ pub(crate) fn download_panel(html: &mut String, app: &App) {
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> Option<bool> {
     match action {
-        "patch-source" if matches!(value, "all" | "2DFan" | "kun") => {
+        "patch-source" if matches!(value, "all" | "2DFan" | "nextmoe") => {
             app.patches.patch_source = value.into()
         }
         "use-download" if !app.patches.patch_game.is_empty() => {

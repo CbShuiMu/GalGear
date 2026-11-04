@@ -98,13 +98,15 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
             if matches!(kind, Pending::RestorePreview) {
                 app.detail.history_open = false;
             }
-            if matches!(kind, Pending::Download) {
+            if matches!(kind, Pending::Download | Pending::NextMoeDownload) {
                 if let Some(transfer) = &mut app.downloads.transfer {
                     transfer.phase = "error".into();
                     transfer.error = Some(Message::from_error(payload));
                 }
                 app.downloads.preview = None;
-                issue(&mut app, Pending::Account, "refresh_fan_status", json!({}));
+                if matches!(kind, Pending::Download) {
+                    issue(&mut app, Pending::Account, "refresh_fan_status", json!({}));
+                }
             }
             if matches!(kind, Pending::Account) {
                 app.account.status = Account {
@@ -131,7 +133,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                     | Pending::CoverOptions
                     | Pending::SetupExecutable(_)
                     | Pending::SetupSave(_) => {}
-                    Pending::AiRuntime | Pending::SkillUpdate => {}
+                    Pending::AiRuntime | Pending::SkillUpdate | Pending::SkillCheck => {}
                     Pending::CollectionSave => {
                         let settings = serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         apply_settings(&mut app, settings, id);
@@ -213,7 +215,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         app.detail.restore_preview = None;
                         app.detail.history_open = false;
                     }
-                    Pending::DataSources(source) => {
+                    Pending::DataSources(source) | Pending::SourceOAuth(source) => {
                         app.data_sources =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         if !source.is_empty() {
@@ -279,7 +281,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         app.downloads.preview =
                             Some(serde_json::from_str(payload).map_err(|e| e.to_string())?)
                     }
-                    Pending::Download => {
+                    Pending::Download | Pending::NextMoeDownload => {
                         app.downloads.transfer =
                             Some(serde_json::from_str(payload).map_err(|e| e.to_string())?);
                         if app
@@ -291,11 +293,15 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             app.downloads.notice = app.downloads.transfer.clone();
                             app.downloads.notice_generation =
                                 app.downloads.notice_generation.wrapping_add(1);
-                            schedule_download_notice_expiry(app.downloads.notice_generation, 8000);
+                            if app.downloads.notice.as_ref().is_none_or(|t| t.archive_password.is_none()) {
+                                schedule_download_notice_expiry(app.downloads.notice_generation, 8000);
+                            }
                             crate::features::refresh_detail_files(&mut app);
                         }
                         app.downloads.preview = None;
-                        issue(&mut app, Pending::Account, "refresh_fan_status", json!({}));
+                        if matches!(kind, Pending::Download) {
+                            issue(&mut app, Pending::Account, "refresh_fan_status", json!({}));
+                        }
                     }
                     Pending::Bootstrap | Pending::Add | Pending::Remove => {
                         let data: Bootstrap =
@@ -310,6 +316,8 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             game_setup::refreshed(&mut app);
                         }
                         if matches!(kind, Pending::Bootstrap) {
+                            crate::updates::check_on_startup(&mut app);
+                            crate::skill_update::check_on_startup(&mut app);
                             if data.update_complete { show_toast(&mut app, Message::new("update.complete"), false); }
                             issue(&mut app, Pending::AiRuntime, "get_ai_runtime", json!({}));
                             issue(
@@ -561,7 +569,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         }
                     }
                     Pending::Enrich => {}
-                    Pending::Update | Pending::InstallUpdate => {}
+                    Pending::Update | Pending::BackgroundUpdate | Pending::InstallUpdate => {}
                 }
                 Ok(())
             })();

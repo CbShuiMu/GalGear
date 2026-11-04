@@ -15,6 +15,16 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         return render;
     }
     match action {
+        "patch-token-settings" => {
+            app.settings_section = "account".into();
+            issue(
+                app,
+                Pending::DataSources(String::new()),
+                "get_data_sources",
+                json!({}),
+            );
+            return dispatch(app, "page", "settings");
+        }
         "home-select" if app.catalog.games.iter().any(|game| game.id == value) => {
             app.home_selected = Some(value.into());
         }
@@ -452,6 +462,22 @@ mod tests {
     }
 
     #[test]
+    fn patch_token_settings_opens_data_sources_through_normal_navigation() {
+        let mut app = App {
+            page: "patches".into(),
+            settings_section: "paths".into(),
+            ..Default::default()
+        };
+        crate::bridge::take_requests();
+        dispatch(&mut app, "patch-token-settings", "");
+        assert_eq!(app.page, "settings");
+        assert_eq!(app.settings_section, "account");
+        let requests = crate::bridge::take_requests();
+        assert!(requests.iter().any(|(_, command, _)| command == "get_data_sources"));
+        assert!(requests.iter().any(|(_, command, _)| command == "load_fan_credentials"));
+    }
+
+    #[test]
     fn returning_to_settings_keeps_the_selected_section_and_credential_draft() {
         let mut app = App::default();
         app.account.credentials_loaded = true;
@@ -474,7 +500,7 @@ mod tests {
         let mut app = App::default();
         app.patches.installed_patches_loaded = true;
         app.patches.resources_searched = true;
-        app.patches.patch_source = "kun".into();
+        app.patches.patch_source = "nextmoe".into();
         app.patches.patch_search_game = "game".into();
         app.patches.resources.push(crate::models::Resource {
             title: "Previous result".into(),
@@ -491,7 +517,7 @@ mod tests {
         dispatch(&mut app, "page", "games");
         dispatch(&mut app, "page", "patches");
         assert_eq!(app.patches.resources[0].title, "Previous result");
-        assert_eq!(app.patches.patch_source, "kun");
+        assert_eq!(app.patches.patch_source, "nextmoe");
         assert_eq!(app.patches.patch_search_game, "game");
         assert!(app.patches.resources_searched);
         assert_eq!(

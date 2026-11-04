@@ -20,6 +20,7 @@ for source, target in (
     (root / 'NOTICE', 'NOTICE'),
     (root / 'docs/bundled-tools.txt', '内置工具说明.txt'),
     (root / 'docs/cloud-storage.md', 'cloud-storage.md'),
+    (root / 'docs/oauth-callback.md', 'OAuth授权说明.md'),
     (root / 'docs/library-import.md', '导入说明.md'),
     (root / 'docs/settings-and-export-2026-10-31.md', '设置与导出说明.md'),
 ):
@@ -32,7 +33,7 @@ shutil.copytree(root / 'LICENSES', stage / 'LICENSES')
 运行环境：Windows 10 / 11 x64、Microsoft Edge WebView2 Runtime。
 便携包数据保存在同目录 data 文件夹；迁移时保留 data。
 账号凭据由本机 Windows 凭据管理器保存，换机需重新配置。
-Skill 通过设置 → 更新 → Skill 手动检查和安装，首次安装需要网络与程序目录写入权限。
+启动后后台检查程序与 Skill 版本，不自动安装；在设置 → 更新中点击更新。首次安装 Skill 需要网络与程序目录写入权限。
 AI 宿主随包附带，无需安装 Python。内置工具说明见《内置工具说明.txt》。
 云存储说明见 cloud-storage.md；GalGear.sha256 用于校验主程序。
 ''', encoding='utf-8')

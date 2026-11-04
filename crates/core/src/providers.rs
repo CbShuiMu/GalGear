@@ -95,6 +95,9 @@ impl Metadata {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Resource {
+    /// 补丁资源的 API 身份；不从展示用 web_url 推测。
+    #[serde(default)]
+    pub download_id: Option<String>,
     pub title: String,
     pub url: String,
     pub source: String,
@@ -218,6 +221,7 @@ pub fn parse_links(body: &str, base: &Url, prefix: &str, source: &str) -> Vec<Re
             url: url.into(),
             source: source.into(),
             description: String::new(),
+            download_id: None,
             tags: card
                 .as_ref()
                 .map(|e| {
@@ -441,6 +445,7 @@ fn search_fan_patches(domain: &str, query: &str) -> Result<Vec<Resource>, Messag
                 url: format!("{}/downloads", subject.url),
                 source: "2DFan".into(),
                 description: String::new(),
+            download_id: None,
                 ..Default::default()
             }),
         }
@@ -448,112 +453,35 @@ fn search_fan_patches(domain: &str, query: &str) -> Result<Vec<Resource>, Messag
     Ok(results)
 }
 
-pub fn search_patch_sites(domain: &str, query: &str) -> Result<ResourceSearch, Message> {
+/// Search both patch providers; NextMoe results precede 2DFan and failures remain visible.
+pub fn search_patch_sites(
+    domain: &str,
+    query: &str,
+    credentials: &crate::data_sources::Credentials,
+) -> Result<ResourceSearch, Message> {
     if query.trim().is_empty() {
         return Err(Message::new("error.title_required"));
     }
-    let (fan, kun) = std::thread::scope(|scope| {
+    let (fan, nextmoe) = std::thread::scope(|scope| {
         let fan = scope.spawn(|| search_fan_patches(domain, query));
-        let kun = search_kun(query);
+        let nextmoe = crate::data_sources::moyu::search(query, credentials);
         (
             fan.join()
                 .unwrap_or_else(|_| Err(network("2DFan request worker failed"))),
-            kun,
+            nextmoe,
         )
     });
     let mut output = ResourceSearch::default();
-    for (source, result) in [("2DFan", fan), ("鲲 Gal", kun)] {
+    for (source, result) in [("NextMoe", nextmoe), ("2DFan", fan)] {
         match result {
             Ok(mut resources) => output.resources.append(&mut resources),
+            Err(error) if source == "NextMoe" => output.warnings.push(error),
             Err(_) => output
                 .warnings
                 .push(Message::new("patches.source_error").arg("source", source)),
         }
     }
     Ok(output)
-}
-
-pub fn search_kun(query: &str) -> Result<Vec<Resource>, Message> {
-    let mut url = Url::parse("https://www.moyu.moe/api/v1/search/quick").map_err(network)?;
-    url.query_pairs_mut()
-        .append_pair("keywords", query.trim())
-        .append_pair("content_limit", "sfw");
-    read_kun(&client()?, url)
-}
-fn read_kun(client: &Client, url: Url) -> Result<Vec<Resource>, Message> {
-    use std::io::Read;
-    // Public GET only. Follow the system network configuration; retry a transient failure once.
-    for attempt in 0..2 {
-        let response = client
-            .get(url.clone())
-            .header(reqwest::header::ACCEPT, "application/json")
-            .header(reqwest::header::REFERER, "https://www.moyu.moe/")
-            .send();
-        let response = match response {
-            Err(e) if attempt == 0 && (e.is_connect() || e.is_timeout()) => continue,
-            result => result.map_err(network)?,
-        };
-        if attempt == 0 && [429, 502, 503, 504].contains(&response.status().as_u16()) {
-            continue;
-        }
-        let response = response.error_for_status().map_err(network)?;
-        let mut bytes = Vec::new();
-        if let Err(e) = response.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes) {
-            if attempt == 0 {
-                continue;
-            }
-            return Err(network(e));
-        }
-        if bytes.len() > 4 * 1024 * 1024 {
-            return Err(Message::new("error.response_size"));
-        }
-        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(network)?;
-        return validate_kun(&value);
-    }
-    Err(Message::new("patches.source_error").arg("source", "鲲 Gal"))
-}
-fn validate_kun(value: &serde_json::Value) -> Result<Vec<Resource>, Message> {
-    if !value["data"]["resources"].is_array() {
-        return Err(Message::new("patches.source_error").arg("source", "鲲 Gal"));
-    }
-    Ok(parse_kun(value))
-}
-fn parse_kun(value: &serde_json::Value) -> Vec<Resource> {
-    let mut results = Vec::new();
-    if let Some(items) = value["data"]["resources"].as_array() {
-        for item in items {
-            let Some(id) = item["id"].as_u64() else {
-                continue;
-            };
-            let title = item["name"].as_str().unwrap_or_default().to_owned();
-            let game = item["patch"]["name"]["display_name"]
-                .as_str()
-                .unwrap_or_default();
-            let tags: Vec<String> = ["type", "language", "platform"]
-                .iter()
-                .flat_map(|key| {
-                    item[*key]
-                        .as_array()
-                        .into_iter()
-                        .flatten()
-                        .filter_map(|v| v.as_str())
-                })
-                .map(str::to_owned)
-                .collect();
-            results.push(Resource {
-                title,
-                url: format!("https://www.moyu.moe/resource/{id}"),
-                source: "鲲 Gal".into(),
-                game_title: game.into(),
-                tags,
-                author: item["user"]["name"].as_str().unwrap_or_default().into(),
-                uploaded_at: item["created"].as_str().unwrap_or_default().into(),
-                size: item["size"].as_str().unwrap_or_default().into(),
-                ..Default::default()
-            });
-        }
-    }
-    results
 }
 
 /// Download and normalize a source image with the same limits as local posters.
@@ -685,50 +613,6 @@ pub fn fan_patches(domain: &str, subject_url: &str) -> Result<Vec<Resource>, Mes
 mod tests {
     use super::*;
     #[test]
-    fn kun_error_envelope_is_not_an_empty_success_and_transient_get_retries_once() {
-        use std::io::{Read, Write};
-        assert!(validate_kun(&serde_json::json!({"code":429,"message":"retry later"})).is_err());
-        assert!(
-            validate_kun(&serde_json::json!({"data":{"resources":[]}}))
-                .unwrap()
-                .is_empty()
-        );
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = Url::parse(&format!("http://{}/search", listener.local_addr().unwrap())).unwrap();
-        let server = std::thread::spawn(move || {
-            for (status, body) in [
-                ("503 Service Unavailable", "temporary"),
-                (
-                    "200 OK",
-                    r#"{"data":{"resources":[{"id":1,"name":"Recovered"}]}}"#,
-                ),
-            ] {
-                let (mut socket, _) = listener.accept().unwrap();
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(2)))
-                    .unwrap();
-                let mut buffer = [0; 4096];
-                let n = socket.read(&mut buffer).unwrap();
-                let request = String::from_utf8_lossy(&buffer[..n]);
-                assert!(request.starts_with("GET /search "));
-                assert!(request.to_lowercase().contains("accept: application/json"));
-                write!(
-                    socket,
-                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                    body.len()
-                )
-                .unwrap();
-            }
-        });
-        let client = Client::builder()
-            .no_proxy()
-            .timeout(Duration::from_secs(2))
-            .build()
-            .unwrap();
-        assert_eq!(read_kun(&client, url).unwrap()[0].title, "Recovered");
-        server.join().unwrap();
-    }
-    #[test]
     fn resource_metadata_stays_with_its_own_card() {
         let body = r#"<div class='download-card'><h4 class='download-card-title'><a href='/downloads/1'>AI patch</a></h4><span class='download-card-kind'>AI翻译</span><span class='uploader-name'>Author A</span><time class='download-card-date' datetime='2024-01-06T12:00:00+08:00'>2024-01-06</time><span class='download-card-size'>3.4 MB</span></div><div class='download-card'><h4 class='download-card-title'><a href='/downloads/2'>CG save</a></h4><span class='download-card-kind'>全CG存档</span><span class='uploader-name'>Author B</span><time class='download-card-date'>2023-12-22</time></div>"#;
         let resources = parse_links(
@@ -743,16 +627,6 @@ mod tests {
         assert_eq!(resources[1].author, "Author B");
         assert_eq!(resources[1].uploaded_at, "2023-12-22");
         assert!(resources[1].size.is_empty());
-    }
-    #[test]
-    fn kun_resource_keeps_game_author_created_time_and_tags() {
-        let resources = parse_kun(
-            &serde_json::json!({"data":{"resources":[{"id":9,"name":"Patch","patch":{"name":{"display_name":"Game"}},"type":["ai"],"language":["zh-Hans"],"size":"22.6MB","user":{"name":"Author"},"created":"2024-01-06T10:00:00Z"}]}}),
-        );
-        assert_eq!(resources[0].game_title, "Game");
-        assert_eq!(resources[0].author, "Author");
-        assert_eq!(resources[0].uploaded_at, "2024-01-06T10:00:00Z");
-        assert_eq!(resources[0].tags, vec!["ai", "zh-Hans"]);
     }
     #[test]
     fn adjacent_people_links_remain_separate_from_subject_tags_and_release_fields() {

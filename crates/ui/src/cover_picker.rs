@@ -59,7 +59,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "cover-picker" => {
             app.detail.editor = Some(detail::Editor::Cover);
             app.cover_picker = State {
-                source: preferences::available_source(app, "vndb").into(),
+                source: preferences::available_source(app, "nextmoe").into(),
                 query: app
                     .detail
                     .selected
@@ -224,7 +224,9 @@ mod tests {
         let initial = crate::bridge::take_requests();
         let (request_id, command, payload) = &initial[0];
         assert_eq!(command, "source_covers");
-        assert!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["query"].is_null());
+        let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
+        assert!(payload["query"].is_null());
+        assert_eq!(payload["source"], "nextmoe");
         assert_eq!(app.cover_picker.query, "Original title");
         app.requests.complete(*request_id);
         resolve(&mut app, *request_id, true, "[]");
@@ -234,7 +236,7 @@ mod tests {
         let search = crate::bridge::take_requests();
         let payload: serde_json::Value = serde_json::from_str(&search[0].2).unwrap();
         assert_eq!(payload["query"], "Another title");
-        assert_eq!(payload["source"], "vndb");
+        assert_eq!(payload["source"], "nextmoe");
         dispatch(&mut app, "cover-provider", "bangumi");
         let switched = crate::bridge::take_requests();
         let payload: serde_json::Value = serde_json::from_str(&switched[0].2).unwrap();
@@ -268,10 +270,10 @@ mod tests {
         dispatch(&mut app, "cover-picker", "game");
         let requests = crate::bridge::take_requests();
         let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
-        assert_eq!(payload["source"], "2dfan");
+        assert_eq!(payload["source"], "nextmoe");
         dispatch(&mut app, "cover-provider", "ymgal");
         assert!(crate::bridge::take_requests().is_empty());
-        assert_eq!(app.cover_picker.source, "2dfan");
+        assert_eq!(app.cover_picker.source, "nextmoe");
     }
 
     #[test]

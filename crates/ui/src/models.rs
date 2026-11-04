@@ -83,7 +83,7 @@ pub(crate) fn default_ai_provider() -> String {
     "deepseek".into()
 }
 pub(crate) fn default_source() -> String {
-    "2dfan".into()
+    "nextmoe".into()
 }
 pub(crate) fn default_theme() -> String {
     "light".into()
@@ -141,6 +141,7 @@ pub(crate) struct Transfer {
     pub(crate) total: Option<u64>,
     pub(crate) path: Option<String>,
     pub(crate) error: Option<Message>,
+    pub(crate) archive_password: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -306,6 +307,7 @@ pub(crate) struct SaveChange {
 #[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 pub(crate) struct Resource {
+    pub(crate) download_id: Option<String>,
     pub(crate) title: String,
     pub(crate) url: String,
     pub(crate) source: String,

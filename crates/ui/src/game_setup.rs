@@ -559,16 +559,33 @@ mod tests {
 
     #[test]
     fn batch_source_uses_only_verified_sources_and_discards_late_search() {
-        let mut app=app();
-        assert_eq!(source_options(&app).iter().map(|o|o.value.as_str()).collect::<Vec<_>>(),vec!["2dfan","vndb","bangumi"]);
-        let before=app.setup.rows[0].source.clone();
-        dispatch(&mut app,"setup-batch-source","ymgal");
-        assert_eq!(app.setup.rows[0].source,before);
-        dispatch(&mut app,"setup-search","new");
-        let old=app.requests.last_id();
-        dispatch(&mut app,"setup-batch-source","vndb");
-        resolve(&mut app,&Pending::SetupSearch("new".into()),old,true,r#"[{"title":"old","url":"https://2dfmax.top/subjects/1"}]"#);
-        assert!(app.setup.rows.iter().all(|r|r.source=="vndb" && r.url.is_empty() && r.candidates.is_empty()));
+        let mut app = app();
+        assert_eq!(
+            source_options(&app)
+                .iter()
+                .map(|o| o.value.as_str())
+                .collect::<Vec<_>>(),
+            vec!["nextmoe", "vndb", "bangumi", "2dfan"]
+        );
+        let before = app.setup.rows[0].source.clone();
+        dispatch(&mut app, "setup-batch-source", "ymgal");
+        assert_eq!(app.setup.rows[0].source, before);
+        dispatch(&mut app, "setup-search", "new");
+        let old = app.requests.last_id();
+        dispatch(&mut app, "setup-batch-source", "vndb");
+        resolve(
+            &mut app,
+            &Pending::SetupSearch("new".into()),
+            old,
+            true,
+            r#"[{"title":"old","url":"https://2dfmax.top/subjects/1"}]"#,
+        );
+        assert!(
+            app.setup
+                .rows
+                .iter()
+                .all(|r| r.source == "vndb" && r.url.is_empty() && r.candidates.is_empty())
+        );
     }
     fn game(id: &str, url: &str) -> serde_json::Value {
         json!({"id":id,"title":id,"folder":"F:/Games/Test","executable":"F:/Games/Test/game.exe","engine":"unknown","cover":null,"modified":0,"metadata":if url.is_empty(){serde_json::Value::Null}else{json!({"url":url})}})
@@ -578,7 +595,14 @@ mod tests {
             initialized: true,
             ..Default::default()
         };
-        app.data_sources = ["vndb", "bangumi"].into_iter().map(|source| preferences::SourceStatus { source: source.into(), configured: true }).collect();
+        app.data_sources = ["vndb", "bangumi"]
+            .into_iter()
+            .map(|source| preferences::SourceStatus {
+                source: source.into(),
+                configured: true,
+                ..Default::default()
+            })
+            .collect();
         app.catalog.games = [
             game("cached", "https://vndb.org/v1"),
             game("new", ""),
@@ -707,15 +731,15 @@ mod tests {
     }
 
     #[test]
-    fn unmatched_games_can_search_2dfan_without_selecting_a_source() {
+    fn unmatched_games_can_search_nextmoe_without_selecting_a_source() {
         let mut app = app();
-        assert_eq!(choice_current(&app, "setup-source:new"), "2dfan");
+        assert_eq!(choice_current(&app, "setup-source:new"), "nextmoe");
         dispatch(&mut app, "setup-search", "new");
         let requests = crate::bridge::take_requests();
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].1, "search_metadata");
         let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
-        assert_eq!(payload, json!({"query":"new", "source":"2dfan"}));
+        assert_eq!(payload, json!({"query":"new", "source":"nextmoe"}));
         assert!(!app.setup.rows[0].can_save());
         assert_eq!(app.setup.rows[1].source, "bangumi");
     }
