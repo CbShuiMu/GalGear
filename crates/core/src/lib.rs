@@ -11,6 +11,7 @@ pub mod credentials;
 pub mod data_sources;
 pub mod downloads;
 pub mod fan_account;
+mod fan_http;
 pub mod game_details;
 pub mod game_setup;
 pub mod launcher_icons;
@@ -139,6 +140,7 @@ pub struct GameEdit {
     pub title: Option<String>,
     pub tags: Vec<String>,
     pub source_tags: Option<Vec<String>>,
+    /// 兼容旧配置的品牌快照；界面统一使用当前 metadata 的品牌。
     pub summary_brand: Option<String>,
     pub summary_release_date: Option<String>,
     pub executable: Option<String>,

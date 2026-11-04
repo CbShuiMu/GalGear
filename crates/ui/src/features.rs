@@ -313,7 +313,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             } else {
                 detail::Editor::Association
             });
-            app.detail.metadata_source = preferences::available_source(app, "vndb").into();
+            app.detail.metadata_source = crate::models::default_source();
             if let Some(game) = app
                 .detail
                 .selected
@@ -809,6 +809,31 @@ mod tests {
             dispatch(&mut app, "metadata-provider", "ymgal");
             assert_eq!(app.detail.metadata_source, "nextmoe");
         }
+    }
+
+    #[test]
+    fn metadata_and_tag_editors_default_to_nextmoe_even_with_other_sources_configured() {
+        let mut app = App::default();
+        app.settings.metadata_provider = "2dfan".into();
+        app.data_sources = serde_json::from_value(json!([
+            {"source":"vndb","configured":true},
+            {"source":"bangumi","configured":true}
+        ]))
+        .unwrap();
+        for action in ["metadata-association", "tags-association"] {
+            dispatch(&mut app, action, "");
+            assert_eq!(app.detail.metadata_source, "nextmoe");
+            dispatch(&mut app, "metadata-provider", "vndb");
+            assert_eq!(app.detail.metadata_source, "vndb");
+            dispatch(&mut app, "editor-close", "");
+            dispatch(&mut app, action, "");
+            assert_eq!(app.detail.metadata_source, "nextmoe");
+        }
+        assert_eq!(app.patches.patch_source, "nextmoe");
+        assert_eq!(
+            preferences::available_source(&app, "unavailable"),
+            "nextmoe"
+        );
     }
 
     #[test]

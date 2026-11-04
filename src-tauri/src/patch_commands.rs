@@ -272,7 +272,8 @@ pub(crate) async fn search_patches(
     let path = state.store.path.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let credentials = galgear_core::data_sources::load(&path, "nextmoe")?;
-        providers::search_patch_sites(&domain, &query, &credentials)
+        let fan = galgear_core::data_sources::load(&path, "2dfan")?;
+        providers::search_patch_sites(&domain, &query, &credentials, fan.fan.as_ref())
     })
         .await
         .map_err(|e| Message::detail("error.network", e))?

@@ -264,7 +264,8 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     }
     html.push_str("<div class=\"hero-facts\">");
     if let Some(meta) = &game.metadata {
-        let brand = edit.summary_brand.as_deref().unwrap_or(&meta.brand);
+        // 顶部与制作资料共用当前品牌，不能被旧资料源的摘要快照覆盖。
+        let brand = &meta.brand;
         let release_date = edit
             .summary_release_date
             .as_deref()
@@ -785,6 +786,61 @@ mod tests {
         let mut html = String::new();
         render(&mut html, &app, &game);
         assert!(html.contains(r#"<span>2025-03-01</span><span class="last-played">最近游玩 <span>2026-01-01</span></span><span class="game-playtime">1.3h游玩时长</span>"#));
+    }
+    #[test]
+    fn detail_brand_uses_current_metadata_even_with_a_legacy_summary() {
+        let mut app = App::default();
+        // 旧配置曾在切换资料源时冻结顶部品牌；加载后应直接显示当前资料。
+        app.settings.game_edits.insert(
+            "game".into(),
+            serde_json::from_value(json!({
+                "summary_brand": "5pb."
+            }))
+            .unwrap(),
+        );
+        for brand in ["elf", "Manual <Brand>", ""] {
+            let game: Game = serde_json::from_value(json!({
+                "id": "game", "title": "Title", "folder": "F:/Games/Title",
+                "engine": "unknown", "modified": 0, "metadata": {"brand": brand}
+            }))
+            .unwrap();
+            app.catalog.games = vec![game.clone()];
+            app.detail.selected = Some(game.id.clone());
+            for editing in [false, true] {
+                if editing {
+                    detail_form::begin(&mut app);
+                } else {
+                    detail_form::cancel(&mut app);
+                }
+                let mut html = String::new();
+                render(&mut html, &app, &game);
+                let facts = html
+                    .split_once("<div class=\"hero-facts\">")
+                    .unwrap()
+                    .1
+                    .split_once("</div>")
+                    .unwrap()
+                    .0;
+                assert!(!html.contains("5pb."));
+                if brand.is_empty() {
+                    assert!(!facts.contains("data-action=\"detail-tag\""));
+                } else {
+                    assert!(facts.contains(&format!("data-value=\"{}\"", esc(brand))));
+                    if editing {
+                        assert!(html.contains(&format!(
+                            "data-input=\"draft-meta-brand\" value=\"{}\"",
+                            esc(brand)
+                        )));
+                    } else {
+                        assert_eq!(
+                            html.matches(&format!("data-value=\"{}\"", esc(brand)))
+                                .count(),
+                            2
+                        );
+                    }
+                }
+            }
+        }
     }
     #[test]
     fn linked_and_unlinked_credits_filter_the_library_instead_of_opening_websites() {

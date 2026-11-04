@@ -107,17 +107,17 @@ pub fn set_data_source(source: String, state: State<'_, AppState>) -> Result<Set
     })
 }
 pub async fn credentials_for(state: &AppState, source: &str) -> Result<Credentials, Message> {
-    if source == "2dfan" {
-        Ok(Credentials::default())
-    } else {
-        let path = state.store.path.clone();
-        let source = source.to_owned();
-        tauri::async_runtime::spawn_blocking(move || {
+    let path = state.store.path.clone();
+    let source = source.to_owned();
+    tauri::async_runtime::spawn_blocking(move || {
+        if source == "2dfan" {
+            data_sources::load(&path, &source)
+        } else {
             data_sources::oauth::load_fresh(&path, &source)
-        })
-        .await
-        .map_err(|_| Message::new("error.operation"))?
-    }
+        }
+    })
+    .await
+    .map_err(|_| Message::new("error.operation"))?
 }
 
 #[tauri::command]

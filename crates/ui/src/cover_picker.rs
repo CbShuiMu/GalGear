@@ -59,7 +59,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "cover-picker" => {
             app.detail.editor = Some(detail::Editor::Cover);
             app.cover_picker = State {
-                source: preferences::available_source(app, "nextmoe").into(),
+                source: crate::models::default_source(),
                 query: app
                     .detail
                     .selected

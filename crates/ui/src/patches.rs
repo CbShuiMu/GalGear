@@ -34,7 +34,7 @@ impl Default for State {
             resources: Vec::new(),
             resources_game: None,
             resource_warnings: Vec::new(),
-            patch_source: "all".into(),
+            patch_source: crate::models::default_source(),
             resources_searched: false,
         }
     }

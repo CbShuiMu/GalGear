@@ -1,29 +1,17 @@
 //! 2DFan sessions, read-only account inspection and confirmed download plans.
 use crate::{credentials::FanCredentials, providers};
 use galgear_i18n::Message;
-use reqwest::{
-    Url,
-    blocking::Client,
-    cookie::Jar,
-    header::{AUTHORIZATION, HeaderValue, REFERER},
-};
+use reqwest::{Url, blocking::Client, header::REFERER};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::{
-    io::Read,
     path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
 
 fn sel(s: &str) -> Selector {
     Selector::parse(s).expect("static selector")
-}
-fn auth_error() -> Message {
-    Message::new("auth.network")
 }
 
 #[derive(Clone, Default, Serialize, Deserialize, Debug)]
@@ -44,53 +32,8 @@ pub struct Session {
 }
 impl Session {
     pub fn new(domain: &str, credentials: FanCredentials) -> Result<Self, Message> {
-        credentials.validate()?;
         let base = providers::fan_base(domain)?;
-        let jar = Arc::new(Jar::default());
-        for pair in credentials
-            .cookie
-            .split(';')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-        {
-            let Some((name, value)) = pair.split_once('=') else {
-                return Err(Message::new("auth.invalid"));
-            };
-            if name.is_empty()
-                || !name
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
-                || HeaderValue::from_str(value).is_err()
-            {
-                return Err(Message::new("auth.invalid"));
-            }
-            jar.add_cookie_str(&format!("{name}={value}; Path=/; Secure"), &base);
-        }
-        let builder = || {
-            Client::builder()
-                .user_agent("GalGear/0.1 (+local game library)")
-                .cookie_provider(jar.clone())
-                .connect_timeout(Duration::from_secs(8))
-                .timeout(Duration::from_secs(25))
-                .redirect(reqwest::redirect::Policy::custom({
-                    let origin = base.origin();
-                    move |attempt| {
-                        if attempt.previous().len() >= 5 {
-                            attempt.error("Too many redirects")
-                        } else if attempt.url().origin() == origin {
-                            attempt.follow()
-                        } else {
-                            attempt.stop()
-                        }
-                    }
-                }))
-        };
-        let client = builder().build().map_err(|_| auth_error())?;
-        let download_client = builder()
-            .connect_timeout(Duration::from_secs(12))
-            .timeout(Duration::from_secs(1800))
-            .build()
-            .map_err(|_| Message::new("download.network"))?;
+        let (client, download_client) = crate::fan_http::clients(&base, &credentials)?;
         Ok(Self {
             client,
             download_client,
@@ -98,40 +41,8 @@ impl Session {
             credentials,
         })
     }
-    fn request(&self, url: Url) -> Result<reqwest::blocking::RequestBuilder, Message> {
-        let mut request = self.client.get(url.clone());
-        if url.origin() == self.base.origin() && !self.credentials.token.is_empty() {
-            let (key, value) = if self.credentials.mode == "bearer" {
-                (AUTHORIZATION, format!("Bearer {}", self.credentials.token))
-            } else {
-                (
-                    reqwest::header::HeaderName::from_static("x-csrf-token"),
-                    self.credentials.token.clone(),
-                )
-            };
-            let mut value =
-                HeaderValue::from_str(&value).map_err(|_| Message::new("auth.invalid"))?;
-            value.set_sensitive(true);
-            request = request.header(key, value);
-        }
-        Ok(request)
-    }
     fn read(&self, url: Url) -> Result<String, Message> {
-        let response = self
-            .request(url)?
-            .send()
-            .map_err(|_| auth_error())?
-            .error_for_status()
-            .map_err(|_| auth_error())?;
-        let mut data = Vec::new();
-        response
-            .take(4 * 1024 * 1024 + 1)
-            .read_to_end(&mut data)
-            .map_err(|_| auth_error())?;
-        if data.len() > 4 * 1024 * 1024 {
-            return Err(Message::new("error.response_size"));
-        }
-        String::from_utf8(data).map_err(|_| auth_error())
+        crate::fan_http::read(&self.client, &self.base, &self.credentials, url)
     }
     pub fn check(&self) -> Result<Account, Message> {
         let mut account = parse_account(&self.read(self.base.clone())?);
@@ -606,7 +517,7 @@ fn finish_download(response: reqwest::blocking::Response, plan: &DownloadPlan, d
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use std::io::{Read, Write};
 
     #[test]
     fn downloads_use_configured_proxy_for_site_and_cdn_files() {

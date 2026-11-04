@@ -6,10 +6,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     };
     let query = std::env::args().nth(1).unwrap_or_else(|| "千恋".into());
-    let subjects = providers::search_fan("https://2dfmax.top", &query)?;
+    let subjects = providers::search_fan("https://2dfmax.top", &query, None)?;
     println!("2DFan subjects: {}", subjects.len());
     if let Some(subject) = subjects.first() {
-        let metadata = providers::fan_metadata("https://2dfmax.top", &subject.url)?;
+        let metadata = providers::fan_metadata("https://2dfmax.top", &subject.url, None)?;
         println!(
             "2DFan metadata: {} / {} / {} / cover={}",
             metadata.title,
@@ -26,11 +26,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::fs::metadata(path)?.len()
             );
         }
-        let patches =
-            providers::fan_patches("https://2dfmax.top", &format!("{}/downloads", subject.url))?;
+        let patches = providers::fan_patches(
+            "https://2dfmax.top",
+            &format!("{}/downloads", subject.url),
+            None,
+        )?;
         println!("2DFan resource pages: {}", patches.len());
     }
-    let combined = providers::search_patch_sites("https://2dfmax.top", &query, &credentials)?;
+    let combined = providers::search_patch_sites("https://2dfmax.top", &query, &credentials, None)?;
     let fan = combined
         .resources
         .iter()

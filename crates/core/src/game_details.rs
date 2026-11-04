@@ -26,12 +26,6 @@ pub fn associate(
     match target {
         MetadataTarget::Details => {
             edit.tags.clone_from(&game.tags);
-            edit.summary_brand.get_or_insert_with(|| {
-                game.metadata
-                    .as_ref()
-                    .map(|meta| meta.brand.clone())
-                    .unwrap_or_default()
-            });
             edit.summary_release_date.get_or_insert_with(|| {
                 game.metadata
                     .as_ref()
@@ -184,6 +178,7 @@ mod tests {
             incoming.clone(),
             MetadataTarget::Details,
         );
+        assert!(edit.summary_brand.is_none());
         let settings = crate::Settings {
             game_edits: BTreeMap::from([(game.id.clone(), edit)]),
             ..Default::default()

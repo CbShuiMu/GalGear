@@ -1,3 +1,4 @@
+use crate::{credentials::FanCredentials, fan_http};
 use galgear_i18n::Message;
 use reqwest::{Url, blocking::Client};
 use scraper::{Html, Selector};
@@ -134,10 +135,6 @@ pub fn fan_base(domain: &str) -> Result<Url, Message> {
             "2dfdf.de",
             "fan2d.top",
             "acgfan.top",
-            "t.vndb.org",
-            "s.vndb.org",
-            "lain.bgm.tv",
-            "store.ymgal.games",
         ]
         .contains(&url.host_str().unwrap_or_default())
         || !url.username().is_empty()
@@ -169,11 +166,16 @@ pub fn page(client: &Client, url: Url) -> Result<String, Message> {
     String::from_utf8(bytes).map_err(network)
 }
 
-pub fn search_fan(domain: &str, query: &str) -> Result<Vec<Resource>, Message> {
+/// 搜索 2DFan 条目；提供凭据时使用对应账号，None 表示匿名访问。
+pub fn search_fan(
+    domain: &str,
+    query: &str,
+    credentials: Option<&FanCredentials>,
+) -> Result<Vec<Resource>, Message> {
     let base = fan_base(domain)?;
     let mut url = base.join("/search").map_err(network)?;
     url.query_pairs_mut().append_pair("keyword", query.trim());
-    let body = page(&client()?, url)?;
+    let body = fan_http::page(&base, url, credentials)?;
     Ok(parse_links(&body, &base, "/subjects/", "2DFan"))
 }
 pub fn parse_links(body: &str, base: &Url, prefix: &str, source: &str) -> Vec<Resource> {
@@ -244,13 +246,18 @@ pub fn parse_links(body: &str, base: &Url, prefix: &str, source: &str) -> Vec<Re
     }
     results
 }
-pub fn fan_metadata(domain: &str, url: &str) -> Result<Metadata, Message> {
+/// 读取同源 2DFan 条目资料，携带已提供的 Token 和 Cookie。
+pub fn fan_metadata(
+    domain: &str,
+    url: &str,
+    credentials: Option<&FanCredentials>,
+) -> Result<Metadata, Message> {
     let base = fan_base(domain)?;
     let url = base.join(url).map_err(network)?;
     if url.host_str() != base.host_str() || !url.path().starts_with("/subjects/") {
         return Err(Message::new("error.site_url"));
     }
-    let body = page(&client()?, url.clone())?;
+    let body = fan_http::page(&base, url.clone(), credentials)?;
     parse_metadata(&body, &url)
 }
 
@@ -420,11 +427,15 @@ fn story_text(element: scraper::ElementRef<'_>) -> String {
         .join("\n\n")
 }
 
-fn search_fan_patches(domain: &str, query: &str) -> Result<Vec<Resource>, Message> {
+fn search_fan_patches(
+    domain: &str,
+    query: &str,
+    credentials: Option<&FanCredentials>,
+) -> Result<Vec<Resource>, Message> {
     let base = fan_base(domain)?;
     let mut url = base.join("/search").map_err(network)?;
     url.query_pairs_mut().append_pair("keyword", query.trim());
-    let body = page(&client()?, url)?;
+    let body = fan_http::page(&base, url, credentials)?;
     let mut results = Vec::new();
     // Search pages identify games; patches are fetched from that game's downloads page.
     for subject in parse_links(&body, &base, "/subjects/", "2DFan")
@@ -432,7 +443,7 @@ fn search_fan_patches(domain: &str, query: &str) -> Result<Vec<Resource>, Messag
         .take(5)
     {
         let url = Url::parse(&format!("{}/downloads", subject.url)).map_err(network)?;
-        match page(&client()?, url) {
+        match fan_http::page(&base, url, credentials) {
             Ok(body) => {
                 let mut patches = parse_links(&body, &base, "/downloads/", "2DFan");
                 for p in &mut patches {
@@ -458,12 +469,13 @@ pub fn search_patch_sites(
     domain: &str,
     query: &str,
     credentials: &crate::data_sources::Credentials,
+    fan_credentials: Option<&FanCredentials>,
 ) -> Result<ResourceSearch, Message> {
     if query.trim().is_empty() {
         return Err(Message::new("error.title_required"));
     }
     let (fan, nextmoe) = std::thread::scope(|scope| {
-        let fan = scope.spawn(|| search_fan_patches(domain, query));
+        let fan = scope.spawn(|| search_fan_patches(domain, query, fan_credentials));
         let nextmoe = crate::data_sources::moyu::search(query, credentials);
         (
             fan.join()
@@ -599,19 +611,50 @@ pub fn save_cover(
         warning,
     ))
 }
-pub fn fan_patches(domain: &str, subject_url: &str) -> Result<Vec<Resource>, Message> {
+/// 读取同源条目的补丁列表；凭据只发送给 2DFan 站点。
+pub fn fan_patches(
+    domain: &str,
+    subject_url: &str,
+    credentials: Option<&FanCredentials>,
+) -> Result<Vec<Resource>, Message> {
     let base = fan_base(domain)?;
     let url = base.join(subject_url).map_err(network)?;
     if url.host_str() != base.host_str() || !url.path().starts_with("/subjects/") {
         return Err(Message::new("error.site_url"));
     }
-    let body = page(&client()?, url)?;
+    let body = fan_http::page(&base, url, credentials)?;
     Ok(parse_links(&body, &base, "/downloads/", "2DFan"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fan_patch_queries_require_valid_supplied_credentials() {
+        let credentials = FanCredentials {
+            mode: "csrf".into(),
+            cookie: "invalid-cookie".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            search_fan_patches("https://2dfmax.top", "fixture", Some(&credentials))
+                .unwrap_err()
+                .key,
+            "auth.invalid"
+        );
+        assert_eq!(
+            fan_patches(
+                "https://2dfmax.top",
+                "/subjects/1/downloads",
+                Some(&credentials)
+            )
+            .unwrap_err()
+            .key,
+            "auth.invalid"
+        );
+        assert!(fan_base("https://t.vndb.org").is_err());
+    }
     #[test]
     fn resource_metadata_stays_with_its_own_card() {
         let body = r#"<div class='download-card'><h4 class='download-card-title'><a href='/downloads/1'>AI patch</a></h4><span class='download-card-kind'>AI翻译</span><span class='uploader-name'>Author A</span><time class='download-card-date' datetime='2024-01-06T12:00:00+08:00'>2024-01-06</time><span class='download-card-size'>3.4 MB</span></div><div class='download-card'><h4 class='download-card-title'><a href='/downloads/2'>CG save</a></h4><span class='download-card-kind'>全CG存档</span><span class='uploader-name'>Author B</span><time class='download-card-date'>2023-12-22</time></div>"#;

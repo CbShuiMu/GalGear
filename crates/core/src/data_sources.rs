@@ -99,6 +99,9 @@ pub fn covers(domain: &str, url: &str, credentials: &Credentials) -> Result<Vec<
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Credentials {
+    /// 仅在内存中传递 2DFan 会话；仍由原凭据库条目保存，不能混入其他来源。
+    #[serde(skip)]
+    pub fan: Option<FanCredentials>,
     pub token: String,
     pub client_id: String,
     pub client_secret: String,
@@ -134,6 +137,9 @@ pub fn validate_source(source: &str) -> Result<(), Message> {
 }
 pub fn credential_target(config: &Path, source: &str) -> Result<String, Message> {
     validate_source(source)?;
+    if source == "2dfan" {
+        return Ok(credentials::target(config));
+    }
     #[cfg(windows)]
     let normalized = config.to_string_lossy().replace('/', "\\");
     #[cfg(windows)]
@@ -145,6 +151,13 @@ pub fn load(config: &Path, source: &str) -> Result<Credentials, Message> {
     decode_credentials(source, saved)
 }
 fn decode_credentials(source: &str, saved: FanCredentials) -> Result<Credentials, Message> {
+    if source == "2dfan" {
+        saved.validate()?;
+        return Ok(Credentials {
+            fan: Some(saved),
+            ..Default::default()
+        });
+    }
     let mut value: Credentials = if saved.cookie.is_empty() {
         Credentials::default()
     } else {
@@ -163,6 +176,10 @@ fn decode_credentials(source: &str, saved: FanCredentials) -> Result<Credentials
 }
 
 pub fn save(config: &Path, source: &str, value: &Credentials) -> Result<(), Message> {
+    if source == "2dfan" {
+        let fan = value.fan.as_ref().ok_or_else(|| Message::new("auth.invalid"))?;
+        return credentials::save(&credential_target(config, source)?, fan);
+    }
     let mut rest = value.clone();
     rest.token.clear();
     let saved = FanCredentials {
@@ -410,7 +427,7 @@ pub fn search(
         return Err(Message::new("error.metadata"));
     }
     if source == "2dfan" {
-        return providers::search_fan(domain, query);
+        return providers::search_fan(domain, query, credentials.fan.as_ref());
     }
     let client = providers::client()?;
     if source == "nextmoe" {
@@ -676,7 +693,7 @@ pub fn parse_ymgal(value: &Value, url: &str) -> Result<Metadata, Message> {
 pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Metadata, Message> {
     let (source, id) = source_for_url(url)?;
     if source == "2dfan" {
-        return providers::fan_metadata(domain, url);
+        return providers::fan_metadata(domain, url, credentials.fan.as_ref());
     }
     let client = providers::client()?;
     match source {
@@ -732,6 +749,83 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fan_credentials_are_forwarded_without_decoding_cookie_as_json_or_serializing_secrets() {
+        let config = Path::new("C:/Fixture/settings.json");
+        assert_eq!(
+            credential_target(config, "2dfan").unwrap(),
+            credentials::target(config)
+        );
+        let saved = FanCredentials {
+            mode: "csrf".into(),
+            token: "fixture-token".into(),
+            cookie: "session=fixture-session".into(),
+        };
+        let credentials = decode_credentials("2dfan", saved.clone()).unwrap();
+        assert_eq!(credentials.fan.as_ref(), Some(&saved));
+        assert!(credentials.token.is_empty());
+        let serialized = serde_json::to_string(&credentials).unwrap();
+        assert!(!serialized.contains("fixture-"));
+        assert!(!format!("{credentials:?}").contains("fixture-"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn fan_queries_load_the_existing_windows_credential_entry() {
+        let directory = tempfile::tempdir().unwrap();
+        let config = directory.path().join("settings.json");
+        let target = credentials::target(&config);
+        let saved = FanCredentials {
+            mode: "bearer".into(),
+            token: "fixture-token".into(),
+            cookie: "session=fixture-session".into(),
+        };
+        // 使用临时路径生成独立凭据键，绝不读取或修改用户的账号条目。
+        credentials::save(&target, &saved).unwrap();
+        let loaded = load(&config, "2dfan");
+        credentials::clear(&target).unwrap();
+        assert_eq!(loaded.unwrap().fan, Some(saved));
+    }
+
+    #[test]
+    fn fan_search_metadata_and_cover_queries_all_use_supplied_credentials() {
+        let credentials = Credentials {
+            fan: Some(FanCredentials {
+                mode: "csrf".into(),
+                cookie: "invalid-cookie".into(),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        // 无效凭据应在本机校验失败；若任何入口退回匿名，就会错误地发出网络请求。
+        assert_eq!(
+            search("2dfan", "https://2dfmax.top", "fixture", &credentials)
+                .unwrap_err()
+                .key,
+            "auth.invalid"
+        );
+        assert_eq!(
+            metadata(
+                "https://2dfmax.top",
+                "https://2dfmax.top/subjects/1",
+                &credentials
+            )
+            .unwrap_err()
+            .key,
+            "auth.invalid"
+        );
+        assert_eq!(
+            covers(
+                "https://2dfmax.top",
+                "https://2dfmax.top/subjects/1",
+                &credentials
+            )
+            .unwrap_err()
+            .key,
+            "auth.invalid"
+        );
+    }
     #[test]
     fn release_covers_deduplicate_images_and_exclude_backs_and_other_bundle_games() {
         let value = json!({"results":[{"title":"Release", "images":[

@@ -58,8 +58,6 @@ pub(crate) fn source_available(app: &App, source: &str) -> bool {
 pub(crate) fn available_source<'a>(app: &'a App, preferred: &'a str) -> &'a str {
     if source_available(app, preferred) {
         preferred
-    } else if source_available(app, &app.settings.metadata_provider) {
-        &app.settings.metadata_provider
     } else {
         "nextmoe"
     }
