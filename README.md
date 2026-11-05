@@ -20,7 +20,7 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 
 > 当前发行版为 **v0.3.4（2026-11-04）**，新增 NextMoe 补丁下载与浏览器授权，改进存档识别、首页背景和更新提示。
 
-## 开始使用
+## 快速上手
 
 前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
 
@@ -30,27 +30,28 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 第一次打开，可以按这个顺序来：
 
 1. 点击 **添加游戏库**，选择放游戏的文件夹。
-2. 扫描后，在确认窗口里为游戏选好资料来源、对应作品和启动程序。可以先保存已经确认的几款，其余稍后再处理。
+2. 扫描后，在确认窗口里为游戏选好资料来源、对应作品和启动程序。可以先保存已经确认的几款，其余稍后再处理。（可以使用右上角的**批量修改**按钮来批量修改列表的数据源并使用**自动搜索**来获取匹配度高的词条，但是记得在自动搜索后再检查一遍以免有错误）
 3. 打开游戏详情，检查启动配置，点击启动。（自动备份的开启需要启动游戏并进行一次存档）
-4. 找到存档位置并确认，做一份备份。以后换补丁、换电脑或重玩，都方便一些。
 
 ## 功能介绍
 
 | 功能 | 说明 |
 | --- | --- |
 | 游戏管理 | 多目录管理、名称搜索、排序、多层收藏夹、拖放和批量整理，记录游玩时长与最近游玩时间。 |
-| 标签与资料 | 支持组合标签筛选，以及 2DFan、VNDB、Bangumi、月幕 Galgame、未萌 NextMoe、KunGal 资料；封面可单独搜索或选用本地图片。 |
-| 转区与超分 | 通过 Locale Emulator 转区启动，使用 Magpie 实时缩放游戏画面。 |
-| 封面与主题 | waifu2x 后台去噪并生成长边 3840 的首页背景；支持主题、明暗模式、语言与字号设置。[封面增强说明](docs/cover-enhancement.md)。 |
-| 游戏截图 | **Shift+S 截图 → 自动复制到剪贴板 → Ctrl+V 粘贴分享**。同时保存原尺寸无损 PNG，支持 Magpie 输出和最近截图预览。 |
-| 存档备份 | 寻找或手动确认存档位置，支持多目录备份、备注、锁定、恢复预览和退出后自动备份；WebDAV 上传下载需手动操作。[云存储说明](docs/cloud-storage.md)。 |
-| 补丁管理 | NextMoe 托管下载需配置具备 `moyu:files` 权限的应用密钥。 搜索 2DFan、鲲 Gal、NextMoe，支持本地补丁、ZIP / RAR / 7z 解压、冲突预览和备份恢复；2DFan 下载需配置代理。 |
-| AI 辅助（测试中） | 补充存档路径搜索，提供前情提要与 DeepSeek 路线图；需自备 API Token，会发送必要游戏文本并产生 API 费用，路线图可能包含剧透。[AI 设置](docs/ai-settings.md)。 |
+| 标签与资料 | 支持声优、画师、脚本等制作人员标签筛选，同时支持组合标签筛选，以及 未萌 NextMoe、KunGal、VNDB、Bangumi、月幕 Galgame、2DFan 资料；封面可单独搜索或选用本地图片。（感谢以上平台） |
+| 内置转区与超分 | 默认勾选并通过 Locale Emulator 转区启动，使用 Magpie 实时缩放游戏画面。（可在游戏配置中取消勾选） |
+| 封面与主题 | Waifu2x 后台去噪并超分4K 的首页背景；支持主题、明暗模式、语言与字号设置。[封面增强说明](docs/cover-enhancement.md)。 |
+| 游戏截图 | **Shift+S 截图 → 自动复制到剪贴板 → Ctrl+V 粘贴分享**。同时保存原尺寸无损 PNG，支持 Magpie模式下截图和游戏详情下方最近截图预览。 |
+| 存档备份 | 寻找或手动确认存档位置，支持多目录备份、备注、锁定、恢复预览和退出后自动备份（可在设置-路径与备份中设置最大存档数）；WebDAV 上传下载需手动操作。[云存储说明](docs/cloud-storage.md)。 |
+| 补丁管理 | **游戏库联动**—通过选择游戏库内的游戏进行搜索，可将补丁直接存放到游戏目录下的补丁文件夹。NextMoe 托管下载需配置具备 `moyu:files` 权限的应用密钥。 搜索 鲲 Gal、2DFan，支持本地补丁、ZIP / RAR / 7z 自动解压、冲突预览和备份恢复；2DFan 下载需配置代理以及账号令牌。（推荐Nextmoe下载补丁，无需积分且提供直链下载） |
+| AI 辅助（测试中） | **AI存档路径搜索**，提供前情提要与 游戏攻略路线图；需自备 API Token，会发送必要游戏文本并产生 API 费用，路线图可能包含剧透。[AI 设置](docs/ai-settings.md)。（路线图和前情提要还在测试中，AI存档搜索首次开启需要启动游戏进行一次存档。） |
 | 浏览器授权 | Bangumi、NextMoe 支持内置应用 OAuth 登录，用户令牌保存在本机 Windows 凭据管理器。[授权说明](docs/oauth-callback.md)。 |
 | 更新提示 | 启动后后台检查 GalGear 与 Skill 版本，显示待更新提示；点击更新才下载安装。 |
+| 数据导入 | 支持PotatoVN、ReinaManager、LunaBox等。 |
 
 <details>
-<summary>功能使用说明与限制</summary>
+<summary>功能介绍详细说明与限制</summary>
+
 
 ### Galgame管理
 
@@ -128,18 +129,18 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 ## 界面预览
 
-截图来自 v0.3.1（2026-10-31），原始分辨率 2560 × 1392；点击图片可查看原图。
+截图来自 v0.3.1（2026-11-5）；点击图片可查看原图。
 
-[![GalGear 首页：最近游戏、作品背景和快捷启动](assets/readme/home-native.png)](assets/readme/home-native.png)
+[![GalGear 首页：最近游戏、作品背景和快捷启动](assets/readme/home-native.gif)](assets/readme/home-native.gif)
 
-[![GalGear 游戏库：游戏封面、搜索、标签筛选和排序](assets/readme/library-native.png)](assets/readme/library-native.png)
+[![GalGear 游戏库：游戏封面、搜索、标签筛选和排序](assets/readme/library-native.gif)](assets/readme/library-native.gif)
 
 <details>
 <summary>更多界面截图：游戏详情与补丁管理</summary>
 
-[![GalGear ATRI 游戏详情：启动按钮、作品资料、标签、存档和补丁管理](assets/readme/detail-native.png)](assets/readme/detail-native.png)
+[![GalGear ATRI 游戏详情：启动按钮、作品资料、标签、存档和补丁管理](assets/readme/detail-native.gif)](assets/readme/detail-native.gif)
 
-[![GalGear 补丁页：联动游戏库中的 ATRI，展示 2DFan 与鲲 Gal 搜索结果](assets/readme/patches-native.png)](assets/readme/patches-native.png)
+[![GalGear 补丁页：联动游戏库中的 ATRI，展示 2DFan 与鲲 Gal 搜索结果](assets/readme/patch-native.gif)](assets/readme/patch-native.gif)
 
 </details>
 

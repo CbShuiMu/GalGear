@@ -6,11 +6,13 @@
 
 **A Galgame manager with locale emulation, upscaling, patch search and management, metadata from multiple sources, and AI-assisted save discovery.**
 
-Windows x64 · 简体中文 / 日本語 / English
+Windows x64 · Interface languages: 简体中文 / 日本語 / English
 
 [简体中文](README.md) · [日本語](README.ja.md) · [English](README.en.md)
 
-[Download](https://github.com/CbShuiMu/GalGear/releases/latest) · [Getting started](#getting-started) · [Features](#features) · [Report an issue](https://github.com/CbShuiMu/GalGear/issues)
+QQ community and feedback group: 607755362
+
+[Download](https://github.com/CbShuiMu/GalGear/releases/latest) · [Quick start](#quick-start) · [Features](#features) · [Report an issue](https://github.com/CbShuiMu/GalGear/issues)
 
 </div>
 
@@ -18,7 +20,7 @@ GalGear is a local Galgame manager for Windows. Add your game folders to browse 
 
 > The current release is **v0.3.4 (November 4, 2026)**, adding NextMoe patch downloads and browser authorization, with improved save discovery, home backgrounds, and update notices.
 
-## Getting started
+## Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
@@ -28,27 +30,27 @@ Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/Gal
 For your first launch:
 
 1. Add a game library and select the folder containing your games.
-2. After scanning, use the confirmation window to choose each game's metadata source, matching title, and executable. You can save the games you have confirmed and handle the rest later.
+2. After scanning, use the confirmation window to choose each game's metadata source, matching title, and executable. You can save the games you have confirmed and handle the rest later. Use **Batch change** at the top right to change the metadata source for the list, then **Auto search** to find close matches. Review the results afterward to catch incorrect matches.
 3. Open the game details, check the launch configuration, and launch the game. To enable automatic backups, first launch the game and create a save.
-4. Find and confirm the save location, then make a backup. This makes it easier to change patches, move to another computer, or replay a game later.
 
 ## Features
 
 | Feature | Description |
 | --- | --- |
 | Library | Manage multiple folders, search, sort, organize nested favorites, drag and drop, and track playtime and last played dates. |
-| Tags and metadata | Combine tag filters and choose metadata from 2DFan, VNDB, Bangumi, 月幕 Galgame, 未萌 NextMoe, or KunGal. Search covers independently or use local images. |
-| Locale and scaling | Launch through Locale Emulator and scale game images in real time with Magpie. |
-| Covers and themes | waifu2x denoises covers and creates home backgrounds with a 3840-pixel long edge. Customize themes, light/dark mode, language, and font size. [Details](docs/cover-enhancement.md). |
-| Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, with Magpie output and recent screenshot previews. |
-| Backups | Find or confirm save locations; back up multiple folders, add notes, lock backups, preview restores, and enable backups after game exit. WebDAV transfers are manual. [Cloud storage](docs/cloud-storage.md). |
-| Patches | NextMoe hosted downloads require an application key with `moyu:files` permission. Search 2DFan, KunGal, and NextMoe, import local patches, extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy. |
-| AI (experimental) | Supplement save discovery, generate recaps and DeepSeek route maps. Requires your own API token, sends necessary game text, and incurs API costs. Route maps may contain spoilers. [AI settings](docs/ai-settings.md). |
+| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕 Galgame, and 2DFan. Search covers independently or use local images. Thanks to these platforms. |
+| Bundled locale emulation and upscaling | Enabled by default: launch through Locale Emulator and scale game images in real time with Magpie. You can uncheck these options in the game configuration. |
+| Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
+| Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, supports capture in Magpie mode, and shows the latest screenshot below the game details. |
+| Backups | Find or confirm save locations; back up multiple folders, add notes, lock backups, preview restores, and enable backups after game exit. Set the maximum backup count under Settings → Paths and backups. WebDAV transfers are manual. [Cloud storage](docs/cloud-storage.md). |
+| Patches | **Linked to your library**: select a library game to search and save patches directly in its patch folder. NextMoe hosted downloads require an application key with `moyu:files` permission. Search KunGal and 2DFan, import local patches, automatically extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy and account token. NextMoe is recommended for patch downloads: no points required, with direct download links. |
+| AI (experimental) | **AI-assisted save path discovery**, story recaps, and walkthrough route maps. Requires your own API token, sends necessary game text, and incurs API costs. Route maps may contain spoilers. [AI settings](docs/ai-settings.md). Recaps and route maps are still being tested; before using AI save discovery for the first time, launch the game and create a save. |
 | Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
 | Update notices | Checks GalGear and Skill versions in the background at startup. Downloads and installation start only when you choose to update. |
+| Data import | Supports PotatoVN, ReinaManager, LunaBox, and more. |
 
 <details>
-<summary>Usage details and limitations</summary>
+<summary>Detailed feature descriptions and limitations</summary>
 
 ### Galgame management
 
@@ -120,18 +122,18 @@ These features are experimental. Save and script support varies by game, and gen
 
 ## Interface preview
 
-Screenshots are from v0.3.1 (October 31, 2026), saved at 2560 × 1392. Click an image to view the original.
+Screenshots are from v0.3.1 (November 5, 2026). Click an image to view the original.
 
-[![GalGear home: recent games, game artwork, and quick launch](assets/readme/home-native.png)](assets/readme/home-native.png)
+[![GalGear home: recent games, game artwork, and quick launch](assets/readme/home-native.gif)](assets/readme/home-native.gif)
 
-[![GalGear library: game covers, search, tag filters, and sorting](assets/readme/library-native.png)](assets/readme/library-native.png)
+[![GalGear library: game covers, search, tag filters, and sorting](assets/readme/library-native.gif)](assets/readme/library-native.gif)
 
 <details>
 <summary>More screenshots: game details and patch management</summary>
 
-[![GalGear ATRI details: launch button, metadata, tags, save management, and patches](assets/readme/detail-native.png)](assets/readme/detail-native.png)
+[![GalGear ATRI details: launch button, metadata, tags, save management, and patches](assets/readme/detail-native.gif)](assets/readme/detail-native.gif)
 
-[![GalGear patches: ATRI selected from the library, with results from 2DFan and KunGal](assets/readme/patches-native.png)](assets/readme/patches-native.png)
+[![GalGear patches: ATRI selected from the library, with results from 2DFan and KunGal](assets/readme/patch-native.gif)](assets/readme/patch-native.gif)
 
 </details>
 

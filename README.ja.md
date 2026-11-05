@@ -6,11 +6,13 @@
 
 **Galgame に特化した管理ツール。ロケールエミュレーション、超解像、パッチの検索・管理、複数ソースからの作品情報取得、AI によるセーブデータ検索に対応。**
 
-Windows x64 · 简体中文 / 日本語 / English
+Windows x64 · 対応表示言語：简体中文 / 日本語 / English
 
 [简体中文](README.md) · [日本語](README.ja.md) · [English](README.en.md)
 
-[ダウンロード](https://github.com/CbShuiMu/GalGear/releases/latest) · [使い始める](#使い始める) · [機能紹介](#機能紹介) · [不具合の報告](https://github.com/CbShuiMu/GalGear/issues)
+交流・フィードバック用 QQ グループ：607755362
+
+[ダウンロード](https://github.com/CbShuiMu/GalGear/releases/latest) · [クイックスタート](#クイックスタート) · [機能紹介](#機能紹介) · [不具合の報告](https://github.com/CbShuiMu/GalGear/issues)
 
 </div>
 
@@ -18,7 +20,7 @@ GalGear は、Windows 向けのローカル Galgame 管理ツールです。ゲ�
 
 > 現在のリリースは **v0.3.4（2026-11-04）** です。NextMoe のパッチ取得とブラウザー認証を追加し、セーブ検出、ホーム背景、更新通知を改善しました。
 
-## 使い始める
+## クイックスタート
 
 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) から Windows x64 版をダウンロードしてください。
 
@@ -28,27 +30,27 @@ GalGear は、Windows 向けのローカル Galgame 管理ツールです。ゲ�
 初回起動時は、次の手順で設定できます。
 
 1. ゲームライブラリを追加し、ゲームを保存しているフォルダーを選びます。
-2. スキャン後の確認画面で、各ゲームの情報ソース、対応する作品、起動プログラムを選びます。確認できたゲームだけ先に保存し、残りは後で設定することもできます。
+2. スキャン後の確認画面で、各ゲームの情報ソース、対応する作品、起動プログラムを選びます。確認できたゲームだけ先に保存し、残りは後で設定することもできます。右上の**一括変更**で一覧の情報ソースをまとめて変更し、**自動検索**で一致度の高い候補を取得できます。誤った候補がないか、自動検索後に必ず確認してください。
 3. ゲームの詳細画面で起動設定を確認してから起動します。自動バックアップを有効にするには、ゲームを起動して一度セーブする必要があります。
-4. セーブデータの保存場所を確認し、バックアップを作成します。パッチの変更、別の PC への移行、再プレイに備えられます。
 
 ## 機能紹介
 
 | 機能 | 内容 |
 | --- | --- |
 | ゲーム管理 | 複数フォルダー、検索、並べ替え、階層型のお気に入り、ドラッグ＆ドロップ、一括整理、プレイ時間の記録に対応。 |
-| タグ・情報 | タグを組み合わせて絞り込み。2DFan、VNDB、Bangumi、月幕 Galgame、未萌 NextMoe、KunGal に対応し、カバーの個別検索やローカル画像の利用も可能。 |
-| 起動と超解像 | Locale Emulator で起動時のロケールを変更し、Magpie でゲーム画面をリアルタイム拡大。 |
-| カバー・テーマ | waifu2x でノイズを除去し、長辺 3840 のホーム背景を生成。テーマ、明暗モード、言語、文字サイズを設定可能。[詳細](docs/cover-enhancement.md)。 |
-| 撮影・共有 | **Shift+S で撮影 → クリップボードへ自動コピー → Ctrl+V で貼り付け・共有**。元の解像度の可逆 PNG 保存、Magpie 出力と最新画像のプレビューに対応。 |
-| バックアップ | 保存場所の検出・確認、複数フォルダーのバックアップ、メモ、ロック、復元プレビュー、終了後の自動バックアップ。WebDAV 転送は手動です。[詳細](docs/cloud-storage.md)。 |
-| パッチ管理 | NextMoe のホスト済みファイルの取得には `moyu:files` 権限のアプリキーが必要です。 2DFan・KunGal・NextMoe の検索、ローカルパッチ、ZIP / RAR / 7z の展開、競合確認と復元。2DFan のダウンロードにはプロキシ設定が必要。 |
-| AI（試験中） | セーブデータ検索の補助、あらすじと DeepSeek ルートマップ。自分の API トークンが必要で、必要なゲーム文章を送信し利用料が発生します。ルートマップにはネタバレを含む場合があります。[AI 設定](docs/ai-settings.md)。 |
+| タグ・情報 | 声優、原画家、シナリオ担当などのスタッフタグと、タグの組み合わせで絞り込み。未萌 NextMoe、KunGal、VNDB、Bangumi、月幕 Galgame、2DFan の作品情報に対応し、カバーの個別検索やローカル画像も利用できます。各プラットフォームに感謝します。 |
+| 内蔵ロケール変更・超解像 | 既定で有効になっており、Locale Emulator で起動し、Magpie でゲーム画面をリアルタイム拡大します。ゲーム設定でチェックを外すこともできます。 |
+| カバー・テーマ | Waifu2x がバックグラウンドでノイズを除去し、ホーム背景を 4K にアップスケール。テーマ、明暗モード、言語、文字サイズを設定可能。[詳細](docs/cover-enhancement.md)。 |
+| 撮影・共有 | **Shift+S で撮影 → クリップボードへ自動コピー → Ctrl+V で貼り付け・共有**。元の解像度の可逆 PNG も保存し、Magpie モードでの撮影とゲーム詳細下部の最新画像プレビューに対応。 |
+| バックアップ | 保存場所の検出・確認、複数フォルダーのバックアップ、メモ、ロック、復元プレビュー、終了後の自動バックアップ。「設定 → パスとバックアップ」で保存数の上限を設定できます。WebDAV 転送は手動です。[詳細](docs/cloud-storage.md)。 |
+| パッチ管理 | **ライブラリと連携**：登録ゲームを選んで検索し、ゲーム内のパッチフォルダーに直接保存できます。NextMoe のホスト済みファイルの取得には `moyu:files` 権限のアプリキーが必要です。KunGal・2DFan の検索、ローカルパッチ、ZIP / RAR / 7z の自動展開、競合確認と復元に対応。2DFan のダウンロードにはプロキシとアカウントトークンが必要です。ポイント不要で直接リンクを提供する NextMoe のパッチ取得を推奨します。 |
+| AI（試験中） | **AI によるセーブデータの保存場所検索**、あらすじ、ゲーム攻略ルートマップ。自分の API トークンが必要で、必要なゲーム文章を送信し利用料が発生します。ルートマップにはネタバレを含む場合があります。[AI 設定](docs/ai-settings.md)。あらすじとルートマップは試験中です。初めて AI セーブ検索を使う前に、ゲームを起動して一度セーブしてください。 |
 | ブラウザー認証 | Bangumi・NextMoe の内蔵 OAuth ログイン。ユーザートークンは Windows 資格情報マネージャーに保存。[詳細](docs/oauth-callback.md)。 |
 | 更新通知 | 起動後に GalGear と Skill の版をバックグラウンド確認。更新を選んだときだけダウンロード・インストールします。 |
+| データのインポート | PotatoVN、ReinaManager、LunaBox などに対応。 |
 
 <details>
-<summary>使い方と制限の詳細</summary>
+<summary>機能紹介の詳細と制限</summary>
 
 ### Galgame の管理
 
@@ -120,18 +122,18 @@ Waifu2x がバックグラウンドでカバー画像のノイズを除去し、
 
 ## 画面プレビュー
 
-画像は v0.3.1（2026-10-31）の画面を 2560 × 1392 で保存したものです。クリックすると原寸で表示できます。
+画像は v0.3.1（2026-11-5）の画面です。クリックすると原寸で表示できます。
 
-[![GalGear ホーム：最近遊んだゲーム、作品の背景画像、クイック起動](assets/readme/home-native.png)](assets/readme/home-native.png)
+[![GalGear ホーム：最近遊んだゲーム、作品の背景画像、クイック起動](assets/readme/home-native.gif)](assets/readme/home-native.gif)
 
-[![GalGear ライブラリ：カバー画像、検索、タグによる絞り込み、並べ替え](assets/readme/library-native.png)](assets/readme/library-native.png)
+[![GalGear ライブラリ：カバー画像、検索、タグによる絞り込み、並べ替え](assets/readme/library-native.gif)](assets/readme/library-native.gif)
 
 <details>
 <summary>その他の画面：ゲーム詳細・パッチ管理</summary>
 
-[![GalGear の ATRI 詳細画面：起動ボタン、作品情報、タグ、セーブデータとパッチの管理](assets/readme/detail-native.png)](assets/readme/detail-native.png)
+[![GalGear の ATRI 詳細画面：起動ボタン、作品情報、タグ、セーブデータとパッチの管理](assets/readme/detail-native.gif)](assets/readme/detail-native.gif)
 
-[![GalGear パッチ画面：ライブラリの ATRI と連携した 2DFan・KunGal・NextMoe の検索結果](assets/readme/patches-native.png)](assets/readme/patches-native.png)
+[![GalGear パッチ画面：ライブラリの ATRI と連携した 2DFan・KunGal・NextMoe の検索結果](assets/readme/patch-native.gif)](assets/readme/patch-native.gif)
 
 </details>
 
