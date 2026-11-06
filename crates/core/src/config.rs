@@ -37,8 +37,7 @@ impl ConfigStore {
                 // user choices are stored as "normal" or "locale".
                 for edit in settings.game_edits.values_mut() {
                     if edit.launch_mode.is_empty() {
-                        edit.launch_mode = "locale".into();
-                        edit.upscale = true;
+                        edit.launch_mode = "normal".into();
                     }
                 }
                 Ok(settings)
@@ -98,6 +97,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn font_shortcut_defaults_for_old_config_and_survives_reopening() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(temp.path().join("settings.json"));
+        fs::write(&store.path, r#"{"version":1}"#).unwrap();
+        let mut settings = store.load().unwrap();
+        assert_eq!(settings.font_hotkey, "Shift+T");
+        settings.font_hotkey = "Ctrl+Alt+F9".into();
+        store.save(&settings).unwrap();
+        assert_eq!(ConfigStore::new(store.path).load().unwrap(), settings);
+    }
+
+    #[test]
     fn feature_visibility_defaults_on_and_survives_reopening() {
         let temp = tempfile::tempdir().unwrap();
         let store = ConfigStore::new(temp.path().join("settings.json"));
@@ -111,27 +122,39 @@ mod tests {
     }
 
     #[test]
-    fn launch_defaults_upgrade_untouched_games_and_preserve_saved_opt_outs() {
+    fn launch_defaults_are_off_and_preserve_saved_choices() {
         let temp = tempfile::tempdir().unwrap();
         let store = ConfigStore::new(temp.path().join("settings.json"));
-        fs::write(&store.path, r#"{"version":1,"game_edits":{
+        fs::write(
+            &store.path,
+            r#"{"version":1,"game_edits":{
             "legacy":{"launch_mode":"","upscale":false},
             "missing":{},
-            "custom":{"launch_mode":"normal","upscale":false}
-        }}"#).unwrap();
+            "custom":{"launch_mode":"normal","upscale":false},
+            "enabled":{"launch_mode":"locale","upscale":true},
+            "legacy_upscale":{"launch_mode":"","upscale":true}
+        }}"#,
+        )
+        .unwrap();
         let mut settings = store.load().unwrap();
         for id in ["legacy", "missing"] {
-            assert_eq!(settings.game_edits[id].launch_mode, "locale");
-            assert!(settings.game_edits[id].upscale);
+            assert_eq!(settings.game_edits[id].launch_mode, "normal");
+            assert!(!settings.game_edits[id].upscale);
         }
         assert_eq!(settings.game_edits["custom"].launch_mode, "normal");
         assert!(!settings.game_edits["custom"].upscale);
-        settings.game_edits.insert("new".into(), crate::GameEdit::default());
-        assert_eq!(settings.game_edits["new"].launch_mode, "locale");
-        assert!(settings.game_edits["new"].upscale);
+        assert_eq!(settings.game_edits["enabled"].launch_mode, "locale");
+        assert!(settings.game_edits["enabled"].upscale);
+        assert_eq!(settings.game_edits["legacy_upscale"].launch_mode, "normal");
+        assert!(settings.game_edits["legacy_upscale"].upscale);
+        settings
+            .game_edits
+            .insert("new".into(), crate::GameEdit::default());
+        assert_eq!(settings.game_edits["new"].launch_mode, "normal");
+        assert!(!settings.game_edits["new"].upscale);
         let edit = settings.game_edits.get_mut("legacy").unwrap();
-        edit.launch_mode = "normal".into();
-        edit.upscale = false;
+        edit.launch_mode = "locale".into();
+        edit.upscale = true;
         store.save(&settings).unwrap();
         assert_eq!(store.load().unwrap(), settings);
     }

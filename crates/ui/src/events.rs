@@ -12,6 +12,8 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 #[wasm_bindgen(start)]
 pub fn start() {
+    #[cfg(target_arch = "wasm32")]
+    std::panic::set_hook(Box::new(|panic| crate::bridge::report_panic(&panic.to_string())));
     APP.with(|state| {
         let mut app = state.borrow_mut();
         issue(&mut app, Pending::Bootstrap, "bootstrap", json!({}));

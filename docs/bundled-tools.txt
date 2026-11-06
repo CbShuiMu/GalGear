@@ -53,3 +53,8 @@ https://github.com/CbShuiMu/Galgear-GalgameReverse-Skill
 本地缺失或 commit 变化时下载对应 ZIP 并解压，校验成功后替换软件目录中的
 Galgear-GalgameReverse-Skill 文件夹；未变化则复用，更新失败保留已有版本。
 首次下载需要联网和软件目录写入权限。AI 宿主仍随 tools/ai-agent 附带。
+
+游戏字体面板（Shift+T）
+游戏前台时打开右上角字体面板。应用时按实际游戏进程位数选择 x86/x64 SimpleFontHook 兼容构建；组件位于 tools/font-hook。Rust 面板提供字体、宽高、字距、行距、字重、垂直度量、字符集伪装、文字映射及预览，游戏内提交刷新。兼容构建处理转区字体识别、运行中安装及引擎刷新，隐藏上游原 UI。
+SimpleFontHook: https://github.com/SuQiandYing/SimpleFontHook
+MIT 许可证随包保留，Detours 使用 Microsoft MIT 许可。

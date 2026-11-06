@@ -9,22 +9,8 @@ fn error(e: impl ToString) -> Message {
 
 /// 复用已有按键名称规则，并限制为修饰键加一个普通键；返回规范名称。
 pub fn hotkey(value: &str) -> Result<String, Message> {
-    let keys = crate::runtime::hotkey_keys(value)
-        .map_err(|_| Message::new("screenshot.invalid_hotkey"))?;
-    if keys
-        .last()
-        .is_none_or(|key| matches!(key, 0x10..=0x12 | 0x5b))
-    {
-        return Err(Message::new("screenshot.invalid_hotkey"));
-    }
-    let mut modifiers: Vec<_> = keys[..keys.len() - 1].to_vec();
-    modifiers.sort_unstable();
-    modifiers.push(keys[keys.len() - 1]);
-    Ok(modifiers
-        .into_iter()
-        .filter_map(crate::runtime::hotkey_key_name)
-        .collect::<Vec<_>>()
-        .join("+"))
+    crate::runtime::canonical_hotkey(value)
+        .map_err(|_| Message::new("screenshot.invalid_hotkey"))
 }
 
 fn is_link(metadata: &std::fs::Metadata) -> bool {

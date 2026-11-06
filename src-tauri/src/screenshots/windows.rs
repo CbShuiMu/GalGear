@@ -7,10 +7,9 @@ use windows_sys::Win32::{
     UI::{HiDpi::*, WindowsAndMessaging::*},
 };
 
-pub(super) mod elevated;
+#[cfg(test)]
 mod keyboard;
-mod magpie;
-pub(super) use keyboard::Keyboard;
+use crate::game_window::magpie;
 mod notification;
 pub(super) use notification::Notification;
 
@@ -22,32 +21,6 @@ pub(super) struct Frame {
 
 fn last_error() -> String {
     std::io::Error::last_os_error().to_string()
-}
-
-pub(super) fn foreground() -> Option<(HWND, std::path::PathBuf)> {
-    use windows_sys::Win32::{Foundation::CloseHandle, System::Threading::*};
-    // SAFETY: 系统填充有效缓冲；进程查询句柄不跨线程，所有分支均关闭。
-    unsafe {
-        let window = magpie::source(GetForegroundWindow());
-        let mut pid = 0;
-        GetWindowThreadProcessId(window, &mut pid);
-        if window.is_null() || pid == std::process::id() || IsIconic(window) != 0 {
-            return None;
-        }
-        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if process.is_null() {
-            return None;
-        }
-        let mut buffer = vec![0; 32768];
-        let mut length = buffer.len() as u32;
-        let ok = QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut length);
-        CloseHandle(process);
-        if ok == 0 {
-            return None;
-        }
-        let path = std::path::PathBuf::from(String::from_utf16_lossy(&buffer[..length as usize]));
-        Some((window, path.canonicalize().ok()?))
-    }
 }
 
 pub(super) fn register(window: HWND, id: i32, hotkey: &str) -> Result<(), galgear_i18n::Message> {

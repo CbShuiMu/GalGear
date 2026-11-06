@@ -18,6 +18,14 @@ pub(crate) fn open_resource(url: String) -> Result<(), Message> {
 
 pub(crate) fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("diagnostics")
+                .js_init_script(crate::diagnostics::FRONTEND_SCRIPT)
+                .build(),
+        )
+        .on_page_load(|window, payload| {
+            log::info!("page_load window={} event={:?}", window.label(), payload.event());
+        })
         .register_uri_scheme_protocol("galgear-icon", |context, request| {
             let id = request.uri().path().trim_start_matches('/');
             let bytes = if id.len() == 64 && id.bytes().all(|c| c.is_ascii_hexdigit()) {
@@ -84,6 +92,8 @@ pub(crate) fn run() {
                 .expect("Static background response")
         })
         .setup(|app| {
+            crate::diagnostics::observe_events(app.handle());
+            log::info!("desktop_setup webview_version={:?}", tauri::webview_version());
             let exe_dir = std::env::current_exe()?
                 .parent()
                 .ok_or_else(|| std::io::Error::other("Executable directory"))?
@@ -93,6 +103,7 @@ pub(crate) fn run() {
             } else {
                 app.path().app_config_dir()?
             };
+            log::info!("loading_state portable={} data_dir={}", exe_dir.join("portable.flag").exists(), data_dir.display());
             let state = AppState::load(data_dir).map_err(std::io::Error::other)?;
             {
                 let mut settings = state.settings.lock().map_err(|_| std::io::Error::other("Settings lock"))?;
@@ -108,7 +119,18 @@ pub(crate) fn run() {
                 tauri::Theme::Light
             }));
             app.manage(state);
-            crate::screenshots::start(app.handle().clone()).map_err(std::io::Error::other)?;
+            #[cfg(windows)]
+            {
+                let (input, [screenshots, fonts]) = crate::game_input::start().map_err(std::io::Error::other)?;
+                app.manage(input);
+                crate::screenshots::start(app.handle().clone(), screenshots).map_err(std::io::Error::other)?;
+                crate::font_tools::start(app.handle().clone(), fonts).map_err(std::io::Error::other)?;
+            }
+            #[cfg(not(windows))]
+            {
+                crate::screenshots::start(app.handle().clone()).map_err(std::io::Error::other)?;
+                crate::font_tools::start(app.handle().clone()).map_err(std::io::Error::other)?;
+            }
             app.manage(crate::import::Imports::default());
             let show = tauri::menu::MenuItem::with_id(
                 app,
@@ -158,10 +180,12 @@ pub(crate) fn run() {
                     }
                 })
                 .build(app)?;
+            log::info!("desktop_ready");
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                log::info!("window_close_requested window={}", window.label());
                 let state = window.state::<AppState>();
                 if snapshot(&state).is_ok_and(|s| s.close_behavior == "tray") {
                     api.prevent_close();
@@ -169,7 +193,8 @@ pub(crate) fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(crate::diagnostics::trace_commands(tauri::generate_handler![
+            crate::diagnostics::record_diagnostic,
             library::bootstrap,
             crate::screenshots::latest_screenshot,
             crate::screenshots::open_screenshot_folder,
@@ -287,16 +312,35 @@ pub(crate) fn run() {
             tools::set_game_tools,
             tools::game_runtime,
             tools::upscale_game,
-        ])
+        ]))
         .build(tauri::generate_context!())
-        .expect("GalGear startup failed")
+        .unwrap_or_else(|error| {
+            log::error!("startup_failed {error:?}");
+            rfd::MessageDialog::new()
+                .set_title("GalGear")
+                .set_description(
+                    Message::detail("diagnostics.startup_failed", &error).render(Default::default()),
+                )
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+            log::logger().flush();
+            std::process::exit(1);
+        })
         .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { code, .. } = &event {
+                log::info!("exit_requested code={code:?}");
+            }
             if matches!(event, tauri::RunEvent::Exit) {
+                log::info!("shutdown_start");
                 app.state::<crate::screenshots::Service>().stop();
+                app.state::<crate::font_tools::Service>().stop();
+                #[cfg(windows)]
+                app.state::<crate::game_input::Service>().stop();
                 if let Err(error) = tools::shutdown_magpie(&app.state::<AppState>()) {
-                    eprintln!("Magpie shutdown: {error:?}");
+                    log::error!("Magpie shutdown: {error:?}");
                 }
                 galgear_core::ai_summary::shutdown();
+                crate::diagnostics::finish();
             }
         });
 }

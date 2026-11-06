@@ -411,6 +411,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             // Do not let a previous preferences request undo a completed save.
                             app.magpie_observed_through = id.checked_sub(1);
                             app.screenshots.saved(id);
+                            app.tool_preferences.saved(id);
                             features::clear_saved_tool_drafts(&mut app);
                             show_toast(&mut app, Message::new("notice.saved"), false);
                             issue(&mut app, Pending::Preferences, "get_preferences", json!({}));

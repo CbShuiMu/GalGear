@@ -30,12 +30,13 @@ pub(crate) fn clear_saved_tool_drafts(app: &mut App) {
     for (field, saved) in [
         ("tool-hotkey", app.settings.magpie_hotkey.clone()),
         ("screenshot-hotkey", app.settings.screenshot_hotkey.clone()),
+        ("font-hotkey", app.settings.font_hotkey.clone()),
         ("tool-magpie", app.settings.magpie.clone()),
         ("tool-locale", app.settings.locale_emulator.clone()),
         ("backup-retention", app.settings.backup_retention.to_string()),
     ] {
         if app.form.get(field).is_some_and(|draft| {
-            if matches!(field, "tool-hotkey" | "screenshot-hotkey") { same_hotkey(draft, &saved) }
+            if matches!(field, "tool-hotkey" | "screenshot-hotkey" | "font-hotkey") { same_hotkey(draft, &saved) }
             else { draft.trim().eq_ignore_ascii_case(&saved) }
         }) { app.form.remove(field); }
     }
@@ -59,6 +60,7 @@ fn game_tools(app: &mut App, id: &str, mode: Option<&str>, auto: Option<bool>) {
 }
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
+    if crate::shortcut_picker::dispatch(app, action, value) { return true; }
     if crate::detail_tags::dispatch(app, action, value) {
         return true;
     }
@@ -81,7 +83,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     .settings
                     .game_edits
                     .get(&id)
-                    .is_none_or(|edit| edit.launch_mode == "locale");
+                    .is_some_and(|edit| edit.launch_mode == "locale");
                 game_tools(
                     app,
                     &id,
@@ -492,7 +494,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                         .settings
                         .game_edits
                         .get(value)
-                        .is_none_or(|e| e.launch_mode == "locale"));
+                        .is_some_and(|e| e.launch_mode == "locale"));
             match app.runtime.get(value).map(String::as_str) {
                 Some("running") => show_toast(app, Message::new("error.already_running"), true),
                 Some("stopped") => launch(app, value, locale, false),
@@ -535,7 +537,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                     app,
                     Pending::Tools,
                     "configure_tools",
-                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupRetention":retention,"screenshotHotkey":setting(app,"screenshot-hotkey",&settings.screenshot_hotkey),"magpieMode":crate::tool_preferences::selection(app)}),
+                    json!({"localeEmulator":locale,"magpie":magpie,"magpieHotkey":hotkey,"backupRetention":retention,"screenshotHotkey":setting(app,"screenshot-hotkey",&settings.screenshot_hotkey),"fontHotkey":setting(app,"font-hotkey",&settings.font_hotkey),"magpieMode":crate::tool_preferences::selection(app)}),
                 );
             } else {
                 show_toast(app, Message::new("backup.retention_error"), true);
@@ -837,26 +839,30 @@ mod tests {
     }
 
     #[test]
-    fn default_launch_options_are_checked_and_can_be_switched_off() {
+    fn default_launch_options_are_unchecked_and_can_be_switched_on() {
         for persisted in [false, true] {
             let mut app = App::default();
             let game: Game = serde_json::from_value(json!({
                 "id":"game", "title":"Game", "folder":"F:/Game",
                 "engine":"unknown", "modified":0
-            })).unwrap();
+            }))
+            .unwrap();
             app.detail.selected = Some(game.id.clone());
             app.detail.editor = Some(detail::Editor::Tools);
             if persisted {
-                app.settings.game_edits.insert(game.id.clone(), serde_json::from_str("{}").unwrap());
+                app.settings
+                    .game_edits
+                    .insert(game.id.clone(), serde_json::from_str("{}").unwrap());
             }
             let mut html = String::new();
             detail::render(&mut html, &app, &game);
-            assert!(html.contains("aria-checked=\"true\" data-action=\"toggle-locale\""));
-            assert!(html.contains("aria-checked=\"true\" data-action=\"toggle-upscale\""));
+            assert!(html.contains("aria-checked=\"false\" data-action=\"toggle-locale\""));
+            assert!(html.contains("aria-checked=\"false\" data-action=\"toggle-upscale\""));
+            assert!(html.contains("<span>转区</span>"));
             crate::bridge::take_requests();
             for (action, mode, upscale) in [
-                ("toggle-locale", "normal", true),
-                ("toggle-upscale", "locale", false),
+                ("toggle-locale", "locale", false),
+                ("toggle-upscale", "normal", true),
             ] {
                 dispatch(&mut app, action, "");
                 let requests = crate::bridge::take_requests();
@@ -866,6 +872,13 @@ mod tests {
                 assert_eq!(payload["upscale"], upscale);
                 app.requests.complete(requests[0].0);
             }
+            app.runtime.insert(game.id.clone(), "stopped".into());
+            dispatch(&mut app, "launch", &game.id);
+            let requests = crate::bridge::take_requests();
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0].1, "launch_game");
+            let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+            assert_eq!(payload["mode"], "normal");
         }
     }
 
@@ -1021,6 +1034,7 @@ mod tests {
         let mut app = App::default();
         let path = "F:/Locale Emulator/LEProc.exe";
         app.form.insert("tool-locale".into(), path.into());
+        app.form.insert("font-hotkey".into(), "Alt+F9".into());
 
         dispatch(&mut app, "configure-tools", "");
 
@@ -1030,6 +1044,8 @@ mod tests {
         let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
         assert_eq!(payload["localeEmulator"], path);
         assert_eq!(payload["magpieHotkey"], "Ctrl+Alt+A");
+        assert_eq!(payload["fontHotkey"], "Alt+F9");
+        assert_eq!(app.settings.font_hotkey, "Shift+T");
         assert!(matches!(
             app.requests.complete(requests[0].0),
             Some(Pending::Tools)

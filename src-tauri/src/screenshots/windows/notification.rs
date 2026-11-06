@@ -1,11 +1,11 @@
-//! 原生短提示沿用应用的明暗和配色，显示在游戏所在屏幕，不激活或抢焦点。
+//! 原生短提示沿用应用的明暗和配色，显示在游戏客户区右下角，不激活或抢焦点。
+use super::{DpiContext, magpie};
 use std::{
-    mem::size_of,
     ptr,
     time::{Duration, Instant},
 };
 use windows_sys::Win32::{
-    Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
+    Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
     Graphics::Gdi::*,
     System::LibraryLoader::GetModuleHandleW,
     UI::{HiDpi::*, WindowsAndMessaging::*},
@@ -21,6 +21,26 @@ struct Content {
 }
 fn rgb(value: u32) -> u32 {
     (value & 255) << 16 | value & 0xff00 | value >> 16
+}
+
+fn notice_bounds(client: RECT, scale: f32) -> Option<RECT> {
+    let available_width = client.right - client.left;
+    let available_height = client.bottom - client.top;
+    if available_width <= 0 || available_height <= 0 {
+        return None;
+    }
+    // 小窗口也保留提示在客户区内，避免固定尺寸将提示推到游戏之外。
+    let margin = ((24.0 * scale) as i32).min((available_width.min(available_height) - 1) / 2);
+    let width = ((400.0 * scale) as i32).min(available_width - 2 * margin);
+    let height = ((100.0 * scale) as i32).min(available_height - 2 * margin);
+    let right = client.right - margin;
+    let bottom = client.bottom - margin;
+    Some(RECT {
+        left: right - width,
+        top: bottom - height,
+        right,
+        bottom,
+    })
 }
 
 #[derive(Default)]
@@ -58,23 +78,48 @@ impl Notification {
         error: bool,
     ) {
         self.hide();
-        // SAFETY: 系统查询有效窗口的监视器和 DPI；无窗口时使用最近屏幕。
+        // SAFETY: 只查询目标窗口；坐标缓冲有效，DPI 上下文在本线程通过 RAII 恢复。
         unsafe {
             let dpi_context =
                 SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-            let scale = GetDpiForWindow(target).max(96) as f32 / 96.0;
-            let mut monitor: MONITORINFO = std::mem::zeroed();
-            monitor.cbSize = size_of::<MONITORINFO>() as u32;
-            if GetMonitorInfoW(
-                MonitorFromWindow(target, MONITOR_DEFAULTTONEAREST),
-                &mut monitor,
-            ) == 0
-            {
-                if !dpi_context.is_null() {
-                    SetThreadDpiAwarenessContext(dpi_context);
-                }
+            if dpi_context.is_null() {
                 return;
             }
+            let _dpi = DpiContext(dpi_context);
+            // 与采集共用 Magpie 输出关联，提示应落在玩家实际看到的画面内。
+            let output = magpie::output(target);
+            if IsWindowVisible(output) == 0 || IsIconic(output) != 0 {
+                return;
+            }
+            let mut client = RECT::default();
+            if GetClientRect(output, &mut client) == 0 {
+                return;
+            }
+            let mut top_left = POINT {
+                x: client.left,
+                y: client.top,
+            };
+            let mut bottom_right = POINT {
+                x: client.right,
+                y: client.bottom,
+            };
+            if ClientToScreen(output, &mut top_left) == 0
+                || ClientToScreen(output, &mut bottom_right) == 0
+            {
+                return;
+            }
+            let scale = GetDpiForWindow(output).max(96) as f32 / 96.0;
+            let Some(bounds) = notice_bounds(
+                RECT {
+                    left: top_left.x,
+                    top: top_left.y,
+                    right: bottom_right.x,
+                    bottom: bottom_right.y,
+                },
+                scale,
+            ) else {
+                return;
+            };
             let dark = theme == "dark";
             let neutral = palette == "white";
             let background = if dark {
@@ -116,16 +161,15 @@ impl Notification {
             };
             // 重复注册会返回类已存在；随后 CreateWindowExW 使用同一模块的类。
             RegisterClassW(&class);
-            let width = (400.0 * scale) as i32;
-            let height = (100.0 * scale) as i32;
-            let margin = (24.0 * scale) as i32;
+            let width = bounds.right - bounds.left;
+            let height = bounds.bottom - bounds.top;
             self.window = CreateWindowExW(
                 WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
                 CLASS,
                 windows_sys::w!("GalGear"),
                 WS_POPUP,
-                monitor.rcWork.right - width - margin,
-                monitor.rcWork.bottom - height - margin,
+                bounds.left,
+                bounds.top,
                 width,
                 height,
                 ptr::null_mut(),
@@ -143,9 +187,6 @@ impl Notification {
                 ShowWindow(self.window, SW_SHOWNOACTIVATE);
                 UpdateWindow(self.window);
                 self.shown = Some(Instant::now());
-            }
-            if !dpi_context.is_null() {
-                SetThreadDpiAwarenessContext(dpi_context);
             }
         }
     }
@@ -263,5 +304,165 @@ fn paint(window: HWND, data: &Content) {
             DeleteObject(font);
         }
         EndPaint(window, &ps);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Notification, notice_bounds};
+    use crate::screenshots::windows::DpiContext;
+    use std::ptr;
+    use windows_sys::Win32::{
+        Foundation::{HWND, POINT, RECT},
+        Graphics::Gdi::ClientToScreen,
+        UI::{HiDpi::*, WindowsAndMessaging::*},
+    };
+
+    #[test]
+    fn notice_uses_offset_game_client_corner() {
+        let bounds = notice_bounds(
+            RECT {
+                left: 160,
+                top: 120,
+                right: 1440,
+                bottom: 840,
+            },
+            1.0,
+        )
+        .unwrap();
+        assert_eq!(
+            (bounds.left, bounds.top, bounds.right, bounds.bottom),
+            (1016, 716, 1416, 816)
+        );
+    }
+
+    #[test]
+    fn notice_scales_with_dpi_on_negative_monitor_coordinates() {
+        let bounds = notice_bounds(
+            RECT {
+                left: -1800,
+                top: -900,
+                right: -200,
+                bottom: 0,
+            },
+            1.5,
+        )
+        .unwrap();
+        assert_eq!(
+            (bounds.left, bounds.top, bounds.right, bounds.bottom),
+            (-836, -186, -236, -36)
+        );
+    }
+
+    #[test]
+    fn notice_fits_small_clients_and_rejects_empty_clients() {
+        let bounds = notice_bounds(
+            RECT {
+                left: 100,
+                top: 80,
+                right: 420,
+                bottom: 200,
+            },
+            2.0,
+        )
+        .unwrap();
+        assert_eq!(
+            (bounds.left, bounds.top, bounds.right, bounds.bottom),
+            (148, 128, 372, 152)
+        );
+        assert!(notice_bounds(RECT::default(), 1.0).is_none());
+        assert!(
+            notice_bounds(
+                RECT {
+                    left: 10,
+                    top: 0,
+                    right: 0,
+                    bottom: 10
+                },
+                1.0
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    #[ignore = "需要交互式 Windows 桌面；创建隔离窗口验证提示位置及焦点"]
+    fn native_notice_stays_inside_game_client_without_activation() {
+        struct TestWindow(HWND);
+        impl Drop for TestWindow {
+            fn drop(&mut self) {
+                // SAFETY: 仅销毁本测试在当前线程创建的窗口。
+                unsafe {
+                    DestroyWindow(self.0);
+                }
+            }
+        }
+        // SAFETY: 窗口和坐标缓冲均由测试拥有，窗口在 DPI 上下文恢复前销毁。
+        unsafe {
+            let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            assert!(!previous.is_null());
+            let _dpi = DpiContext(previous);
+            let target = TestWindow(CreateWindowExW(
+                WS_EX_NOACTIVATE,
+                windows_sys::w!("STATIC"),
+                windows_sys::w!("GalGear notice positioning test"),
+                WS_OVERLAPPEDWINDOW,
+                100,
+                100,
+                800,
+                500,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null(),
+            ));
+            assert!(!target.0.is_null());
+            ShowWindow(target.0, SW_SHOWNOACTIVATE);
+            let mut notification = Notification::default();
+            for (x, y, width, height, theme) in
+                [(100, 100, 800, 500, "light"), (180, 140, 360, 260, "dark")]
+            {
+                assert_ne!(
+                    SetWindowPos(
+                        target.0,
+                        ptr::null_mut(),
+                        x,
+                        y,
+                        width,
+                        height,
+                        SWP_NOACTIVATE | SWP_NOZORDER
+                    ),
+                    0
+                );
+                let foreground = GetForegroundWindow();
+                notification.show(
+                    target.0,
+                    "截图已保存并复制到剪贴板。",
+                    theme,
+                    "white-pink",
+                    false,
+                );
+                assert!(!notification.window.is_null());
+                assert_ne!(IsWindowVisible(notification.window), 0);
+                assert_eq!(GetForegroundWindow(), foreground, "提示不能抢占焦点");
+
+                let mut client = RECT::default();
+                assert_ne!(GetClientRect(target.0, &mut client), 0);
+                let mut origin = POINT { x: 0, y: 0 };
+                assert_ne!(ClientToScreen(target.0, &mut origin), 0);
+                let mut actual = RECT::default();
+                assert_ne!(GetWindowRect(notification.window, &mut actual), 0);
+                let margin = (24.0 * GetDpiForWindow(target.0) as f32 / 96.0) as i32;
+                assert_eq!(actual.right, origin.x + client.right - margin);
+                assert_eq!(actual.bottom, origin.y + client.bottom - margin);
+                assert!(actual.left >= origin.x && actual.top >= origin.y);
+            }
+            ShowWindow(target.0, SW_HIDE);
+            notification.show(target.0, "hidden", "light", "white", false);
+            assert!(
+                notification.window.is_null(),
+                "目标隐藏后不应回退到屏幕角落"
+            );
+        }
     }
 }

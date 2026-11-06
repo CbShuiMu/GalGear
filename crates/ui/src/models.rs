@@ -39,6 +39,8 @@ pub(crate) struct Settings {
     pub(crate) screenshot_enabled: bool,
     #[serde(default = "default_screenshot_hotkey")]
     pub(crate) screenshot_hotkey: String,
+    #[serde(default = "default_font_hotkey")]
+    pub(crate) font_hotkey: String,
     #[serde(default)]
     pub(crate) fan_domain: String,
     #[serde(default = "true_value")]
@@ -231,9 +233,9 @@ impl Default for GameEdit {
             tag_rules: BTreeMap::new(),
             save_paths: Vec::new(),
             auto_backup: false,
-            launch_mode: "locale".into(),
+            launch_mode: "normal".into(),
             locale_profile: String::new(),
-            upscale: true,
+            upscale: false,
             ai_summary: false,
         }
     }
@@ -394,6 +396,10 @@ mod tests {
             )
         );
     }
+}
+
+pub(crate) fn default_font_hotkey() -> String {
+    "Shift+T".into()
 }
 
 pub(crate) fn default_screenshot_hotkey() -> String {

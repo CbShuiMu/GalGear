@@ -1,0 +1,94 @@
+// GalGear PFS adapter, replacing the pinned SimpleFontHook implementation (MIT).
+
+static std::string ArtemisPfsResourceKey(const std::wstring& name) {
+    std::string key = ArtemisWideToUtf8(name);
+    return GalGearPfs::Normalize(key) ? key : std::string();
+}
+static const std::vector<GalGearPfs::Archive>& ArtemisPfsArchives() {
+    static const std::vector<GalGearPfs::Archive> archives = [] {
+        std::vector<GalGearPfs::Archive> result;
+        const std::wstring root = ArtemisGetGameRoot();
+        wchar_t executable[MAX_PATH]{};
+        GetModuleFileNameW(nullptr, executable, MAX_PATH);
+        std::wstring stem = executable;
+        stem = stem.substr(stem.find_last_of(L"\\/") + 1);
+        size_t dot = stem.find_last_of(L'.');
+        if (dot != std::wstring::npos) stem.resize(dot);
+        std::vector<GalGearPfs::Candidate> candidates;
+        WIN32_FIND_DATAW data{};
+        HANDLE find = orgFindFirstFileW((root + L"\\*.pfs*").c_str(), &data);
+        if (find == INVALID_HANDLE_VALUE) return result;
+        bool overflow = false;
+        do {
+            GalGearPfs::Candidate candidate;
+            if (!(data.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) &&
+                GalGearPfs::CandidateName(data.cFileName, stem, candidate)) {
+                if (candidates.size() == 128) { overflow = true; break; }
+                candidates.push_back(std::move(candidate));
+            }
+        } while (FindNextFileW(find, &data));
+        FindClose(find);
+        if (overflow) return result;
+        std::sort(candidates.begin(), candidates.end(), GalGearPfs::Before);
+        uint64_t totalIndex = 0;
+        for (const auto& candidate : candidates) {
+            GalGearPfs::Archive archive;
+            archive.path = root + L"\\" + candidate.name;
+            GalGearPfs::Handle file{orgCreateFileW(archive.path.c_str(), GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            if (file.value == INVALID_HANDLE_VALUE || !GalGearPfs::Load(file.value, archive)) {
+                Utils::Trace("[GalGearPfs] rejected archive index");
+                continue;
+            }
+            totalIndex += archive.indexBytes;
+            if (totalIndex > 128 * 1024 * 1024) { result.clear(); return result; }
+            Utils::Trace("[GalGearPfs] parsed entries=%lu part=%d executable-family=%d",
+                static_cast<unsigned long>(archive.entries.size()), candidate.part, candidate.executable ? 1 : 0);
+            result.push_back(std::move(archive));
+        }
+        return result;
+    }();
+    return archives;
+}
+static std::wstring ArtemisResourceNameForKind(ArtemisResourceKind kind) {
+    if (kind == ARTEMIS_RESOURCE_LIST_WINDOWS) return L"system\\table\\list_windows.tbl";
+    if (kind == ARTEMIS_RESOURCE_LIST_WINDOWS_JA) return L"system\\table\\list_windows_ja.tbl";
+    return L"";
+}
+static bool ArtemisReadPfsResource(const std::wstring& name, std::vector<BYTE>& bytes, std::wstring* label) {
+    std::string key = ArtemisPfsResourceKey(name);
+    if (key.empty()) return false;
+    for (const auto& archive : ArtemisPfsArchives()) {
+        auto entry = std::lower_bound(archive.entries.begin(), archive.entries.end(), key,
+            [](const GalGearPfs::Entry& value, const std::string& wanted) { return value.name < wanted; });
+        if (entry == archive.entries.end() || entry->name != key) continue;
+        GalGearPfs::Handle file{orgCreateFileW(archive.path.c_str(), GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+        // Once an overlay owns a resource, never silently substitute a base copy
+        // if reading it fails (that could restore untranslated script/config).
+        if (file.value == INVALID_HANDLE_VALUE || !GalGearPfs::Resource(file.value, archive, *entry, bytes)) return false;
+        if (label) *label = archive.path + L"!" + name;
+        Utils::Trace("[GalGearPfs] resource bytes=%lu encrypted=%d", entry->size, archive.encrypted ? 1 : 0);
+        return true;
+    }
+    return false;
+}
+static const ArtemisPfsLayoutEvidence& ArtemisProbePfsLayout() {
+    static const ArtemisPfsLayoutEvidence evidence = [] {
+        ArtemisPfsLayoutEvidence result{};
+        for (const auto& archive : ArtemisPfsArchives()) {
+            result.parsedArchive = true;
+            for (const auto& entry : archive.entries) {
+                const std::string& name = entry.name;
+                if (name.compare(0, 25, "system\\table\\list_windows") == 0 &&
+                    name.size() >= 4 && name.compare(name.size() - 4, 4, ".tbl") == 0) result.modernTable = true;
+                if ((name.compare(0, 7, "system\\") == 0 || name.compare(0, 6, "_base\\") == 0) &&
+                    name.size() >= 4 && name.compare(name.size() - 4, 4, ".iet") == 0) result.legacyScript = true;
+            }
+        }
+        Utils::Trace("[GalGearPfs] layout parsed=%d table=%d iet=%d", result.parsedArchive,
+            result.modernTable, result.legacyScript);
+        return result;
+    }();
+    return evidence;
+}

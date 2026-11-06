@@ -245,7 +245,7 @@
 /* Left navigation tabs retain the corner radii defined by their layouts. */
 :root .app-shell[data-theme] :is(button, .button):not(:where(
   .choice-trigger, .choice-option, .game-face, .folder-face,
-  .card-action, .card-title, .detail-backdrop, .nav-item, .preference-tab)) {
+  .card-action, .card-title, .detail-backdrop, .nav-item, .preference-tab, .shortcut-field)) {
   border-radius: 999px;
 }
 
@@ -1066,6 +1066,15 @@
 
 .preferences-content #backup-retention{max-width:none}
 .preferences-content .tools-help{white-space:pre-line}
+.shortcut-field{width:100%;min-height:42px;padding:10px 12px;text-align:left;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:inherit;font:inherit;cursor:pointer}
+.shortcut-field:focus-visible,.shortcut-capture:focus-visible{outline:2px solid var(--pink);outline-offset:3px}
+.shortcut-dialog{width:min(560px,calc(100vw - 40px))}
+.shortcut-dialog .editor-body{padding:20px 24px}
+.shortcut-dialog p{color:var(--muted);line-height:1.6;margin:0 0 18px}
+.shortcut-capture{min-height:150px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;padding:20px;border:1px solid var(--line);border-radius:12px;background:var(--surface-soft)}
+.shortcut-capture kbd{display:inline-flex;align-items:center;justify-content:center;min-width:58px;min-height:60px;padding:10px 16px;border:1px solid var(--button-line);border-bottom-width:4px;border-radius:9px;background:var(--surface-raised);color:inherit;font-family:inherit;font-size:1.5rem;font-weight:600;line-height:1.1}
+.shortcut-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;padding:0 24px 24px}
+.shortcut-dialog .error-text{margin:12px 0 0;color:var(--pink-dark)}
 
 /* 与游戏库封面共用明暗主题阴影。 */
 .app-shell[data-theme] :is(.library-bar, .reference-detail .reading-card, .reference-detail .detail-card, .reference-detail .detail-cover) {

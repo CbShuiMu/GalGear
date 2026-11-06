@@ -143,6 +143,7 @@ pub(crate) fn paint(app: &App) {
     choices::popup(&mut html, app);
     game_setup::render(&mut html, app);
     crate::updates::render(&mut html, app);
+    crate::shortcut_picker::render(&mut html, app);
     html.push_str("</main>");
     if let Some((message, error)) = &app.toast {
         write!(html, r#"<div class="toast {} {}" role="{}">{}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,

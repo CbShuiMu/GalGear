@@ -1,6 +1,7 @@
 //! 管理员游戏的输入桥接。辅助进程只识别约定快捷键并回传通知，不读写文件或执行外部命令。
 //! 配置通过父进程消息窗口的属性发布；代数隔离切换游戏、修改快捷键后的迟到通知。
-use super::{Keyboard, last_error, magpie};
+use super::{keyboard::Keyboard, last_error};
+use crate::game_window::magpie;
 use galgear_i18n::Message;
 use std::{
     ffi::OsStr,
@@ -25,16 +26,23 @@ use windows_sys::Win32::{
     },
     UI::{
         Shell::{SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW},
-        WindowsAndMessaging::*,
+        WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, DispatchMessageW, GetForegroundWindow, GetPropW,
+            GetWindowThreadProcessId, HWND_MESSAGE, IsWindow, MSG, PM_REMOVE, PeekMessageW,
+            PostMessageW, RemovePropW, SW_HIDE, SetPropW, WM_APP, WM_INPUT,
+        },
     },
 };
 
-const ARGUMENT: &str = "--galgear-screenshot-input";
-const GENERATION: windows_sys::core::PCWSTR = windows_sys::w!("GalGear.Screenshot.Generation");
-const TARGET: windows_sys::core::PCWSTR = windows_sys::w!("GalGear.Screenshot.Target");
-const KEYS: windows_sys::core::PCWSTR = windows_sys::w!("GalGear.Screenshot.Keys");
-pub(in crate::screenshots) const INPUT_MESSAGE: u32 = WM_APP + 74;
-pub(in crate::screenshots) const ERROR_MESSAGE: u32 = WM_APP + 75;
+const ARGUMENT: &str = "--galgear-game-input";
+const GENERATION: windows_sys::core::PCWSTR = windows_sys::w!("GalGear.GameInput.Generation");
+const TARGET: windows_sys::core::PCWSTR = windows_sys::w!("GalGear.GameInput.Target");
+const KEYS: [windows_sys::core::PCWSTR; 2] = [
+    windows_sys::w!("GalGear.GameInput.ScreenshotKeys"),
+    windows_sys::w!("GalGear.GameInput.FontKeys"),
+];
+pub(super) const INPUT_MESSAGE: u32 = WM_APP + 74;
+pub(super) const ERROR_MESSAGE: u32 = WM_APP + 76;
 
 fn elevated(process: HANDLE) -> Result<bool, String> {
     let mut token = ptr::null_mut();
@@ -62,7 +70,7 @@ fn elevated(process: HANDLE) -> Result<bool, String> {
     Ok(value.TokenIsElevated != 0)
 }
 
-pub(in crate::screenshots) fn required(window: HWND) -> Result<bool, String> {
+pub(super) fn required(window: HWND) -> Result<bool, String> {
     // SAFETY: 伪句柄只借用；窗口所属进程查询句柄由本次调用管理。
     unsafe {
         if elevated(GetCurrentProcess())? {
@@ -80,9 +88,9 @@ pub(in crate::screenshots) fn required(window: HWND) -> Result<bool, String> {
 }
 
 #[derive(Default)]
-pub(in crate::screenshots) struct Relay {
+pub(super) struct Relay {
     generation: usize,
-    configuration: Option<(usize, usize)>,
+    configuration: Option<(usize, [usize; 2])>,
     pending: Option<mpsc::Receiver<Result<OwnedHandle, Message>>>,
     child: Option<OwnedHandle>,
     attempted: bool,
@@ -90,12 +98,12 @@ pub(in crate::screenshots) struct Relay {
 
 impl Relay {
     /// 发布已由主进程验证的前台游戏和组合键。关闭时首先撤销代数，不等待 UAC。
-    pub(in crate::screenshots) fn configure(
+    pub(super) fn configure(
         &mut self,
         window: HWND,
-        target: Option<(HWND, &[u16])>,
+        target: Option<(HWND, [&[u16]; 2])>,
     ) -> Result<(), Message> {
-        let configuration = target.map(|(target, keys)| (target as usize, encode(keys)));
+        let configuration = target.map(|(target, keys)| (target as usize, keys.map(encode)));
         if configuration != self.configuration {
             self.clear(window);
             if let Some((target, keys)) = configuration {
@@ -103,12 +111,13 @@ impl Relay {
                 // SAFETY: 本线程拥有 window；属性仅保存整数/系统 HWND，不传递内存指针。
                 let ok = unsafe {
                     SetPropW(window, TARGET, target as HANDLE) != 0
-                        && SetPropW(window, KEYS, keys as HANDLE) != 0
+                        && (keys[0] == 0 || SetPropW(window, KEYS[0], keys[0] as HANDLE) != 0)
+                        && (keys[1] == 0 || SetPropW(window, KEYS[1], keys[1] as HANDLE) != 0)
                         && SetPropW(window, GENERATION, self.generation as HANDLE) != 0
                 };
                 if !ok {
                     self.clear(window);
-                    return Err(Message::detail("screenshot.input_error", last_error()));
+                    return Err(Message::detail("game_input.error", last_error()));
                 }
             }
             self.configuration = configuration;
@@ -123,7 +132,7 @@ impl Relay {
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.pending = None;
                     return Err(Message::detail(
-                        "screenshot.input_error",
+                        "game_input.error",
                         "Input helper stopped during startup",
                     ));
                 }
@@ -134,45 +143,45 @@ impl Relay {
             unsafe { WaitForSingleObject(child.as_raw_handle(), 0) != WAIT_TIMEOUT }
         }) {
             self.child = None;
-            return Err(Message::detail(
-                "screenshot.input_error",
-                "Input helper exited",
-            ));
+            return Err(Message::detail("game_input.error", "Input helper exited"));
         }
         if configuration.is_some() && !self.attempted {
             self.attempted = true;
             let (sender, receiver) = mpsc::sync_channel(1);
             let window = window as usize;
             std::thread::Builder::new()
-                .name("screenshot-elevation".into())
+                .name("game-input-elevation".into())
                 .spawn(move || {
                     let _ = sender.send(launch(window));
                 })
-                .map_err(|e| Message::detail("screenshot.input_error", e))?;
+                .map_err(|e| Message::detail("game_input.error", e))?;
             self.pending = Some(receiver);
         }
         Ok(())
     }
 
-    pub(in crate::screenshots) fn accepts(&self, message: &MSG) -> bool {
-        message.message == INPUT_MESSAGE
+    pub(super) fn accepts(&self, message: &MSG) -> Option<usize> {
+        let slot = message.message.checked_sub(INPUT_MESSAGE)? as usize;
+        (slot < 2
             && message.wParam == self.generation
             && self
                 .configuration
-                .is_some_and(|(target, _)| message.lParam as usize == target)
+                .is_some_and(|(target, keys)| message.lParam as usize == target && keys[slot] != 0))
+        .then_some(slot)
     }
 
-    pub(in crate::screenshots) fn clear(&mut self, window: HWND) {
+    pub(super) fn clear(&mut self, window: HWND) {
         // SAFETY: 只移除本模块在自有窗口上设置的属性。
         unsafe {
             RemovePropW(window, GENERATION);
-            RemovePropW(window, KEYS);
+            RemovePropW(window, KEYS[0]);
+            RemovePropW(window, KEYS[1]);
             RemovePropW(window, TARGET);
         }
         self.configuration = None;
     }
 
-    pub(in crate::screenshots) fn retry(&mut self) {
+    pub(super) fn retry(&mut self) {
         if self.pending.is_none() && self.child.is_none() {
             self.attempted = false;
         }
@@ -212,7 +221,7 @@ fn decode(value: usize) -> Option<Vec<u16>> {
 }
 
 fn launch(window: usize) -> Result<OwnedHandle, Message> {
-    let error = |error| Message::detail("screenshot.input_error", error);
+    let error = |error| Message::detail("game_input.error", error);
     let executable = std::env::current_exe().map_err(error)?;
     let file: Vec<u16> = executable
         .as_os_str()
@@ -227,7 +236,7 @@ fn launch(window: usize) -> Result<OwnedHandle, Message> {
     unsafe {
         let result = CoInitializeEx(ptr::null(), COINIT_APARTMENTTHREADED as u32);
         if result < 0 {
-            return Err(Message::detail("screenshot.input_error", result));
+            return Err(Message::detail("game_input.error", result));
         }
         let mut request = SHELLEXECUTEINFOW {
             cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
@@ -243,14 +252,14 @@ fn launch(window: usize) -> Result<OwnedHandle, Message> {
         CoUninitialize();
         if success == 0 {
             return Err(if failure.raw_os_error() == Some(ERROR_CANCELLED as i32) {
-                Message::new("screenshot.input_cancelled")
+                Message::new("game_input.cancelled")
             } else {
                 error(failure)
             });
         }
         if request.hProcess.is_null() {
             return Err(Message::detail(
-                "screenshot.input_error",
+                "game_input.error",
                 "Missing process handle",
             ));
         }
@@ -273,7 +282,7 @@ pub(crate) fn run_helper() -> bool {
     if let (Some(owner), Some(window), None) = (owner, window, arguments.next())
         && let Err(error) = receive(owner, window as HWND)
     {
-        eprintln!("Screenshot input: {error}");
+        eprintln!("Game input: {error}");
     }
     true
 }
@@ -314,7 +323,7 @@ fn receive(owner: u32, parent: HWND) -> Result<(), String> {
         let window = CreateWindowExW(
             0,
             windows_sys::w!("STATIC"),
-            windows_sys::w!("GalGear elevated screenshot input"),
+            windows_sys::w!("GalGear elevated game input"),
             0,
             0,
             0,
@@ -339,8 +348,8 @@ fn receive(owner: u32, parent: HWND) -> Result<(), String> {
 
 fn receive_loop(owner: HANDLE, parent: HWND, window: HWND) -> Result<(), String> {
     let mut keyboard: Option<Keyboard> = None;
-    let mut configuration = (0, ptr::null_mut(), 0);
-    let mut keys = Vec::new();
+    let mut configuration = (0, ptr::null_mut(), [0; 2]);
+    let mut keys: [Vec<u16>; 2] = std::array::from_fn(|_| Vec::new());
     loop {
         // SAFETY: owner 句柄由调用方持有；窗口属性仅作值查询，从不解引用其内容。
         unsafe {
@@ -349,21 +358,20 @@ fn receive_loop(owner: HANDLE, parent: HWND, window: HWND) -> Result<(), String>
             }
             let generation = GetPropW(parent, GENERATION) as usize;
             let target = GetPropW(parent, TARGET);
-            let encoded = GetPropW(parent, KEYS) as usize;
+            let encoded = KEYS.map(|key| GetPropW(parent, key) as usize);
             let active = generation != 0
                 && generation == GetPropW(parent, GENERATION) as usize
                 && magpie::source(GetForegroundWindow()) == target;
             let next = if active {
                 (generation, target, encoded)
             } else {
-                (0, ptr::null_mut(), 0)
+                (0, ptr::null_mut(), [0; 2])
             };
             if next != configuration {
                 keyboard = None;
-                keys.clear();
-                if active && let Some(parsed) = decode(encoded) {
+                keys = encoded.map(|encoded| decode(encoded).unwrap_or_default());
+                if active && keys.iter().any(|key| !key.is_empty()) {
                     keyboard = Some(Keyboard::start(window)?);
-                    keys = parsed;
                 }
                 configuration = next;
             }
@@ -372,13 +380,13 @@ fn receive_loop(owner: HANDLE, parent: HWND, window: HWND) -> Result<(), String>
                 if message.hwnd == window
                     && message.message == WM_INPUT
                     && let Some(input) = &mut keyboard
-                    && input.pressed(message.lParam, &keys)
+                    && let Some(slot) = input.pressed_many(message.lParam, &[&keys[0], &keys[1]])
                     && magpie::source(GetForegroundWindow()) == configuration.1
                     && GetPropW(parent, GENERATION) as usize == configuration.0
                 {
                     PostMessageW(
                         parent,
-                        INPUT_MESSAGE,
+                        INPUT_MESSAGE + slot as u32,
                         configuration.0,
                         configuration.1 as isize,
                     );
@@ -411,7 +419,7 @@ mod tests {
     fn relay_rejects_notifications_from_old_configuration() {
         let relay = Relay {
             generation: 7,
-            configuration: Some((42, 0x153)),
+            configuration: Some((42, [0x153, 0x154])),
             ..Default::default()
         };
         let mut message = MSG {
@@ -420,11 +428,13 @@ mod tests {
             lParam: 42,
             ..Default::default()
         };
-        assert!(relay.accepts(&message));
+        assert_eq!(relay.accepts(&message), Some(0));
+        message.message += 1;
+        assert_eq!(relay.accepts(&message), Some(1));
         message.wParam = 6;
-        assert!(!relay.accepts(&message));
+        assert_eq!(relay.accepts(&message), None);
         message.wParam = 7;
         message.lParam = 41;
-        assert!(!relay.accepts(&message));
+        assert_eq!(relay.accepts(&message), None);
     }
 }

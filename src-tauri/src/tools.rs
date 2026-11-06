@@ -150,12 +150,24 @@ pub(crate) fn open_game_folder(id: String, state: State<'_, AppState>) -> Result
 }
 
 #[tauri::command]
-pub(crate) fn launch_game(
+pub(crate) async fn launch_game(
+    id: String,
+    mode: Option<String>,
+    confirmed_unknown: Option<bool>,
+    app: tauri::AppHandle,
+) -> Result<(), Message> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        launch_game_at(id, mode, confirmed_unknown, state, &app)
+    }).await.map_err(|e| Message::detail("error.launch", e))?
+}
+
+fn launch_game_at(
     id: String,
     mode: Option<String>,
     confirmed_unknown: Option<bool>,
     state: State<'_, AppState>,
-    app: tauri::AppHandle,
+    app: &tauri::AppHandle,
 ) -> Result<(), Message> {
     let _guard = state::begin_write(&state)?;
     let game = find_game(&state, &id)?;
@@ -188,6 +200,8 @@ pub(crate) fn launch_game(
     {
         return Err(Message::new("error.already_running"));
     }
+    // begin_write serializes launches; do not hold the process map while spawning a process.
+    drop(running);
     let locale = mode.as_deref().unwrap_or(&edit.launch_mode) == "locale";
     let mut command = if locale {
         let locale_emulator = tool_path(&settings.locale_emulator, "tools.locale_missing")?;
@@ -203,12 +217,11 @@ pub(crate) fn launch_game(
     if !locale && edit.launcher.is_some() {
         command.arg(&executable);
     }
-    let child = command
-        .args(&edit.arguments)
-        .current_dir(edit.working_directory.as_deref().unwrap_or(&game.folder))
-        .spawn()
+    let directory = edit.working_directory.as_deref().unwrap_or(&game.folder);
+    let child = command.args(&edit.arguments).current_dir(directory).spawn()
         .map_err(|e| Message::detail("error.launch", e))?;
-    running.insert(id, child);
+    log::info!("game_spawned game_id={id} pid={} locale={locale} upscale={}", child.id(), edit.upscale);
+    state.tools.running.lock().map_err(|_| Message::new("error.catalog_state"))?.insert(id, child);
     if let Some(hotkey) = upscale_hotkey {
         schedule_upscale(
             app.clone(),
@@ -229,6 +242,7 @@ pub(crate) fn launch_game(
 }
 
 #[tauri::command]
+#[expect(clippy::too_many_arguments, reason = "保留已有 Tauri 顶层 JSON 参数，新增字段保持旧客户端兼容")]
 pub(crate) async fn configure_tools(
     locale_emulator: String,
     magpie: String,
@@ -236,25 +250,39 @@ pub(crate) async fn configure_tools(
     backup_retention: usize,
     magpie_mode: Option<String>,
     screenshot_hotkey: Option<String>,
+    font_hotkey: Option<String>,
     app: tauri::AppHandle,
 ) -> Result<Settings, Message> {
     let screenshot_hotkey = screenshot_hotkey.as_deref().map(galgear_core::screenshots::hotkey).transpose()?;
     tauri::async_runtime::spawn_blocking(move || {
         app.state::<crate::screenshots::Service>().configure(screenshot_hotkey.clone(), move |state| {
-            configure_tools_at(state, &locale_emulator, &magpie, &magpie_hotkey, backup_retention, magpie_mode.as_deref(), screenshot_hotkey.as_deref())
+            configure_tools_at(state, &locale_emulator, &magpie, &magpie_hotkey, backup_retention, magpie_mode.as_deref(), ToolHotkeys { screenshot: screenshot_hotkey.as_deref(), font: font_hotkey.as_deref() })
         })
     }).await.map_err(|e| Message::detail("tools.error", e))?
 }
 
+#[derive(Default)]
+struct ToolHotkeys<'a> {
+    screenshot: Option<&'a str>,
+    font: Option<&'a str>,
+}
+
 fn configure_tools_at(
     state: &AppState, locale_emulator: &str, magpie: &str, magpie_hotkey: &str, backup_retention: usize, magpie_mode: Option<&str>,
-    screenshot_hotkey: Option<&str>,
+    hotkeys: ToolHotkeys<'_>,
 ) -> Result<Settings, Message> {
-    runtime::hotkey_keys(magpie_hotkey).map_err(|e| Message::detail("tools.error", e))?;
-    let screenshot_hotkey = screenshot_hotkey.map(galgear_core::screenshots::hotkey).transpose()?;
-    if screenshot_hotkey.as_deref().is_some_and(|shortcut| galgear_core::screenshots::hotkey(magpie_hotkey).is_ok_and(|magpie| magpie == shortcut)) {
-        return Err(Message::new("screenshot.magpie_conflict"));
+    let current = snapshot(state)?;
+    let screenshot_hotkey = hotkeys.screenshot.map(galgear_core::screenshots::hotkey).transpose()?;
+    let font_hotkey = hotkeys.font.map(runtime::canonical_hotkey).transpose()
+        .map_err(|_| Message::new("shortcut.invalid"))?;
+    let magpie_shortcut = runtime::canonical_hotkey(magpie_hotkey)
+        .map_err(|_| Message::new("shortcut.invalid"))?;
+    let screenshot = screenshot_hotkey.as_deref().unwrap_or(&current.screenshot_hotkey);
+    let font = font_hotkey.as_deref().unwrap_or(&current.font_hotkey);
+    if screenshot == magpie_shortcut || font == magpie_shortcut || screenshot == font {
+        return Err(Message::new("shortcut.conflict"));
     }
+    if let Some(font) = &font_hotkey { crate::font_tools::validate_hotkey(font, &current.font_hotkey)?; }
     if !(1..=1000).contains(&backup_retention) { return Err(Message::new("error.operation")); }
     let locale_emulator = normalize_tool_path(locale_emulator);
     let magpie = normalize_tool_path(magpie);
@@ -268,6 +296,7 @@ fn configure_tools_at(
         settings.magpie = magpie.into();
         settings.magpie_hotkey = hotkey;
         settings.backup_retention = backup_retention;
+        if let Some(hotkey) = &font_hotkey { settings.font_hotkey.clone_from(hotkey); }
         if let Some(hotkey) = &screenshot_hotkey {
             settings.screenshot_hotkey.clone_from(hotkey);
             settings.screenshot_enabled = true;
@@ -402,6 +431,7 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
                     Err(_) => continue,
                 };
             if current != previous {
+                log::info!("runtime_changed statuses={current:?}");
                 let _ = app.emit("runtime-updated", &current);
             }
             let handle = app.clone();
@@ -524,11 +554,18 @@ mod tests {
     fn tool_card_saves_screenshot_shortcut_and_rejects_invalid_or_shared_keys() {
         let data = tempfile::tempdir().unwrap();
         let state = AppState::load(data.path().join("data")).unwrap();
-        let saved = configure_tools_at(&state, "", "", "Ctrl+Alt+A", 12, None, Some("alt+f9")).unwrap();
+        let saved = configure_tools_at(&state, "", "", "Ctrl+Alt+A", 12, None, ToolHotkeys { screenshot: Some("alt+f9"), font: None }).unwrap();
         assert_eq!(saved.screenshot_hotkey, "Alt+F9");
         assert!(saved.screenshot_enabled);
+        assert_eq!(saved.font_hotkey, "Shift+T");
+        for hotkey in ["Ctrl", "Ctrl+Alt+A", "Alt+F9"] {
+            assert!(configure_tools_at(&state, "", "", "Ctrl+Alt+A", 20, None, ToolHotkeys { screenshot: None, font: Some(hotkey) }).is_err());
+            let unchanged = state.store.load().unwrap();
+            assert_eq!(unchanged.font_hotkey, "Shift+T");
+            assert_eq!(unchanged.backup_retention, 12);
+        }
         for hotkey in ["Ctrl", "Ctrl+Alt+A"] {
-            assert!(configure_tools_at(&state, "", "", "Ctrl+Alt+A", 20, None, Some(hotkey)).is_err());
+            assert!(configure_tools_at(&state, "", "", "Ctrl+Alt+A", 20, None, ToolHotkeys { screenshot: Some(hotkey), font: None }).is_err());
             let unchanged = state.store.load().unwrap();
             assert_eq!(unchanged.backup_retention, 12);
             assert_eq!(unchanged.screenshot_hotkey, "Alt+F9");
@@ -568,7 +605,7 @@ mod tests {
         let config = data.path().join("config/config.json");
         std::fs::write(&config, r#"{"shortcuts":{"scale":3137}}"#).unwrap();
         let path = executable.to_str().unwrap();
-        let settings = configure_tools_at(&state, "", path, "Alt+Shift+B", 10, None, None).unwrap();
+        let settings = configure_tools_at(&state, "", path, "Alt+Shift+B", 10, None, ToolHotkeys { screenshot: None, font: None }).unwrap();
         assert_eq!(settings.magpie_hotkey, "Alt+Shift+B");
         assert_eq!(crate::bundled_tools::magpie_hotkey(&executable, "").unwrap(), settings.magpie_hotkey);
         assert!(sync_magpie_hotkey(&state).unwrap().is_none());
@@ -593,12 +630,12 @@ mod tests {
         let config = data.path().join("config/config.json");
         let original=serde_json::json!({"shortcuts":{"scale":3137},"scalingModes":[{"name":"First"},{"name":"Second"}],"profiles":[{"scalingMode":0},{"name":"Game","scalingMode":0}],"unknown":true});
         std::fs::write(&config,serde_json::to_vec(&original).unwrap()).unwrap();
-        configure_tools_at(&state,"",executable.to_str().unwrap(),"Alt+Shift+A",10,Some(r#"{"name":"Second"}"#), None).unwrap();
+        configure_tools_at(&state,"",executable.to_str().unwrap(),"Alt+Shift+A",10,Some(r#"{"name":"Second"}"#), ToolHotkeys { screenshot: None, font: None }).unwrap();
         let value:serde_json::Value=serde_json::from_slice(&std::fs::read(&config).unwrap()).unwrap();
         assert_eq!(value["profiles"][0]["scalingMode"],1);
         assert_eq!(value["profiles"][1],original["profiles"][1]);
         assert_eq!(value["unknown"],true);
-        assert!(configure_tools_at(&state,"",executable.to_str().unwrap(),"Alt+Shift+B",20,Some(r#"{"name":"Removed"}"#), None).is_err());
+        assert!(configure_tools_at(&state,"",executable.to_str().unwrap(),"Alt+Shift+B",20,Some(r#"{"name":"Removed"}"#), ToolHotkeys { screenshot: None, font: None }).is_err());
         assert_eq!(serde_json::from_slice::<serde_json::Value>(&std::fs::read(&config).unwrap()).unwrap(),value);
         assert_eq!(snapshot(&state).unwrap().backup_retention,10);
     }
@@ -613,7 +650,7 @@ mod tests {
         let config = data.path().join("config/config.json");
         std::fs::write(&config, r#"{"shortcuts":{"scale":3137,"windowedModeScale":3138}}"#).unwrap();
         let previous = serde_json::to_value(snapshot(&state).unwrap()).unwrap();
-        assert!(configure_tools_at(&state, "", executable.to_str().unwrap(), "Alt+Shift+B", 20, None, None).is_err());
+        assert!(configure_tools_at(&state, "", executable.to_str().unwrap(), "Alt+Shift+B", 20, None, ToolHotkeys { screenshot: None, font: None }).is_err());
         assert_eq!(serde_json::to_value(snapshot(&state).unwrap()).unwrap(), previous);
     }
 
@@ -719,17 +756,17 @@ mod tests {
         let _cleanup = Cleanup(&state);
         let path = executable.to_str().unwrap();
         let original = crate::bundled_tools::magpie_hotkey(&executable, "").unwrap();
-        let settings = configure_tools_at(&state, "", path, &original, 10, None, None).unwrap();
+        let settings = configure_tools_at(&state, "", path, &original, 10, None, ToolHotkeys { screenshot: None, font: None }).unwrap();
         ensure_magpie(&state, &settings).unwrap();
         let previous = state.tools.magpie.lock().unwrap().as_ref().unwrap().id();
-        let saved = configure_tools_at(&state, "", path, "Alt+Shift+B", 10, None, None).unwrap();
+        let saved = configure_tools_at(&state, "", path, "Alt+Shift+B", 10, None, ToolHotkeys { screenshot: None, font: None }).unwrap();
         assert_eq!(saved.magpie_hotkey, "Alt+Shift+B");
         assert_eq!(runtime::detect(executable.to_str()), Status::Running);
         let current = state.tools.magpie.lock().unwrap().as_ref().unwrap().id();
         assert_ne!(current, previous);
         assert_eq!(crate::bundled_tools::magpie_hotkey(&executable, "").unwrap(), "Alt+Shift+B");
         // A repeated save leaves the same live process in place.
-        configure_tools_at(&state, "", path, "Shift+Alt+B", 10, None, None).unwrap();
+        configure_tools_at(&state, "", path, "Shift+Alt+B", 10, None, ToolHotkeys { screenshot: None, font: None }).unwrap();
         assert_eq!(state.tools.magpie.lock().unwrap().as_ref().unwrap().id(), current);
     }
 

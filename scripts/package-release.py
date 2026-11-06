@@ -10,7 +10,7 @@ version = tomllib.loads((root / 'Cargo.toml').read_text(encoding='utf-8'))['work
 artifacts = root / 'artifacts'
 stage = artifacts / f'release-v{version}' / 'portable'
 stage.mkdir(parents=True, exist_ok=False)
-for name in ('7zip', 'ai-agent', 'waifu2x', 'magpie', 'locale-emulator'):
+for name in ('7zip', 'ai-agent', 'waifu2x', 'magpie', 'locale-emulator', 'font-hook'):
     shutil.copytree(root / 'tools' / name, stage / 'tools' / name,
                     ignore=shutil.ignore_patterns('logs', '*.log', '*.tmp', '__pycache__'))
 for source, target in (
@@ -18,6 +18,8 @@ for source, target in (
     (artifacts / 'GalGear.sha256', 'GalGear.sha256'),
     (root / 'LICENSE', 'LICENSE'),
     (root / 'NOTICE', 'NOTICE'),
+    (root / 'docs/font-tools.md', '游戏字体面板.md'),
+    (root / 'docs/runtime-logs.md', '运行日志说明.md'),
     (root / 'docs/bundled-tools.txt', '内置工具说明.txt'),
     (root / 'docs/cloud-storage.md', 'cloud-storage.md'),
     (root / 'docs/oauth-callback.md', 'OAuth授权说明.md'),
@@ -37,7 +39,10 @@ shutil.copytree(root / 'LICENSES', stage / 'LICENSES')
 AI 宿主随包附带，无需安装 Python。内置工具说明见《内置工具说明.txt》。
 云存储说明见 cloud-storage.md；GalGear.sha256 用于校验主程序。
 ''', encoding='utf-8')
-required = ('GalGear.exe', 'portable.flag', 'LICENSE', 'NOTICE',
+required = ('tools/font-hook/x86/GalGearFontHook.dll', 'tools/font-hook/x86/font-hook-loader.exe',
+            'tools/font-hook/x64/GalGearFontHook.dll', 'tools/font-hook/x64/font-hook-loader.exe',
+            'tools/font-hook/adapter.json', 'tools/font-hook/SimpleFontHook-LICENSE.txt',
+            'tools/font-hook/Detours-LICENSE.txt', 'GalGear.exe', 'portable.flag', 'LICENSE', 'NOTICE',
             'LICENSES/MIT-GalGear-prior-to-v0.3.3.txt', 'tools/7zip/7z.exe',
             'tools/7zip/7z.dll', 'tools/7zip/License.txt',
             'tools/ai-agent/GalGear.AiAgent.exe',
@@ -63,6 +68,13 @@ with zipfile.ZipFile(archive) as bundle:
     assert bundle.read('GalGear.exe') == (stage / 'GalGear.exe').read_bytes()
     assert bundle.read('LICENSE') == (root / 'LICENSE').read_bytes()
     assert bundle.read('NOTICE') == (root / 'NOTICE').read_bytes()
+    # Git checkouts may convert notice line endings on Windows; compare the full text.
+    for bundled, original in (
+        ('SimpleFontHook-LICENSE.txt', 'SuQiandYing-MIT.txt'),
+        ('Detours-LICENSE.txt', 'Detours-MIT.txt'),
+    ):
+        assert bundle.read(f'tools/font-hook/{bundled}').replace(b'\r\n', b'\n') == (
+            root / 'docs/licenses' / original).read_bytes().replace(b'\r\n', b'\n')
     print(f'Portable verified: {len(bundle.namelist())} files, {archive.stat().st_size} bytes')
 installer = artifacts / f'GalGear_{version}_x64-setup.exe'
 shutil.copy2(root / f'target/release/bundle/nsis/{installer.name}', installer)

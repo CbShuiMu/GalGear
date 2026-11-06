@@ -8,11 +8,18 @@ ANY WARRANTY, including MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE for the complete terms.
 
 Corresponding source and build scripts for this release:
-https://github.com/CbShuiMu/GalGear/tree/v0.3.4
-https://github.com/CbShuiMu/GalGear/archive/refs/tags/v0.3.4.tar.gz
+https://github.com/CbShuiMu/GalGear/tree/v0.4.0
+https://github.com/CbShuiMu/GalGear/archive/refs/tags/v0.4.0.tar.gz
 
 Earlier GalGear code was distributed under MIT. Its original copyright and
 permission notice is retained in LICENSES/MIT-GalGear-prior-to-v0.3.3.txt.
 Bundled third-party tools and dependencies retain their own licenses. Their
 notices remain in their respective directories; upstream source links for
 bundled tools are listed in the accompanying bundled-tools documentation.
+
+SimpleFontHook by SuQiandYing: https://github.com/SuQiandYing/SimpleFontHook
+GalGear uses a compatibility build with its own floating panel, IPC bridge and
+loader. The upstream MIT notice is preserved verbatim in
+tools/font-hook/SimpleFontHook-LICENSE.txt. Microsoft Detours retains its MIT
+notice in tools/font-hook/Detours-LICENSE.txt. These notices apply to their
+respective components; the GalGear application remains GPL-3.0-only.

@@ -137,7 +137,7 @@ fn tick(app: &tauri::AppHandle, engine: &Path) -> Result<(), String> {
                 }
             }
             Err(error) if !paused() => {
-                eprintln!("Cover enhancement: {error}");
+                log::warn!("Cover enhancement: {error}");
                 remember_failure(&cache, &source, error);
             }
             Err(_) => {}
@@ -151,7 +151,7 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(8)).await;
         let Some(engine) = engine(&app) else {
-            eprintln!("Cover enhancement unavailable: install tools/waifu2x");
+            log::warn!("Cover enhancement unavailable: install tools/waifu2x");
             return;
         };
         loop {
@@ -159,7 +159,7 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
             let engine = engine.clone();
             match tauri::async_runtime::spawn_blocking(move || tick(&handle, &engine)).await {
                 Ok(Ok(())) => {}
-                other => eprintln!("Cover worker: {other:?}"),
+                other => log::error!("Cover worker: {other:?}"),
             }
             tokio::time::sleep(Duration::from_secs(3)).await;
         }

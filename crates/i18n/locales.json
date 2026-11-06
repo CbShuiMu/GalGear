@@ -1,4 +1,49 @@
 {
+  "font.hotkey": {
+    "zh-CN": "字体调节面板快捷键",
+    "ja-JP": "フォント調整パネルのショートカット",
+    "en-US": "Font adjustment panel hotkey"
+  },
+  "shortcut.help": {
+    "zh-CN": "请按下快捷键组合（至少包含 Ctrl、Alt、Shift 或 Win 中的一项）。Esc 取消，Tab 切换按钮。",
+    "ja-JP": "修飾キー（Ctrl・Alt・Shift・Win）を含むキーの組み合わせを押してください。Esc でキャンセル、Tab でボタンを移動します。",
+    "en-US": "Press a key combination with Ctrl, Alt, Shift or Win. Esc cancels; Tab moves between buttons."
+  },
+  "shortcut.waiting": {
+    "zh-CN": "等待按键…",
+    "ja-JP": "キー入力を待っています…",
+    "en-US": "Waiting for keys…"
+  },
+  "shortcut.reset": {
+    "zh-CN": "重置",
+    "ja-JP": "リセット",
+    "en-US": "Reset"
+  },
+  "shortcut.invalid": {
+    "zh-CN": "请使用至少一个修饰键和一个支持的普通按键。",
+    "ja-JP": "修飾キーと対応する通常キーを組み合わせてください。",
+    "en-US": "Use at least one modifier and one supported non-modifier key."
+  },
+  "shortcut.conflict": {
+    "zh-CN": "字体面板、截图和 Magpie 的快捷键不能相同，请重新选择。",
+    "ja-JP": "フォントパネル・撮影・Magpie には別々のショートカットを指定してください。",
+    "en-US": "Choose different shortcuts for the font panel, screenshots and Magpie."
+  },
+  "diagnostics.init_failed": {
+    "zh-CN": "无法在安装目录的 logs 文件夹创建运行日志。程序将继续运行，但本次故障可能无法追溯。请检查目录写入权限和磁盘空间。{detail}",
+    "ja-JP": "インストール先の logs フォルダーにログを作成できません。アプリは続行しますが、障害の記録が残らない可能性があります。書き込み権限と空き容量を確認してください。{detail}",
+    "en-US": "Cannot create a log in the installation directory's logs folder. The app will continue, but diagnostic records may be unavailable. Check write permissions and disk space. {detail}"
+  },
+  "diagnostics.write_failed": {
+    "zh-CN": "运行日志写入失败，后续诊断信息可能丢失。请检查安装目录的写入权限和磁盘空间。{detail}",
+    "ja-JP": "ログの書き込みに失敗しました。以降の診断情報が失われる可能性があります。書き込み権限と空き容量を確認してください。{detail}",
+    "en-US": "Writing the runtime log failed. Further diagnostic records may be lost. Check write permissions and disk space. {detail}"
+  },
+  "diagnostics.startup_failed": {
+    "zh-CN": "GalGear 启动失败，请查看安装目录 logs 中本次启动的日志。{detail}",
+    "ja-JP": "GalGear を起動できませんでした。インストール先の logs フォルダーで今回のログを確認してください。{detail}",
+    "en-US": "GalGear failed to start. Check this session's log in the installation directory's logs folder. {detail}"
+  },
   "settings.section_ai": {
     "zh-CN": "AI",
     "ja-JP": "AI",
@@ -2245,9 +2290,9 @@
     "en-US": "Backups: .galgear-backups/saves in the game folder.\nBlank paths use bundled tools; adjust scaling in Magpie.\nScreenshots: original-size PNGs in screenshots, also copied to clipboard."
   },
   "tools.locale_launch": {
-    "zh-CN": "转区启动",
-    "ja-JP": "ロケール起動",
-    "en-US": "Locale launch"
+    "zh-CN": "转区",
+    "ja-JP": "ロケール",
+    "en-US": "Locale"
   },
   "tools.launch_options": {
     "zh-CN": "启动选项",
@@ -4278,5 +4323,225 @@
     "zh-CN": "解压密码",
     "ja-JP": "解凍パスワード",
     "en-US": "Archive password"
+  },
+  "font.title": {
+    "zh-CN": "游戏字体",
+    "ja-JP": "ゲームフォント",
+    "en-US": "Game fonts"
+  },
+  "game_input.error": {
+    "zh-CN": "游戏快捷键接收失败：{detail}",
+    "ja-JP": "ゲームのショートカットを受信できません：{detail}",
+    "en-US": "Could not receive game shortcuts: {detail}"
+  },
+  "game_input.cancelled": {
+    "zh-CN": "已取消管理员游戏的快捷键授权。重启 GalGear 后可重试。",
+    "ja-JP": "管理者ゲームのショートカット権限がキャンセルされました。GalGearを再起動して再試行してください。",
+    "en-US": "Elevated game input permission was cancelled. Restart GalGear to retry."
+  },
+  "font.error": {
+    "zh-CN": "字体工具失败：{detail}",
+    "ja-JP": "フォントツールエラー：{detail}",
+    "en-US": "Font tool failed: {detail}"
+  },
+  "font.invalid": {
+    "zh-CN": "参数超出范围。字体名最多31个UTF-16字符；启用垂直度量或伪装需选择字体。",
+    "ja-JP": "設定値が範囲外です。フォント名は31 UTF-16文字以内。垂直メトリクス・偽装にはフォント選択が必要です。",
+    "en-US": "Invalid values. Font names allow 31 UTF-16 units. Vertical metrics and spoofing require a font."
+  },
+  "font.face": {
+    "zh-CN": "字体（留空保留游戏字体）",
+    "ja-JP": "フォント（空欄でゲームの設定を使用）",
+    "en-US": "Font (blank keeps the game font)"
+  },
+  "font.height": {
+    "zh-CN": "字号比例 %",
+    "ja-JP": "文字サイズ %",
+    "en-US": "Size %"
+  },
+  "font.width": {
+    "zh-CN": "字宽比例 %",
+    "ja-JP": "文字幅 %",
+    "en-US": "Width %"
+  },
+  "font.apply": {
+    "zh-CN": "应用到游戏",
+    "ja-JP": "ゲームに適用",
+    "en-US": "Apply to game"
+  },
+  "font.reset": {
+    "zh-CN": "停用替换",
+    "ja-JP": "置換を無効化",
+    "en-US": "Disable replacement"
+  },
+  "font.hint": {
+    "zh-CN": "中文字体兼容自动处理，字符集伪装按需开启。点击应用后，在游戏中确认显示效果。",
+    "ja-JP": "中国語フォントの互換処理は自動です。文字セット偽装は必要時に有効にし、適用後はゲームで確認してください。",
+    "en-US": "Chinese font compatibility is automatic. Enable charset spoofing as needed, then apply and check the game."
+  },
+  "font.components_missing": {
+    "zh-CN": "缺少字体组件，请运行 scripts/build-font-hook.ps1 或安装完整版本。",
+    "ja-JP": "フォントコンポーネントがありません。完全版をインストールしてください。",
+    "en-US": "Font components are missing. Build with scripts/build-font-hook.ps1 or install a complete package."
+  },
+  "font.busy": {
+    "zh-CN": "正在处理，请完成后再操作。",
+    "ja-JP": "処理中です。完了をお待ちください。",
+    "en-US": "Processing; wait before applying again."
+  },
+  "font.access_denied": {
+    "zh-CN": "仍无法访问游戏进程，请检查游戏权限或保护软件。",
+    "ja-JP": "ゲームプロセスにアクセスできません。権限や保護ソフトを確認してください。",
+    "en-US": "Access to the game process was denied. Check its permissions or protection software."
+  },
+  "font.uac_cancelled": {
+    "zh-CN": "已取消字体调整的管理员授权，未应用设置。",
+    "ja-JP": "フォント変更の管理者権限がキャンセルされ、設定は適用されませんでした。",
+    "en-US": "Administrator permission was cancelled; font settings were not applied."
+  },
+  "font.helper_timeout": {
+    "zh-CN": "等待字体组件响应超时。请检查游戏状态后重试。",
+    "ja-JP": "フォントコンポーネントの応答がタイムアウトしました。ゲームの状態を確認してください。",
+    "en-US": "The font component timed out. Check the game and retry."
+  },
+  "font.target_changed": {
+    "zh-CN": "游戏进程已退出或改变，请返回游戏后重新打开面板。",
+    "ja-JP": "ゲームプロセスが終了または変更されました。ゲームに戻りパネルを開き直してください。",
+    "en-US": "The game process exited or changed. Return to the game and reopen the panel."
+  },
+  "font.helper_failed": {
+    "zh-CN": "字体组件执行失败（代码 {code}）。",
+    "ja-JP": "フォントコンポーネントが失敗しました（コード {code}）。",
+    "en-US": "The font component failed (code {code})."
+  },
+  "font.hotkey_conflict": {
+    "zh-CN": "{shortcut} 已被占用，字体面板未注册。请释放此快捷键或在设置中更换。",
+    "ja-JP": "{shortcut} は使用中です。解放するか、設定で別のキーに変更してください。",
+    "en-US": "{shortcut} is in use. Release it or choose another shortcut in Settings."
+  },
+  "font.no_window": {
+    "zh-CN": "游戏窗口已关闭或不可见。",
+    "ja-JP": "ゲームウィンドウが閉じているか非表示です。",
+    "en-US": "The game window is closed or hidden."
+  },
+  "font.window_small": {
+    "zh-CN": "游戏窗口太小，请放大后打开字体面板。",
+    "ja-JP": "ゲームウィンドウを大きくしてください。",
+    "en-US": "Enlarge the game window to open the font panel."
+  },
+  "font.working": {
+    "zh-CN": "正在处理…",
+    "ja-JP": "処理中…",
+    "en-US": "Working…"
+  },
+  "font.submitted": {
+    "zh-CN": "参数已送达 Hook，已请求运行时刷新。请在游戏中确认显示效果。",
+    "ja-JP": "設定をHookに送信し、実行時更新を要求しました。ゲームで表示をご確認ください。",
+    "en-US": "Hook accepted the settings and requested a live refresh. Check the result in game."
+  },
+  "font.save_failed": {
+    "zh-CN": "参数已送达游戏，但保存失败：{detail}",
+    "ja-JP": "設定は送信済みですが、保存に失敗しました：{detail}",
+    "en-US": "Configuration was sent, but saving failed: {detail}"
+  },
+  "font.worker_failed": {
+    "zh-CN": "后台字体任务异常结束，请重试。",
+    "ja-JP": "バックグラウンド処理が終了しました。再試行してください。",
+    "en-US": "The background font task ended unexpectedly. Retry."
+  },
+  "font.char_spacing": {
+    "zh-CN": "字距（−20～60）",
+    "ja-JP": "文字間隔（−20～60）",
+    "en-US": "Character spacing (−20–60)"
+  },
+  "font.line_spacing": {
+    "zh-CN": "行距（−80～200）",
+    "ja-JP": "行間（−80～200）",
+    "en-US": "Line spacing (−80–200)"
+  },
+  "font.weight": {
+    "zh-CN": "字重（100～900）",
+    "ja-JP": "ウェイト（100～900）",
+    "en-US": "Weight (100–900)"
+  },
+  "font.vertical": {
+    "zh-CN": "启用垂直度量",
+    "ja-JP": "垂直メトリクスを有効化",
+    "en-US": "Enable vertical metrics"
+  },
+  "font.ascent": {
+    "zh-CN": "上行高度 ‰（100～2000）",
+    "ja-JP": "アセント ‰（100～2000）",
+    "en-US": "Ascent ‰ (100–2000)"
+  },
+  "font.descent": {
+    "zh-CN": "下行高度 ‰（−2000～−1）",
+    "ja-JP": "ディセント ‰（−2000～−1）",
+    "en-US": "Descent ‰ (−2000–−1)"
+  },
+  "font.ascent_help": {
+    "zh-CN": "数值越大，上方预留空间越多",
+    "ja-JP": "大きい値ほど上の余白が増加",
+    "en-US": "Larger: more space above."
+  },
+  "font.descent_help": {
+    "zh-CN": "数值越负，下方预留空间越多",
+    "ja-JP": "小さい値ほど下の余白が増加",
+    "en-US": "More negative: space below."
+  },
+  "font.spoof": {
+    "zh-CN": "字符集伪装：源 → 目标",
+    "ja-JP": "文字セット偽装：元 → 先",
+    "en-US": "Charset spoof: source → target"
+  },
+  "font.mapping": {
+    "zh-CN": "游戏内文字映射",
+    "ja-JP": "ゲーム内文字マッピング",
+    "en-US": "In-game text mapping"
+  },
+  "font.mapping_off": {
+    "zh-CN": "关闭映射",
+    "ja-JP": "無効",
+    "en-US": "Off"
+  },
+  "font.mapping_jp": {
+    "zh-CN": "日文旧字形",
+    "ja-JP": "日本語旧字体",
+    "en-US": "Japanese old forms"
+  },
+  "font.mapping_t2s": {
+    "zh-CN": "繁体 → 简体",
+    "ja-JP": "繁体字 → 簡体字",
+    "en-US": "Traditional → Simplified"
+  },
+  "font.mapping_s2t": {
+    "zh-CN": "简体 → 繁体",
+    "ja-JP": "簡体字 → 繁体字",
+    "en-US": "Simplified → Traditional"
+  },
+  "font.codepage": {
+    "zh-CN": "映射源编码（自动检测回退）",
+    "ja-JP": "入力コードページ（検出失敗時）",
+    "en-US": "Source encoding (fallback)"
+  },
+  "font.preview": {
+    "zh-CN": "排版预览 · 映射与伪装以游戏为准",
+    "ja-JP": "組版プレビュー · 偽装・変換はゲームで確認",
+    "en-US": "Layout preview · check mapping in game"
+  },
+  "font.incompatible": {
+    "zh-CN": "Hook 通信版本不兼容。请更新适配组件；官方原版 DLL 尚无此接口。",
+    "ja-JP": "Hookの通信バージョンが非対応です。アダプターを更新してください。公式DLLにはこのAPIがありません。",
+    "en-US": "Incompatible Hook protocol. Update the adapter; official DLLs do not yet expose this API."
+  },
+  "font.not_found": {
+    "zh-CN": "游戏进程无法匹配所选字体，请选择其他字体。",
+    "ja-JP": "ゲーム側で選択したフォントを確認できません。別のフォントを選択してください。",
+    "en-US": "The game process cannot match this font. Select another font."
+  },
+  "font.prepare_failed": {
+    "zh-CN": "无法准备此字体的兼容副本或度量设置，原有配置未更改。请更换字体或调整度量、伪装设置后重试。",
+    "ja-JP": "フォントの互換コピーまたはメトリクスを準備できません。元の設定は維持されます。フォントや設定を変更してください。",
+    "en-US": "Could not prepare the font or its metrics. Previous settings are unchanged. Try another font or adjust metrics and spoofing."
   }
 }

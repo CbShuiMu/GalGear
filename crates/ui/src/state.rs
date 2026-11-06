@@ -14,6 +14,7 @@ pub(crate) struct App {
     pub(crate) cloud: cloud::State,
     pub(crate) summary: crate::ai_summary::State,
     pub(crate) tool_preferences: crate::tool_preferences::State,
+    pub(crate) shortcut_picker: crate::shortcut_picker::State,
     pub(crate) setup: game_setup::State,
     pub(crate) library_import: crate::library_import::State,
     pub(crate) page: String,
@@ -59,6 +60,7 @@ impl Default for App {
             setup: game_setup::State::default(),
             library_import: Default::default(),
             tool_preferences: Default::default(),
+            shortcut_picker: Default::default(),
             page: "home".into(),
             home_selected: None,
             settings: Settings {
@@ -67,6 +69,7 @@ impl Default for App {
                 backup_retention: 10,
                 screenshot_enabled: true,
                 screenshot_hotkey: crate::models::default_screenshot_hotkey(),
+                font_hotkey: crate::models::default_font_hotkey(),
                 theme: default_theme(),
                 color_theme: default_color_theme(),
                 sort_by: "title".into(),
@@ -118,6 +121,7 @@ thread_local! { pub(crate) static APP: RefCell<App> = RefCell::new(App::default(
 
 pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: u32) {
     app.screenshots.preserve_settings(&app.settings, &mut settings, request_id);
+    app.tool_preferences.preserve_settings(&app.settings, &mut settings, request_id);
     crate::ai_summary::preserve_completed_setup(&app.summary, &mut settings, request_id);
     if request_id < app.theme_request {
         settings.theme.clone_from(&app.settings.theme);

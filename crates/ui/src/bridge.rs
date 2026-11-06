@@ -4,6 +4,9 @@ use wasm_bindgen::prelude::wasm_bindgen;
 #[wasm_bindgen]
 extern "C" {
     #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen(js_namespace = GalGearBridge, js_name = report_panic)]
+    pub(crate) fn report_panic(message: &str);
+    #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_namespace = GalGearBridge)]
     pub(crate) fn local_date(seconds: f64) -> String;
     #[cfg(target_arch = "wasm32")]

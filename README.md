@@ -2,7 +2,7 @@
 
 <img src="assets/readme/logo.svg" width="80" height="80" alt="GalGear 侧栏顶部的粉色花朵 Logo" />
 
-# GalGear
+# 🌸 GalGear
 
 **专注于GalGame的管理器，转区超分，补丁搜索管理，多数据源刮削，AI存档搜索。**
 
@@ -12,20 +12,20 @@ Windows x64 · 界面语言支持 简体中文 / 日本語 / English
 
 交流反馈QQ群：607755362
 
-[下载](https://github.com/CbShuiMu/GalGear/releases/latest) · [开始使用](#开始使用) · [功能介绍](#功能介绍) · [反馈问题](https://github.com/CbShuiMu/GalGear/issues)
+[下载](https://github.com/CbShuiMu/GalGear/releases/latest) · [快速上手](#-快速上手) · [功能介绍](#-功能介绍) · [反馈问题](https://github.com/CbShuiMu/GalGear/issues)
 
 </div>
 
 GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加进来，就能看封面、找游戏、整理收藏夹、启动游戏，也能在同一个地方管理存档和补丁。
 
-> 当前发行版为 **v0.3.4（2026-11-04）**，新增 NextMoe 补丁下载与浏览器授权，改进存档识别、首页背景和更新提示。
+> 当前发行版为 **v0.4.0（2026-11-07）**，新增游戏内字体 Hook 与 Shift+T 悬浮面板、运行诊断日志，改进截图与共享输入处理。
 
-## 快速上手
+## 🚀 快速上手
 
 前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
 
-- **安装版**：下载 `GalGear_0.3.4_x64-setup.exe`，按提示安装。
-- **便携版**：下载 `GalGear-0.3.4-win64-portable.zip`，解压后运行 `GalGear.exe`。
+- **安装版**：下载 `GalGear_0.4.0_x64-setup.exe`，按提示安装。
+- **便携版**：下载 `GalGear-0.4.0-win64-portable.zip`，解压后运行 `GalGear.exe`。
 
 第一次打开，可以按这个顺序来：
 
@@ -33,14 +33,15 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 2. 扫描后，在确认窗口里为游戏选好资料来源、对应作品和启动程序。可以先保存已经确认的几款，其余稍后再处理。（可以使用右上角的**批量修改**按钮来批量修改列表的数据源并使用**自动搜索**来获取匹配度高的词条，但是记得在自动搜索后再检查一遍以免有错误）
 3. 打开游戏详情，检查启动配置，点击启动。（自动备份的开启需要启动游戏并进行一次存档）
 
-## 功能介绍
+## ✨ 功能介绍
 
 | 功能 | 说明 |
 | --- | --- |
 | 游戏管理 | 多目录管理、名称搜索、排序、多层收藏夹、拖放和批量整理，记录游玩时长与最近游玩时间。 |
 | 标签与资料 | 支持声优、画师、脚本等制作人员标签筛选，同时支持组合标签筛选，以及 未萌 NextMoe、KunGal、VNDB、Bangumi、月幕 Galgame、2DFan 资料；封面可单独搜索或选用本地图片。（感谢以上平台） |
-| 内置转区与超分 | 默认勾选并通过 Locale Emulator 转区启动，使用 Magpie 实时缩放游戏画面。（可在游戏配置中取消勾选） |
+| 内置转区与超分 | 默认不勾选，可在游戏配置中按需开启 Locale Emulator 转区或 Magpie 实时缩放。 |
 | 封面与主题 | Waifu2x 后台去噪并超分4K 的首页背景；支持主题、明暗模式、语言与字号设置。[封面增强说明](docs/cover-enhancement.md)。 |
+| 字体 Hook 与悬浮面板 | 游戏前台默认按 **Shift+T** 打开原生悬浮面板，调整字体、字号、字宽、字距、行距与字重；通过 SimpleFontHook 兼容构建应用到游戏。支持字符集伪装与文字映射，实际效果取决于游戏引擎。[字体面板说明](docs/font-tools.md)。 |
 | 游戏截图 | **Shift+S 截图 → 自动复制到剪贴板 → Ctrl+V 粘贴分享**。同时保存原尺寸无损 PNG，支持 Magpie模式下截图和游戏详情下方最近截图预览。 |
 | 存档备份 | 寻找或手动确认存档位置，支持多目录备份、备注、锁定、恢复预览和退出后自动备份（可在设置-路径与备份中设置最大存档数）；WebDAV 上传下载需手动操作。[云存储说明](docs/cloud-storage.md)。 |
 | 补丁管理 | **游戏库联动**—通过选择游戏库内的游戏进行搜索，可将补丁直接存放到游戏目录下的补丁文件夹。NextMoe 托管下载需配置具备 `moyu:files` 权限的应用密钥。 搜索 鲲 Gal、2DFan，支持本地补丁、ZIP / RAR / 7z 自动解压、冲突预览和备份恢复；2DFan 下载需配置代理以及账号令牌。（推荐Nextmoe下载补丁，无需积分且提供直链下载） |
@@ -48,12 +49,13 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 | 浏览器授权 | Bangumi、NextMoe 支持内置应用 OAuth 登录，用户令牌保存在本机 Windows 凭据管理器。[授权说明](docs/oauth-callback.md)。 |
 | 更新提示 | 启动后后台检查 GalGear 与 Skill 版本，显示待更新提示；点击更新才下载安装。 |
 | 数据导入 | 支持PotatoVN、ReinaManager、LunaBox等。 |
+| 运行日志 | 在程序旁的 `logs/` 记录启动、命令和异常诊断，不自动上传。[日志说明](docs/runtime-logs.md)。 |
 
 <details>
 <summary>功能介绍详细说明与限制</summary>
 
 
-### Galgame管理
+### 🎮 Galgame管理
 
 游戏可以放在不同目录，不必为了使用 GalGear 重新搬家。支持按名称搜索、组合标签筛选和排序，也可以用多层收藏夹整理正在玩、想玩或已经通关的作品。一款游戏能放进多个收藏夹，支持拖放和批量整理。
 
@@ -61,11 +63,11 @@ GalGear 会记录游玩时长和最近游玩时间。计时依赖 GalGear 对游
 
 Waifu2x会在后台对封面去噪，并生成经过降噪的首页 4K 背景（保持原比例，长边 3840）。这项功能以 **笔记本 RTX 2060** 为最低配置设计目标，采用小分块、单任务处理；生成成功后才替换，相同封面会复用结果。部署与缓存说明见 [封面增强](docs/cover-enhancement.md)。
 
-### TAG分类
+### 🏷️ TAG分类
 
 从游戏的标签到游戏资料中的声优，所有属性都可以通过标签筛选。
 
-### 多个数据源，自动刮削
+### 🔎 多个数据源，自动刮削
 
 作品资料可从 **2DFan、VNDB、Bangumi、月幕 Galgame、未萌NextMoe、KunGal** 中选择，每款游戏可以使用不同来源。简介、制作组、制作人员和标签会保存在本地，也可以自己修改。**感谢以上平台。**
 
@@ -75,7 +77,13 @@ Waifu2x会在后台对封面去噪，并生成经过降噪的首页 4K 背景（
 
 界面支持粉色、白粉、白色三种主题色，可分别搭配亮色或夜间模式；语言和字号也能在设置中调整。
 
-### 游戏截图
+### 🔤 游戏内字体 Hook 与悬浮面板
+
+游戏库中的游戏位于前台时，默认按 **Shift+T** 打开或隐藏 Rust 原生悬浮面板。可选择系统字体，调整高度、宽度、字距、行距和字重，并按需设置垂直度量、字符集伪装及日文旧字形/繁简映射。点击“应用到游戏”才加载与游戏进程同位数的 Hook；打开面板本身不会加载 Hook。参数按游戏保存，实际重绘和字体效果取决于引擎。快捷键可在“设置 → 路径与备份 → 存档备份与内置工具”中修改，点击卡片右上角保存后生效。
+
+字体替换基于 [SuQiandYing 的 SimpleFontHook](https://github.com/SuQiandYing/SimpleFontHook)。GalGear 提供自己的悬浮面板、IPC、加载器和兼容补丁；上游及 Detours 的 MIT 版权与许可声明均原样保留，不改变这些组件的许可证。功能范围与兼容限制见 [游戏字体面板](docs/font-tools.md)。
+
+### 📸 游戏截图
 
 在游戏中按默认快捷键 **Shift+S** 截图后，图片会**自动复制到剪贴板**。切换到支持图片粘贴的聊天窗口、文档或图片编辑器，按 **Ctrl+V** 就能直接粘贴分享。
 
@@ -87,7 +95,7 @@ Waifu2x会在后台对封面去噪，并生成经过降噪的首页 4K 背景（
 
 建议使用窗口或无边框模式，并让游戏画面完整显示在屏幕内；独占全屏、受保护画面或第三方覆盖层可能影响截图。管理员权限游戏可能需要一次 Windows 授权，以接收截图快捷键。
 
-### 云上存档/存档管理
+### ☁️ 云上存档/存档管理
 
 GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，也允许手动指定。  
 
@@ -99,7 +107,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 云备份需要自己点击上传和下载，目前没有后台自动同步。
 
-### 补丁搜索与管理
+### 🧩 补丁搜索与管理
 
 可以搜索 **2DFan、鲲 Gal、NextMoe** 的补丁资源，查看原站说明，下载网站提供的可用直链；也可以直接导入本地补丁。需要登录或付费的资源，仍受原站账号和权限限制。（**2DFan资源下载需要配置代理**）
 
@@ -111,13 +119,13 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 
 
-### AI存档搜索
+### 📁 AI存档搜索
 
 软件会先扫描一边预设的可能路径。AI存档搜索仅作为补充，新游戏使用该功能需要启动游戏并进行一次存档，退出后点击存档卡片右上角的AI搜索。
 
 
 
-### AI驱动剧情（测试中）
+### 🤖 AI驱动剧情（测试中）
 
 提供可选的 **AI 前情提要**。在“设置 → AI”配置 DeepSeek、OpenAI、Qwen 或 Kimi 的 API Token 和模型，再到游戏的编辑配置里开启 **AI 分析**。首次准备可能需要一些时间，完成后可以在详情页查看前情提要和当前进度。
 
@@ -127,7 +135,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 </details>
 
-## 界面预览
+## 🖼️ 界面预览
 
 截图来自 v0.3.1（2026-11-5）；点击图片可查看原图。
 
@@ -144,7 +152,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 </details>
 
-## 数据存放位置
+## 🗂️ 数据存放位置
 
 | 内容 | 保存位置 |
 | --- | --- |
@@ -160,7 +168,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 
 
-## 使用须知
+## 📌 使用须知
 
 - GalGear 管理的是已经安装好的本地 EXE 游戏，不提供游戏本体，也不负责光盘镜像挂载或安装。
 - 存档识别并不覆盖所有引擎，第一次备份前请检查位置。Locale Emulator、Magpie 可以在设置-路径与备份中修改配置路径，也取决于游戏与本机环境。
@@ -172,20 +180,26 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 
 
-## 致谢
+## 🙏 致谢
 
 GalGear 的部分功能使用了以下开源工具，感谢各项目的开发者与维护者：
 
+- [SimpleFontHook — SuQiandYing](https://github.com/SuQiandYing/SimpleFontHook)：游戏字体 Hook 的上游实现，使用 MIT 许可；GalGear 的兼容构建保留[上游原始声明](docs/licenses/SuQiandYing-MIT.txt)。
+- [Microsoft Detours](https://github.com/microsoft/Detours)：Hook 使用的 API 拦截库，保留 [Microsoft MIT 许可](docs/licenses/Detours-MIT.txt)。
 - [Locale Emulator（LE）](https://github.com/xupefei/Locale-Emulator)：提供转区启动能力。
 - [Magpie](https://github.com/Blinue/Magpie)：提供游戏画面的实时缩放与超分。
 - [waifu2x-ncnn-vulkan（waifu2x）](https://github.com/nihui/waifu2x-ncnn-vulkan)：用于封面去噪和首页背景增强。
 - [7-Zip](https://github.com/ip7z/7zip)：用于 RAR、7z 等补丁压缩包的解压。
 
-各工具保留原有许可证和版权声明。内置工具的使用与上游源码链接见 [内置工具说明](docs/bundled-tools.txt)。
+SimpleFontHook 与 Detours 的 MIT 许可要求在软件副本或主要部分中保留版权与许可声明；安装包和便携包均在 `tools/font-hook/` 中附带两份完整原文。各工具保留原有许可证和版权声明。内置工具的使用与上游源码链接见 [内置工具说明](docs/bundled-tools.txt)。
 
-## 更新记录
+## 📝 更新记录
 
 
+
+### v0.4.0
+
+- 新增游戏内字体 Hook、Shift+T 悬浮面板和运行日志；随包保留 SimpleFontHook、Detours 的 MIT 许可。[发布说明](docs/releases/v0.4.0.md)。
 
 ### v0.3.4
 

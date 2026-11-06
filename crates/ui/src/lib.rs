@@ -27,6 +27,7 @@ mod patches;
 mod playtime;
 mod preferences;
 mod tool_preferences;
+mod shortcut_picker;
 mod requests;
 mod screenshots;
 mod responses;

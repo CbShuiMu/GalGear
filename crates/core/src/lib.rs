@@ -12,6 +12,7 @@ pub mod data_sources;
 pub mod downloads;
 pub mod fan_account;
 mod fan_http;
+pub mod font_tools;
 pub mod game_details;
 pub mod game_setup;
 pub mod launcher_icons;
@@ -61,6 +62,10 @@ pub struct Settings {
     pub screenshot_enabled: bool,
     /// 游戏前台时生效的全局截图快捷键。
     pub screenshot_hotkey: String,
+    /// 游戏前台时打开字体调节面板的快捷键；旧配置默认 Shift+T。
+    pub font_hotkey: String,
+    /// 游戏字体面板的已提交参数；旧配置默认为空。
+    pub game_fonts: BTreeMap<String, font_tools::Profile>,
     pub fan_domain: String,
     pub metadata_checks: BTreeMap<String, u64>,
     pub metadata_attempt_versions: BTreeMap<String, u32>,
@@ -107,6 +112,8 @@ impl Default for Settings {
             screenshot_folder: String::new(),
             screenshot_enabled: true,
             screenshot_hotkey: "Shift+S".into(),
+            font_hotkey: "Shift+T".into(),
+            game_fonts: BTreeMap::new(),
             fan_domain: "https://2dfmax.top".into(),
             metadata_checks: BTreeMap::new(),
             metadata_attempt_versions: BTreeMap::new(),
@@ -185,9 +192,9 @@ impl Default for GameEdit {
             tag_rules: BTreeMap::new(),
             save_paths: Vec::new(),
             auto_backup: false,
-            launch_mode: "locale".into(),
+            launch_mode: "normal".into(),
             locale_profile: String::new(),
-            upscale: true,
+            upscale: false,
             ai_summary: false,
             play_status: PlayStatus::default(),
         }

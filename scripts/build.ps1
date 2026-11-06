@@ -7,6 +7,7 @@ foreach ($relative in @('tools\magpie\Magpie.exe', 'tools\magpie\config\config.j
 }
 & (Join-Path $PSScriptRoot 'setup-waifu2x.ps1')
 & (Join-Path $PSScriptRoot 'setup-7zip.ps1')
+& (Join-Path $PSScriptRoot 'build-font-hook.ps1')
 & (Join-Path $PSScriptRoot 'build-frontend.ps1') -Release
 & (Join-Path $PSScriptRoot 'build-ai-agent.ps1')
 Push-Location (Split-Path -Parent $PSScriptRoot)
@@ -22,6 +23,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\ai-agent') -Destination $agentOutput -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\waifu2x') -Destination $agentOutput -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\7zip') -Destination $agentOutput -Recurse -Force
+    Copy-Item -LiteralPath (Join-Path $taskRoot 'tools\font-hook') -Destination $agentOutput -Recurse -Force
     foreach ($name in @('magpie', 'locale-emulator')) {
         $source = (Resolve-Path -LiteralPath (Join-Path $taskRoot "tools\$name")).Path
         Get-ChildItem -LiteralPath $source -Recurse -File | ForEach-Object {

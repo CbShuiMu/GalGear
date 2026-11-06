@@ -9,7 +9,7 @@ use tauri::{Emitter, Manager};
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use windows::elevated::run_helper as run_input_helper;
+use crate::game_input::{Subscription, Trigger};
 
 type SaveSettings = Box<dyn FnOnce(&AppState) -> Result<Settings, Message> + Send>;
 
@@ -47,12 +47,22 @@ impl Service {
     }
 }
 
-pub(crate) fn start(app: tauri::AppHandle) -> Result<(), Message> {
+pub(crate) fn start(
+    app: tauri::AppHandle,
+    #[cfg(windows)] input: Subscription,
+) -> Result<(), Message> {
     let (sender, receiver) = mpsc::channel();
     app.manage(Service(sender));
     std::thread::Builder::new()
         .name("galgear-screenshots".into())
-        .spawn(move || worker(app, receiver))
+        .spawn(move || {
+            worker(
+                app,
+                receiver,
+                #[cfg(windows)]
+                input,
+            )
+        })
         .map_err(|e| Message::detail("screenshot.error", e))?;
     Ok(())
 }
@@ -98,28 +108,7 @@ pub(crate) async fn latest_screenshot(
 }
 
 #[cfg(windows)]
-fn foreground_game(
-    state: &AppState,
-) -> Option<(windows_sys::Win32::Foundation::HWND, galgear_core::Game)> {
-    let (window, executable) = windows::foreground()?;
-    // 只在复制目录元数据时持锁；后续文件系统访问不持有目录锁。
-    let games = state.catalog.lock().ok()?.games.clone();
-    let game = games
-        .into_iter()
-        .filter(|game| {
-            game.executable
-                .as_ref()
-                .is_some_and(|exe| Path::new(exe).canonicalize().is_ok_and(|p| p == executable))
-                || Path::new(&game.folder)
-                    .canonicalize()
-                    .is_ok_and(|root| executable.starts_with(root))
-        })
-        .max_by_key(|game| game.folder.len())?;
-    Some((window, game))
-}
-
-#[cfg(windows)]
-fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
+fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>, mut input: Subscription) {
     use std::{
         ptr,
         time::{Duration, Instant},
@@ -153,10 +142,7 @@ fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
     let mut refreshed = Instant::now() - Duration::from_secs(2);
     let mut notification = windows::Notification::default();
     let mut trigger = Trigger::default();
-    let mut keyboard: Option<windows::Keyboard> = None;
     let mut keys = Vec::new();
-    let mut relay = windows::elevated::Relay::default();
-    let mut relay_required = false;
     loop {
         notification.expire();
         match receiver.recv_timeout(Duration::from_millis(20)) {
@@ -182,9 +168,8 @@ fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
                     }
                     attempted = None;
                     trigger = Trigger::default();
-                    keyboard = None;
-                    relay.clear(window);
-                    relay.retry();
+                    input.configure(None)?;
+                    input.retry()?;
                     last_window = ptr::null_mut();
                     refreshed = Instant::now() - Duration::from_secs(2);
                     Ok(saved)
@@ -200,33 +185,14 @@ fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
             if foreground_changed {
                 attempted = None;
                 trigger = Trigger::default();
-                if let Some(keyboard) = &mut keyboard {
-                    keyboard.clear();
-                }
             }
             last_window = foreground;
             refreshed = Instant::now();
-            target = foreground_game(&state);
-            relay_required = if target.is_some() {
-                match windows::elevated::required(foreground) {
-                    Ok(required) => required,
-                    Err(detail) => {
-                        if foreground_changed {
-                            let error = Message::detail("screenshot.input_error", detail);
-                            let _ = app.emit("tool-failed", &error);
-                            show_notice(&mut notification, foreground, &error, true, &state);
-                        }
-                        false
-                    }
-                }
-            } else {
-                false
-            };
+            target = crate::game_window::foreground_game(&state);
             let enabled = snapshot(&state).is_ok_and(|s| s.screenshot_enabled);
             if registered && (!enabled || target.is_none()) {
                 windows::unregister(window, 1);
                 registered = false;
-                keyboard = None;
             }
             if target.is_none() {
                 attempted = None;
@@ -248,14 +214,6 @@ fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
                                 galgear_core::runtime::hotkey_keys(&s.screenshot_hotkey).ok()
                             })
                             .unwrap_or_default();
-                        match windows::Keyboard::start(window) {
-                            Ok(input) => keyboard = Some(input),
-                            Err(error) => {
-                                let error = Message::detail("screenshot.hotkey_error", error);
-                                let _ = app.emit("tool-failed", &error);
-                                show_notice(&mut notification, foreground, &error, true, &state);
-                            }
-                        }
                     }
                     Err(error) => {
                         let _ = app.emit("tool-failed", &error);
@@ -264,42 +222,30 @@ fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
                 }
             }
         }
-        let relay_target = if registered && relay_required {
+        let input_target = if registered {
             target
                 .as_ref()
                 .map(|(window, _)| (*window, keys.as_slice()))
         } else {
             None
         };
-        if let Err(error) = relay.configure(window, relay_target) {
+        if let Err(error) = input.configure(input_target) {
             let _ = app.emit("tool-failed", &error);
             show_notice(&mut notification, foreground, &error, true, &state);
         }
-        let mut hotkey_message = false;
+        let mut hotkey_message = match input.pressed() {
+            Ok(pressed) => pressed,
+            Err(error) => {
+                let _ = app.emit("tool-failed", &error);
+                show_notice(&mut notification, foreground, &error, true, &state);
+                false
+            }
+        };
         // SAFETY: 消息结构有效，仅在创建窗口的线程消费消息。
         let mut message = unsafe { std::mem::zeroed() };
         // SAFETY: message 为本线程有效缓冲，读取本线程消息队列。
         while unsafe { PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_REMOVE) } != 0 {
-            if message.hwnd == window && relay.accepts(&message) {
-                hotkey_message = true;
-            } else if message.hwnd == window && message.message == windows::elevated::ERROR_MESSAGE
-            {
-                let error = Message::detail(
-                    "screenshot.input_error",
-                    "Input helper could not receive keyboard events",
-                );
-                let _ = app.emit("tool-failed", &error);
-                show_notice(&mut notification, foreground, &error, true, &state);
-            } else if message.hwnd == window && message.message == WM_INPUT {
-                if let Some(keyboard) = &mut keyboard {
-                    hotkey_message |= keyboard.pressed(message.lParam, &keys);
-                }
-                // SAFETY: 系统默认过程负责 WM_INPUT 清理，数据已在上面读取。
-                unsafe {
-                    DispatchMessageW(&message);
-                }
-            } else if message.hwnd == window && message.message == WM_HOTKEY && message.wParam == 1
-            {
+            if message.hwnd == window && message.message == WM_HOTKEY && message.wParam == 1 {
                 hotkey_message = true;
             } else {
                 // SAFETY: 标准消息循环，message 来自本线程 PeekMessageW。
@@ -327,8 +273,7 @@ fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
             );
         }
     }
-    drop(keyboard);
-    relay.clear(window);
+    drop(input);
     if registered {
         windows::unregister(window, 1);
     }
@@ -371,43 +316,6 @@ fn show_notice(
             &settings.color_theme,
             error,
         );
-    }
-}
-
-#[cfg(any(windows, test))]
-#[derive(Default)]
-struct Trigger {
-    last: Option<std::time::Instant>,
-}
-#[cfg(any(windows, test))]
-impl Trigger {
-    fn observe(&mut self, pressed: bool, now: std::time::Instant) -> bool {
-        // WM_HOTKEY 和 WM_INPUT 可能跨消息轮次到达，编码期间也可能已松键。
-        if pressed
-            && self
-                .last
-                .is_none_or(|last| now.duration_since(last).as_millis() >= 250)
-        {
-            self.last = Some(now);
-            true
-        } else {
-            false
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Trigger;
-    use std::time::{Duration, Instant};
-    #[test]
-    fn duplicate_input_notifications_only_capture_once() {
-        let now = Instant::now();
-        let mut trigger = Trigger::default();
-        assert!(trigger.observe(true, now));
-        assert!(!trigger.observe(true, now + Duration::from_millis(20)));
-        assert!(!trigger.observe(false, now + Duration::from_millis(300)));
-        assert!(trigger.observe(true, now + Duration::from_millis(400)));
     }
 }
 

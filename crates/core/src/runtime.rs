@@ -311,6 +311,17 @@ pub fn hotkey_keys(hotkey: &str) -> Result<Vec<u16>, String> {
     Ok(keys)
 }
 
+/// 校验修饰键与一个普通键的组合，并按稳定顺序返回规范名称。
+pub fn canonical_hotkey(value: &str) -> Result<String, String> {
+    let mut keys = hotkey_keys(value)?;
+    if keys.last().is_none_or(|key| matches!(key, 0x10..=0x12 | 0x5b)) {
+        return Err("A shortcut must end with a non-modifier key".into());
+    }
+    let modifiers = keys.len() - 1;
+    keys[..modifiers].sort_unstable();
+    Ok(keys.into_iter().filter_map(hotkey_key_name).collect::<Vec<_>>().join("+"))
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct LocaleProfile {
     pub guid: String,

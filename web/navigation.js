@@ -1,7 +1,7 @@
 // Shared focus boundaries for keyboard, controller and modal rendering.
 export const focusSelector = 'button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, [tabindex="0"]';
 export function topLayer() {
-  for (const selector of ['.update-dialog', '.controller-keyboard', '.choice-popup', '.tag-remove-dialog', '.snapshot-delete-dialog', '.setup-dialog', '.library-dialog', '.ai-summary-dialog', '.restore-dialog', '.archive-dialog', '.editor-dialog', '.game-context-menu', '.detail-panel']) {
+  for (const selector of ['.update-dialog', '.controller-keyboard', '.shortcut-dialog', '.choice-popup', '.tag-remove-dialog', '.snapshot-delete-dialog', '.setup-dialog', '.library-dialog', '.ai-summary-dialog', '.restore-dialog', '.archive-dialog', '.editor-dialog', '.game-context-menu', '.detail-panel']) {
     const layer = document.querySelector(selector);
     if (layer && !layer.closest('[inert]')) return layer;
   }

@@ -16,6 +16,8 @@ use std::fmt::Write;
 pub(crate) struct State {
     #[serde(default)]
     options: Vec<Mode>,
+    #[serde(skip)]
+    saved_request: u32,
     #[serde(default)]
     pub(crate) selected: String,
     #[serde(skip)]
@@ -25,6 +27,22 @@ pub(crate) struct State {
     #[serde(skip)]
     error: Option<Message>,
 }
+impl State {
+    pub(crate) fn saved(&mut self, request: u32) {
+        self.saved_request = request;
+    }
+    pub(crate) fn preserve_settings(
+        &self,
+        current: &crate::models::Settings,
+        incoming: &mut crate::models::Settings,
+        request: u32,
+    ) {
+        if request < self.saved_request {
+            incoming.font_hotkey.clone_from(&current.font_hotkey);
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct Mode {
     value: String,
@@ -38,6 +56,7 @@ pub(crate) fn load(app: &mut App) {
     }
     app.tool_preferences = State {
         path: path.clone(),
+        saved_request: app.tool_preferences.saved_request,
         request: Some(app.requests.next_id()),
         ..Default::default()
     };
@@ -123,6 +142,7 @@ pub(crate) fn resolve(
             match result {
                 Ok(mut state) => {
                     state.path = app.tool_preferences.path.clone();
+                    state.saved_request = app.tool_preferences.saved_request;
                     app.tool_preferences = state;
                 }
                 Err(error) => app.tool_preferences.error = Some(error),
@@ -169,6 +189,27 @@ pub(crate) fn render(html: &mut String, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn stale_settings_cannot_undo_font_shortcut_after_profile_reload() {
+        let mut app = App::default();
+        let old = app.settings.clone();
+        app.settings.font_hotkey = "Alt+F9".into();
+        app.tool_preferences.saved(10);
+        load(&mut app);
+        let id = app.requests.last_id();
+        resolve(
+            &mut app,
+            &Pending::MagpieModes,
+            id,
+            true,
+            r#"{"options":[],"selected":""}"#,
+        );
+        crate::state::apply_settings(&mut app, old.clone(), 9);
+        assert_eq!(app.settings.font_hotkey, "Alt+F9");
+        crate::state::apply_settings(&mut app, old, 11);
+        assert_eq!(app.settings.font_hotkey, "Shift+T");
+    }
+
     #[test]
     fn path_changes_cannot_save_a_profile_from_a_different_magpie() {
         let mut app = App::default();

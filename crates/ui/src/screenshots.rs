@@ -119,8 +119,7 @@ pub fn screenshot_updated(game: &str) {
 }
 
 pub(crate) fn render(html: &mut String, app: &App) {
-    write!(html, r#"<label class="edit-field" for="screenshot-hotkey"><span>{}</span><input id="screenshot-hotkey" data-input="screenshot-hotkey" value="{}" placeholder="Shift+S" autocomplete="off" spellcheck="false"/></label>"#,
-        t(app,"screenshot.hotkey"), esc(&crate::features::setting(app,"screenshot-hotkey",&app.settings.screenshot_hotkey))).unwrap();
+    crate::shortcut_picker::field(html, app, "screenshot-hotkey");
 }
 
 pub(crate) fn render_card(html: &mut String, app: &App, game: &str) {

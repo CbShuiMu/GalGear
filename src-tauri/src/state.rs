@@ -93,6 +93,10 @@ impl AppState {
             &cached.games,
         ));
         let account = accounts::AccountState::load(&store, &settings);
+        log::info!("state_loaded games={} warnings={} language={} theme={}", cached.games.len(), cached.warnings.len(), settings.language.code(), settings.theme);
+        for warning in &cached.warnings {
+            log::warn!("state_warning key={} detail={warning}", warning.key);
+        }
         Ok(Self {
             store,
             settings: Mutex::new(settings),

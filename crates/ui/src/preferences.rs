@@ -588,22 +588,19 @@ fn paths(html: &mut String, app: &App) {
             app.settings.locale_emulator.clone(),
         ),
         ("tool-magpie", "tools.magpie", app.settings.magpie.clone()),
-        (
-            "tool-hotkey",
-            "tools.hotkey",
-            app.settings.magpie_hotkey.clone(),
-        ),
 
     ] {
         write!(html,r#"<label class="edit-field" for="{}"><span>{}</span><input id="{}" data-input="{}" value="{}"/></label>"#,key,t(app,label),key,key,esc(&features::setting(app,key,&fallback))).unwrap();
     }
+    crate::shortcut_picker::field(html, app, "tool-hotkey");
     crate::tool_preferences::render(html, app);
+    crate::shortcut_picker::field(html, app, "font-hotkey");
+    crate::screenshots::render(html, app);
     write!(
         html,
-        "<label class=\"edit-field\" for=\"backup-retention\"><span>{}</span><input id=\"backup-retention\" data-input=\"backup-retention\" value=\"{}\" type=\"number\" min=\"1\" max=\"1000\"/></label>{}</div><p class=\"tools-help\">{}</p></section><div class=\"config-export-row\"><p class=\"config-note\">{}<br>{}</p>{}</div><p class=\"muted\">{}</p>",
+        "<label class=\"edit-field\" for=\"backup-retention\"><span>{}</span><input id=\"backup-retention\" data-input=\"backup-retention\" value=\"{}\" type=\"number\" min=\"1\" max=\"1000\"/></label></div><p class=\"tools-help\">{}</p></section><div class=\"config-export-row\"><p class=\"config-note\">{}<br>{}</p>{}</div><p class=\"muted\">{}</p>",
         t(app, "backup.retention"),
         esc(&features::setting(app,"backup-retention",&app.settings.backup_retention.to_string())),
-        { let mut screenshot = String::new(); crate::screenshots::render(&mut screenshot, app); screenshot },
         t(app, "tools.help"),
         t(app, "settings.config_path"),
         esc(&app.config_path),

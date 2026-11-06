@@ -2,7 +2,7 @@
 
 <img src="assets/readme/logo.svg" width="80" height="80" alt="GalGear's pink flower logo, shown at the top of the sidebar" />
 
-# GalGear
+# 🌸 GalGear
 
 **A Galgame manager with locale emulation, upscaling, patch search and management, metadata from multiple sources, and AI-assisted save discovery.**
 
@@ -12,20 +12,20 @@ Windows x64 · Interface languages: 简体中文 / 日本語 / English
 
 QQ community and feedback group: 607755362
 
-[Download](https://github.com/CbShuiMu/GalGear/releases/latest) · [Quick start](#quick-start) · [Features](#features) · [Report an issue](https://github.com/CbShuiMu/GalGear/issues)
+[Download](https://github.com/CbShuiMu/GalGear/releases/latest) · [Quick start](#-quick-start) · [Features](#-features) · [Report an issue](https://github.com/CbShuiMu/GalGear/issues)
 
 </div>
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> The current release is **v0.3.4 (November 4, 2026)**, adding NextMoe patch downloads and browser authorization, with improved save discovery, home backgrounds, and update notices.
+> The current release is **v0.4.0 (November 7, 2026)**, adding an in-game font Hook, a Shift+T floating panel, and runtime diagnostics, with improved screenshot and shared input handling.
 
-## Quick start
+## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.3.4_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.3.4-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.4.0_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.4.0-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -33,14 +33,15 @@ For your first launch:
 2. After scanning, use the confirmation window to choose each game's metadata source, matching title, and executable. You can save the games you have confirmed and handle the rest later. Use **Batch change** at the top right to change the metadata source for the list, then **Auto search** to find close matches. Review the results afterward to catch incorrect matches.
 3. Open the game details, check the launch configuration, and launch the game. To enable automatic backups, first launch the game and create a save.
 
-## Features
+## ✨ Features
 
 | Feature | Description |
 | --- | --- |
 | Library | Manage multiple folders, search, sort, organize nested favorites, drag and drop, and track playtime and last played dates. |
 | Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕 Galgame, and 2DFan. Search covers independently or use local images. Thanks to these platforms. |
-| Bundled locale emulation and upscaling | Enabled by default: launch through Locale Emulator and scale game images in real time with Magpie. You can uncheck these options in the game configuration. |
+| Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
+| Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
 | Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, supports capture in Magpie mode, and shows the latest screenshot below the game details. |
 | Backups | Find or confirm save locations; back up multiple folders, add notes, lock backups, preview restores, and enable backups after game exit. Set the maximum backup count under Settings → Paths and backups. WebDAV transfers are manual. [Cloud storage](docs/cloud-storage.md). |
 | Patches | **Linked to your library**: select a library game to search and save patches directly in its patch folder. NextMoe hosted downloads require an application key with `moyu:files` permission. Search KunGal and 2DFan, import local patches, automatically extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy and account token. NextMoe is recommended for patch downloads: no points required, with direct download links. |
@@ -48,11 +49,12 @@ For your first launch:
 | Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
 | Update notices | Checks GalGear and Skill versions in the background at startup. Downloads and installation start only when you choose to update. |
 | Data import | Supports PotatoVN, ReinaManager, LunaBox, and more. |
+| Runtime logs | Records startup, command, and error diagnostics in `logs/` beside the executable; no automatic uploads. [Logging](docs/runtime-logs.md). |
 
 <details>
 <summary>Detailed feature descriptions and limitations</summary>
 
-### Galgame management
+### 🎮 Galgame management
 
 Games can stay in different folders; there is no need to move them to use GalGear. Search by name, combine tag filters, sort your library, and use nested favorites folders to organize games you are playing, plan to play, or have finished. A game can belong to multiple favorites folders, with drag-and-drop and batch organization supported.
 
@@ -60,11 +62,11 @@ GalGear records playtime and when you last played. Tracking relies on detecting 
 
 Waifu2x denoises covers in the background and generates denoised 4K home backgrounds, preserving the aspect ratio with a 3840-pixel long edge. The feature is designed with a **laptop RTX 2060** as its minimum hardware target and processes one task at a time in small tiles. Images are replaced only after successful generation, and results are reused for identical covers. See [Cover enhancement](docs/cover-enhancement.md) for deployment and cache details (in Chinese).
 
-### Tag filtering
+### 🏷️ Tag filtering
 
 Filter by tags covering everything from game attributes to voice actors listed in the game's metadata.
 
-### Automatic metadata from multiple sources
+### 🔎 Automatic metadata from multiple sources
 
 Choose metadata from **2DFan, VNDB, Bangumi, 月幕 Galgame, 未萌 NextMoe, and KunGal**, with a different source available for each game. Synopses, developers, staff, and tags are stored locally and can also be edited manually. **Thanks to all these platforms.**
 
@@ -72,7 +74,13 @@ Search for covers separately by name, choose a different cover source, or use a 
 
 The interface offers pink, white-pink, and white themes, each with light or dark mode. You can also adjust the language and font size in Settings.
 
-### Game screenshots
+### 🔤 In-game font Hook and floating panel
+
+Press the default shortcut **Shift+T** with a library game in the foreground to toggle the native Rust floating panel. Choose a system font and adjust height, width, character spacing, line spacing, and weight, with optional vertical metrics, charset emulation, and Japanese glyph or Traditional/Simplified Chinese mapping. The matching x86/x64 Hook is loaded only when you click **Apply to game**, not when you open the panel. Successful settings are saved per game; actual redraw and font results depend on the engine. To change the shortcut, open Settings → Paths & backups → Save backups and bundled tools, then save the card.
+
+Font replacement is based on [SimpleFontHook by SuQiandYing](https://github.com/SuQiandYing/SimpleFontHook). GalGear supplies its own floating panel, IPC, loader, and compatibility patches. The original MIT copyright and permission notices for the upstream Hook and Detours remain intact; these components retain their own licenses. See [Font panel details and limitations](docs/font-tools.md).
+
+### 📸 Game screenshots
 
 Press the default shortcut **Shift+S** in a game and the screenshot is **automatically copied to the clipboard**. Switch to a chat window, document, or image editor that supports pasting images and press **Ctrl+V** to paste and share it directly.
 
@@ -84,7 +92,7 @@ The **Recent screenshot** card on the game details page shows the latest image, 
 
 Windowed or borderless mode is recommended, with the entire game image visible on screen. Exclusive fullscreen, protected content, or third-party overlays may affect capture. Games running as administrator may require a Windows authorization prompt so GalGear can receive the screenshot shortcut.
 
-### Cloud backups and save management
+### ☁️ Cloud backups and save management
 
 GalGear searches for saves in the game folder, AppData, Documents, and other locations. You can also specify locations manually.
 
@@ -96,7 +104,7 @@ A preview is shown before restoring, and the current saves are backed up first. 
 
 Uploads and downloads must be started manually; background automatic synchronization is not currently available.
 
-### Patch search and management
+### 🧩 Patch search and management
 
 Search for patch resources on **2DFan, KunGal, and NextMoe**, read the original site's instructions, and download available direct links provided by the site. You can also import local patches. Resources requiring login or payment remain subject to the original site's account and access requirements. **Downloading resources from 2DFan requires a configured proxy.**
 
@@ -106,11 +114,11 @@ Local ZIP archives can be previewed directly; RAR and 7z archives use the bundle
 
 For extracted patches, place each patch in its own subfolder under `patch/` in the game folder. GalGear lists them on the details page so you can install or switch patches without copying files manually each time.
 
-### AI-assisted save discovery
+### 📁 AI-assisted save discovery
 
 GalGear first scans a preset list of possible paths. AI-assisted save discovery supplements this scan. For a new game, launch it and create a save first, then exit and click the AI search button at the top right of the save card.
 
-### AI story features (experimental)
+### 🤖 AI story features (experimental)
 
 An optional **AI story recap** is available. Configure an API token and model for DeepSeek, OpenAI, Qwen, or Kimi under **Settings → AI**, then enable AI analysis in the game's configuration editor. Initial preparation may take some time. Once it finishes, you can view the recap and your current progress on the details page.
 
@@ -120,7 +128,7 @@ These features are experimental. Save and script support varies by game, and gen
 
 </details>
 
-## Interface preview
+## 🖼️ Interface preview
 
 Screenshots are from v0.3.1 (November 5, 2026). Click an image to view the original.
 
@@ -137,7 +145,7 @@ Screenshots are from v0.3.1 (November 5, 2026). Click an image to view the origi
 
 </details>
 
-## Data locations
+## 🗂️ Data locations
 
 | Data | Location |
 | --- | --- |
@@ -151,7 +159,7 @@ Keep the application folder, `data/`, `tools/`, game backups, and installed `Gal
 
 Account tokens, cookies, and cloud storage passwords are stored in the local Windows Credential Manager and must be configured again on another computer. Removing a game from the library only changes the list; it does not delete the game, saves, or backups. For 2DFan, you need to obtain the token and cookies yourself.
 
-## Usage notes
+## 📌 Usage notes
 
 - GalGear manages local EXE games that are already installed. It does not provide games or mount or install disc images.
 - Save detection does not support every engine; check the location before making your first backup. Locale Emulator and Magpie configuration paths can be changed under **Settings → Paths & backups**. Their behavior also depends on the game and your local environment.
@@ -161,18 +169,24 @@ To report a problem, include the application version, reproduction steps, and er
 
 Developer documentation (in Chinese): [Module structure](docs/architecture.md) · [Data source integration](docs/interface-and-data-sources-2026-10-14.md) · [Requirements](docs/requirements.md)
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 GalGear uses the following open-source tools for several of its features. Thanks to their developers and maintainers:
 
+- [SimpleFontHook — SuQiandYing](https://github.com/SuQiandYing/SimpleFontHook): the upstream font Hook implementation, licensed under MIT. The compatibility build preserves its [original notice](docs/licenses/SuQiandYing-MIT.txt).
+- [Microsoft Detours](https://github.com/microsoft/Detours): the API interception library used by the Hook, with its [Microsoft MIT license](docs/licenses/Detours-MIT.txt) retained.
 - [Locale Emulator (LE)](https://github.com/xupefei/Locale-Emulator): launching games with an emulated locale.
 - [Magpie](https://github.com/Blinue/Magpie): real-time game image scaling and upscaling.
 - [waifu2x-ncnn-vulkan (waifu2x)](https://github.com/nihui/waifu2x-ncnn-vulkan): cover denoising and home background enhancement.
 - [7-Zip](https://github.com/ip7z/7zip): extracting RAR, 7z, and other patch archives.
 
-Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
+The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
-## Release history
+## 📝 Release history
+
+### v0.4.0
+
+- Added an in-game font Hook, Shift+T floating panel, and runtime logs; bundled the original SimpleFontHook and Detours MIT notices. [Release notes](docs/releases/v0.4.0.md).
 
 ### v0.3.4
 

@@ -163,6 +163,9 @@ pub(crate) async fn refresh_fan_status_inner(
     .await
     .unwrap_or_else(|_| Err(Message::new("auth.network")));
     state.account.refreshing.store(false, Ordering::SeqCst);
+    if let Err(error) = &result {
+        log::warn!("account_refresh_failed key={} detail={error}", error.key);
+    }
     let (committed, status) = {
         let mut cache = state
             .account

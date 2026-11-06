@@ -1,6 +1,12 @@
 //! 通过 Magpie 公开的窗口属性关联源游戏与输出；不按窗口标题或屏幕尺寸猜测。
 use std::ptr;
-use windows_sys::Win32::{Foundation::HWND, UI::WindowsAndMessaging::*};
+use windows_sys::Win32::{
+    Foundation::HWND,
+    UI::WindowsAndMessaging::{
+        FindWindowExW, FindWindowW, GW_OWNER, GetPropW, GetWindow, IsIconic, IsWindow,
+        IsWindowVisible,
+    },
+};
 
 const CLASS: windows_sys::core::PCWSTR =
     windows_sys::w!("Window_Magpie_967EB565-6F73-4E94-AE53-00CC42592A22");
@@ -24,7 +30,7 @@ fn associated_source(scaling: HWND) -> HWND {
     }
 }
 
-pub(super) fn source(foreground: HWND) -> HWND {
+pub(crate) fn source(foreground: HWND) -> HWND {
     let scaling = scaling_window();
     if !scaling.is_null() && foreground == scaling {
         let source = associated_source(scaling);
@@ -36,7 +42,7 @@ pub(super) fn source(foreground: HWND) -> HWND {
     foreground
 }
 
-pub(super) fn output(game: HWND) -> HWND {
+pub(crate) fn output(game: HWND) -> HWND {
     let scaling = scaling_window();
     // SAFETY: 系统查询处理已关闭或无效句柄；调用者在采集后再次验证关联。
     unsafe {

@@ -156,7 +156,7 @@ function measureLibraryBounds() {
   shell.dataset.minimumWidth = String(bounds.width);
   if (window.__TAURI__?.core && key !== minimumRequest) {
     minimumRequest = key;
-    window.__TAURI__.core.invoke('set_library_bounds', bounds).catch(error => {
+    (window.GalGearDiagnostics?.invoke || window.__TAURI__.core.invoke)('set_library_bounds', bounds).catch(error => {
       minimumRequest = '';
       console.error('Unable to apply library window bounds', error);
     });
@@ -373,6 +373,14 @@ function renderFrame(html) {
       previousContext=false;contextReturnId=null;
     }
     syncModalBoundary();
+    const shortcutDialog = document.querySelector('.shortcut-dialog');
+    if (shortcutDialog && !shortcutReturnFocus) {
+      shortcutReturnFocus = shortcutDialog.dataset.shortcutField;
+      document.getElementById('shortcut-capture')?.focus({preventScroll:true});
+    } else if (!shortcutDialog && shortcutReturnFocus) {
+      document.getElementById(shortcutReturnFocus)?.focus({preventScroll:true});
+      shortcutReturnFocus = null;
+    }
     document.querySelectorAll('.add-menu').forEach(menu => setAddMenuExpanded(menu, menu.dataset.expanded === 'true'));
     const saveDialog = document.querySelector('.snapshot-delete-dialog') || document.querySelector('.restore-dialog') || document.querySelector('.archive-dialog');
     const importDialog = document.querySelector('.import-dialog');
@@ -479,10 +487,14 @@ window.GalGearBridge = {
       if (old) { document.body.append(old); for (const [selector, top] of positions) { const pane = old.querySelector(selector); if (pane) pane.scrollTop = top; } old.addEventListener('animationend', () => old.remove(), { once: true }); setTimeout(() => old.remove(), 600); }
     }
   },
+  report_panic(message) {
+    if (window.GalGearDiagnostics) window.GalGearDiagnostics.panic(message);
+    else console.error(message);
+  },
   async request(id, command, payload) {
     try {
       if (!window.__TAURI__?.core) throw { key: 'error.desktop', args: {} };
-      const result = await window.__TAURI__.core.invoke(command, JSON.parse(payload));
+      const result = await (window.GalGearDiagnostics?.invoke || window.__TAURI__.core.invoke)(command, JSON.parse(payload));
       ui.resolve(id, true, JSON.stringify(result ?? null));
     } catch (error) {
       // Bootstrap may call synchronously during wasm initialization.
@@ -558,7 +570,24 @@ document.addEventListener('compositionend', event => {
 document.addEventListener('change', event => {
   if (wasmReady && event.target.dataset.select) ui.dispatch(event.target.dataset.select, event.target.value);
 });
+let shortcutReturnFocus = null;
+document.addEventListener('click', event => {
+  if (event.target.closest('[data-action="shortcut-reset"]')) document.getElementById('shortcut-capture')?.focus({preventScroll:true});
+});
 document.addEventListener('keydown', event => {
+  const recorder = document.querySelector('.shortcut-dialog');
+  if (wasmReady && recorder) {
+    if (event.key === 'Escape' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+      event.preventDefault(); event.stopImmediatePropagation(); ui.dispatch('shortcut-cancel', ''); return;
+    }
+    const navigation = event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey;
+    const buttonAction = event.target.closest('button') && ['Enter', ' '].includes(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+    if (!navigation && !buttonAction) {
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (!event.repeat && !event.isComposing && event.keyCode !== 229) ui.dispatch('shortcut-pressed', JSON.stringify({code:event.code,ctrl:event.ctrlKey,alt:event.altKey,shift:event.shiftKey,meta:event.metaKey}));
+      return;
+    }
+  }
   const addMenu = document.querySelector('.add-menu[data-expanded=true]');
   if (event.key === 'Escape' && addMenu) {
     addMenu.querySelector('.add-trigger').focus({preventScroll:true});
@@ -849,6 +878,7 @@ document.addEventListener('scroll', event => {
 
 try {
   await init(); wasmReady = true;
+  window.GalGearDiagnostics?.ready();
   if (window.__TAURI__?.event) {
     await window.__TAURI__.event.listen('scan-progress', event => ui.scan_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('game-enriched', event => ui.game_enriched(JSON.stringify(event.payload)));
@@ -860,7 +890,7 @@ try {
           const image = new Image(); image.src = src; return image.decode();
         }));
         ui.cover_enhanced(JSON.stringify(data));
-      } catch (error) { console.warn('Artwork preload failed; keeping current cover', error); }
+      } catch (error) { window.GalGearDiagnostics?.error(error); console.warn('Artwork preload failed; keeping current cover', error); }
     });
     await window.__TAURI__.event.listen('enrichment-progress', event => ui.enrichment_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('fan-download-progress', event => ui.download_progress(JSON.stringify(event.payload)));
@@ -875,6 +905,7 @@ try {
   }
 }
 catch (error) {
+  window.GalGearDiagnostics?.error(error);
   const screen = document.createElement('div');
   screen.className = 'boot-screen';
   screen.textContent = String(error);

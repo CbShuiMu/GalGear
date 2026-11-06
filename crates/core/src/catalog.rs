@@ -160,6 +160,7 @@ pub fn forget_entry(settings: &mut Settings, id: &str) {
     settings.excluded_games.retain(|excluded| excluded != id);
     settings.manual_games.retain(|game| game.id != id);
     settings.game_edits.remove(id);
+    settings.game_fonts.remove(id);
     settings.cover_overrides.remove(id);
     settings.metadata_checks.remove(id);
     settings.metadata_attempt_versions.remove(id);
