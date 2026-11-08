@@ -12,6 +12,7 @@ mod cover_picker;
 mod detail;
 mod detail_form;
 mod detail_tags;
+mod detail_tools;
 mod downloads;
 mod events;
 mod features;

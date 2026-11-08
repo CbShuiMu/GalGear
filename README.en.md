@@ -18,14 +18,14 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.4.1 (November 8, 2026)** adds a configurable shared save backup folder and improves offline library entries, alias search, and playtime tracking.
+> **v0.4.2 (November 8, 2026)** adds quick controls for locale emulation, upscaling, automatic backups, and AI analysis, plus WebDAV uploads from game details.
 
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.4.1_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.4.1-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.4.2_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.4.2-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -39,11 +39,11 @@ For your first launch:
 | --- | --- |
 | Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. |
 | Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕 Galgame, and 2DFan. Search covers independently or use local images. Thanks to these platforms. |
-| Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. |
+| Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
 | Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
 | Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, supports capture in Magpie mode, and shows the latest screenshot below the game details. |
-| Backups | Organize backups by game and save time in a configurable shared folder. Back up multiple save folders, add notes, lock backups, preview restores, and back up after a game exits. Existing backups migrate after validation. Start WebDAV transfers manually. [Backups and cloud storage](docs/cloud-storage.md). |
+| Backups | Organize backups by game and save time in a configurable shared folder. Back up multiple save folders, add notes, lock backups, preview restores, and back up after a game exits. Existing backups migrate after validation. Start WebDAV transfers manually. [Backups and cloud storage](docs/cloud-storage.md). Start a WebDAV upload from the save card in game details. GalGear checks the saved connection before creating and uploading a local snapshot. |
 | Patches | **Linked to your library**: select a library game to search and save patches directly in its patch folder. NextMoe hosted downloads require an application key with `moyu:files` permission. Search KunGal and 2DFan, import local patches, automatically extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy and account token. NextMoe is recommended for patch downloads: no points required, with direct download links. |
 | AI (experimental) | **AI-assisted save path discovery**, story recaps, and walkthrough route maps. Requires your own API token, sends necessary game text, and incurs API costs. Route maps may contain spoilers. [AI settings](docs/ai-settings.md). Recaps and route maps are still being tested; before using AI save discovery for the first time, launch the game and create a save. |
 | Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
@@ -100,7 +100,7 @@ After confirming the locations, you can back up multiple save folders, add notes
 
 A preview is shown before restoring, and the current saves are backed up first. Exit a running game before restoring saves or applying patches.
 
-**WebDAV cloud backups** are also supported. Configure your connection under **Settings → Cloud storage** to upload saves manually, or download cloud backups into your local backup history and then restore them. When moving between computers, use the same game title on both. If there are multiple save locations, make sure their order matches as well. See [Cloud storage](docs/cloud-storage.md) for connection examples and instructions (in Chinese).
+Save a **WebDAV** connection under **Settings → Cloud storage**, exit the game, and use the cloud upload button on its save card. GalGear checks the connection before backing up and uploading the saves. Download cloud backups from Cloud storage and restore them from the local backup history. When moving between computers, use the same game title on both. If there are multiple save locations, make sure their order matches as well. See [Cloud storage](docs/cloud-storage.md) for connection examples and instructions (in Chinese).
 
 Uploads and downloads must be started manually; background automatic synchronization is not currently available.
 
@@ -183,6 +183,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## 📝 Release history
+
+### v0.4.2
+
+- Added four quick controls, a cloud upload button, and folder buttons with tooltips to game details. GalGear checks the WebDAV connection before creating and uploading a snapshot. [Release notes](docs/releases/v0.4.2.md).
 
 ### v0.4.1
 

@@ -99,6 +99,12 @@ pub(super) fn google(name: &str) -> Option<&'static str> {
         "backup" => include_str!(
             "../../../src-tauri/icons/backup_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
         ),
+        "history" => include_str!(
+            "../../../src-tauri/icons/history_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "cloud_upload" => include_str!(
+            "../../../src-tauri/icons/cloud_upload_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
         "folder_special" => include_str!(
             "../../../src-tauri/icons/folder_special_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
         ),

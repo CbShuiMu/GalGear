@@ -3639,6 +3639,26 @@
     "ja-JP": "現在のセーブデータをアップロード",
     "en-US": "Upload current saves"
   },
+  "cloud.upload_save": {
+    "zh-CN": "上传云存档",
+    "ja-JP": "クラウドにセーブデータをアップロード",
+    "en-US": "Upload saves to cloud"
+  },
+  "cloud.checking_upload": {
+    "zh-CN": "正在检查云存储配置并测试连接…",
+    "ja-JP": "クラウド設定を確認し、接続をテストしています…",
+    "en-US": "Checking cloud settings and testing the connection…"
+  },
+  "cloud.uploading": {
+    "zh-CN": "正在上传云存档…",
+    "ja-JP": "セーブデータをクラウドにアップロードしています…",
+    "en-US": "Uploading saves to the cloud…"
+  },
+  "cloud.configure_first": {
+    "zh-CN": "请先在设置 → 云存储填写连接信息、测试连接并保存。",
+    "ja-JP": "設定 → クラウドストレージで接続情報を入力し、接続テストを行って保存してください。",
+    "en-US": "Enter connection details in Settings → Cloud storage, test the connection, and save."
+  },
   "cloud.refresh": {
     "zh-CN": "刷新云端备份",
     "ja-JP": "クラウドのバックアップを更新",

@@ -199,7 +199,7 @@
 
 .reference-detail .screenshot-card .utility-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .reference-detail .screenshot-card .utility-heading h3{margin:0}
-.reference-detail .screenshot-card .utility-heading .button{margin-left:auto;min-height:32px;padding:6px 10px;font-size:calc(var(--ui-font)*.75)}
+.reference-detail .screenshot-card .utility-heading .button{margin-left:auto;min-height:32px;font-size:calc(var(--ui-font)*.75)}
 .reference-detail .screenshot-preview{margin:14px 0 0;min-width:0}
 .reference-detail .screenshot-preview img{display:block;width:100%;height:auto;max-height:300px;object-fit:contain;border-radius:8px;background:var(--detail-utility)}
 .reference-detail .screenshot-preview figcaption{margin-top:8px;color:var(--muted);font-size:calc(var(--ui-font)*.6875);overflow-wrap:anywhere}
@@ -240,13 +240,13 @@
 .reference-detail :is(.reading-card,.detail-card) button:disabled {
     --detail-action-opacity: .55;
 }
-.reference-detail :is(.metadata-actions,.card-heading-actions) .button.icon-only {
+.reference-detail :is(.metadata-actions,.card-heading-actions,.screenshot-card .utility-heading,.save-backup-actions) .button.icon-only {
     width: 32px;
     min-width: 32px;
     height: 32px;
     padding: 0;
 }
-.reference-detail :is(.metadata-actions,.card-heading-actions) .button.icon-only>.icon {
+.reference-detail :is(.metadata-actions,.card-heading-actions,.screenshot-card .utility-heading,.save-backup-actions) .button.icon-only>.icon {
     display: block;
     width: 18px;
     height: 18px;
@@ -263,4 +263,85 @@
         transition: none;
         translate: none;
     }
+}
+
+/* 展开宽度参与排版，让收藏和通关随胶囊右移；窄列提前独占一行，避免 hover 换行抖动。 */
+.reference-detail .detail-scroll { container: detail-layout / inline-size; }
+.reference-detail .detail-summary { container: detail-summary / inline-size; }
+.reference-detail .detail-tool-actions { display: flex; align-items: center; gap: 8px; }
+.reference-detail .game-tools-shortcuts {
+    --quick-tool-size: 34px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--button-bg);
+    box-shadow: inset 0 0 0 1px var(--button-line);
+}
+:root .app-shell[data-theme] .reference-detail .game-tools-shortcuts .game-settings-button {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+.game-tools-shortcuts .game-settings-button .icon { transition: transform 320ms cubic-bezier(.2,.7,.2,1); }
+.game-tools-reveal { width: 0; overflow: hidden; visibility: hidden; transition: width 320ms cubic-bezier(.2,.7,.2,1), visibility 320ms; }
+.game-tools-buttons { display: flex; align-items: center; gap: 4px; width: max-content; padding: 4px 6px 4px 2px; opacity: 0; transition: opacity 160ms ease; }
+.game-tools-shortcuts:is(:hover,:focus-within) .game-tools-reveal { width: calc(var(--quick-tool-size) * 4 + 20px); visibility: visible; }
+.game-tools-shortcuts:is(:hover,:focus-within) .game-tools-buttons { opacity: 1; }
+.game-tools-shortcuts:is(:hover,:focus-within) .game-settings-button .icon { transform: rotate(90deg); }
+.game-tool-shortcut.tool-locale { --tool-color: #087e8b; }
+.game-tool-shortcut.tool-upscale { --tool-color: #27834e; }
+.game-tool-shortcut.tool-backup { --tool-color: #bd477f; }
+.game-tool-shortcut.tool-ai { --tool-color: #356fc7; }
+[data-theme="dark"] .game-tool-shortcut.tool-locale { --tool-color: #6dd9e2; }
+[data-theme="dark"] .game-tool-shortcut.tool-upscale { --tool-color: #7cdaa0; }
+[data-theme="dark"] .game-tool-shortcut.tool-backup { --tool-color: #f49bc3; }
+[data-theme="dark"] .game-tool-shortcut.tool-ai { --tool-color: #91baff; }
+:root .app-shell[data-theme] .reference-detail .game-tool-shortcut {
+    display: grid;
+    place-items: center;
+    width: var(--quick-tool-size);
+    height: var(--quick-tool-size);
+    flex: 0 0 var(--quick-tool-size);
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--tool-color);
+    font-size: calc(var(--ui-font) * .8125);
+    font-weight: 700;
+    line-height: 1;
+}
+.game-tool-shortcut .icon { width: 21px; height: 21px; }
+:root .app-shell[data-theme] .reference-detail .game-tool-shortcut[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--tool-color) 14%, transparent);
+    border-color: var(--tool-color);
+}
+:root .app-shell[data-theme] .reference-detail .game-tools-shortcuts button:hover:not(:disabled) {
+    background: var(--button-hover-bg);
+}
+:root .app-shell[data-theme] .reference-detail .game-tool-shortcut:hover:not(:disabled) { color: var(--tool-color); }
+:root .app-shell[data-theme] .reference-detail .game-tool-shortcut:focus-visible { outline-offset: -3px; }
+.reference-detail .save-card .card-heading-actions { margin-left: auto; }
+@container detail-summary (max-width: 540px) {
+    .reference-detail .detail-tool-actions { flex-basis: 100%; }
+}
+@container detail-layout (max-width: 500px) {
+    .reference-detail .detail-hero { grid-template-columns: minmax(0,1fr); }
+    .reference-detail .detail-cover { max-width: 150px; }
+}
+@container detail-summary (max-width: 340px) {
+    .reference-detail .game-tools-shortcuts { --quick-tool-size: 28px; }
+    .reference-detail .detail-tool-actions,.reference-detail .hero-actions .detail-state-actions { gap: 4px; }
+    .reference-detail .detail-state-actions .card-action { width: 32px; height: 32px; flex-basis: 32px; padding: 5px; }
+}
+@media (hover: none) {
+    .game-tools-shortcuts .game-tools-reveal { width: calc(var(--quick-tool-size) * 4 + 20px); visibility: visible; }
+    .game-tools-shortcuts .game-tools-buttons { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .game-tools-shortcuts .game-settings-button .icon,.game-tools-reveal,.game-tools-buttons { transition: none; }
 }

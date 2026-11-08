@@ -308,10 +308,11 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             app.busy() || !game.available || runtime == "running",
         ));
     }
-    write!(html,r#"<button class="icon-button game-settings-button" data-action="game-settings" aria-label="{}" title="{}" {}>{}</button>"#,t(app,"detail.configure"),t(app,"detail.configure"),if game.available {""} else {"disabled"},icon("settings")).unwrap();
+    html.push_str("<div class=\"detail-tool-actions\">");
+    crate::detail_tools::shortcuts(html, app, game, &edit);
     html.push_str("<div class=\"detail-state-actions\">");
     crate::game_actions::render(html, app, game);
-    html.push_str("</div>");
+    html.push_str("</div></div>");
     write!(
         html,
         "</div><section class=\"hero-tags\" aria-label=\"{}\"><div class=\"game-tags\">",
@@ -547,14 +548,28 @@ fn location(html: &mut String, app: &App, game: &Game) {
 }
 
 fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
-    write!(
-        html,
-        "<section class=\"detail-card save-card\"><div class=\"utility-heading\"><h3>{}</h3><div class=\"card-heading-actions\">{}{}</div></div>",
+    let report = app.detail.saves.get(&game.id);
+    let selected = edit.save_path.as_deref().filter(|path| !path.trim().is_empty())
+        .or_else(|| (edit.save_paths.len() == 1).then(|| edit.save_paths[0].as_str()));
+    let has_confirmed = report.is_some_and(|report| report.locations.iter().any(|location| location.confidence == "confirmed"));
+    let locations: Vec<_> = report.into_iter().flat_map(|report| &report.locations)
+        .filter(|location| edit.save_path_auto || selected.is_none_or(|path| location.path.eq_ignore_ascii_case(path)))
+        .filter(|location| !has_confirmed || location.confidence == "confirmed").collect();
+    write!(html, "<section class=\"detail-card save-card\"><div class=\"utility-heading\"><h3>{}</h3><div class=\"card-heading-actions\">{}{}",
         t(app, "save.title"),
         button("ai-find-save", &game.id, t(app, "save.ai_find"), "", "quiet", features::save_busy(app)),
         button("choose-save", &game.id, t(app, "save.choose"), "folder", "quiet", features::save_busy(app))
-    )
-    .unwrap();
+    ).unwrap();
+    // 多个有效目录保留各自的入口，按钮提示中显示路径以便区分。
+    for location in locations.iter().filter(|location| location.exists) {
+        html.push_str(&crate::widgets::icon_button("open-save", &location.path,
+            &format!("{}: {}", t(app, "detail.open_directory"), location.path),
+            "folder_open", "quiet", false));
+    }
+    if !locations.iter().any(|location| location.exists) {
+        html.push_str(&crate::widgets::icon_button("open-save", "", t(app, "detail.open_directory"), "folder_open", "quiet", true));
+    }
+    html.push_str("</div></div>");
     if let Some(report) = app.detail.saves.get(&game.id) {
         if report.locations.is_empty() {
             write!(
@@ -571,28 +586,9 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
             )
             .unwrap();
         }
-        let selected = edit
-            .save_path
-            .as_deref()
-            .filter(|path| !path.trim().is_empty())
-            .or_else(|| (edit.save_paths.len() == 1).then(|| edit.save_paths[0].as_str()));
-        let has_confirmed = report.locations.iter().any(|location| location.confidence == "confirmed");
-        for location in report
-            .locations
-            .iter()
-            .filter(|location| edit.save_path_auto || selected.is_none_or(|path| location.path.eq_ignore_ascii_case(path)))
-            .filter(|location| !has_confirmed || location.confidence == "confirmed")
-        {
+        for location in locations {
             write!(html,"<div class=\"save-entry\"><p class=\"save-status\" title=\"{}\"><span></span>{}</p><p class=\"path-value\">{}</p><div class=\"detail-actions\">",t(app,match location.source.as_str(){"manual"=>"save.manual","config"=>"save.config","roaming"=>"save.roaming","documents"=>"save.documents","saved-games"=>"save.saved_games",_=>"save.game"}),t(app,if !location.exists{"save.uncreated"}else if location.confidence=="confirmed"{"backup.confirmed"}else{"save.candidate"}),esc(&location.path)).unwrap();
             if location.exists {
-                html.push_str(&button(
-                    "open-save",
-                    &location.path,
-                    t(app, "detail.open_directory"),
-                    "folder",
-                    "quiet",
-                    false,
-                ));
                 if location.confidence == "confirmed" {
                     html.push_str("<span class=\"save-backup-actions\">");
                     html.push_str(&button(
@@ -600,13 +596,14 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
                         &game.id,
                         t(app, "backup.create"),
                         "backup",
-                        "quiet",
-                        features::save_busy(app),
+                        "quiet icon-only",
+                        features::save_busy(app) || crate::cloud::busy(app),
                     ));
                     html.push_str(&button(
-                        "save-history", &game.id, t(app, "backup.archive"), "update", "quiet",
-                        features::save_busy(app),
+                        "save-history", &game.id, t(app, "backup.archive"), "history", "quiet icon-only",
+                        features::save_busy(app) || crate::cloud::busy(app),
                     ));
+                    crate::cloud::detail_upload_button(html, app, &game.id);
                     html.push_str("</span>");
                 } else {
                     html.push_str(&button(
@@ -649,23 +646,7 @@ fn tools_dialog(html: &mut String, app: &App, game: &Game) {
         .cloned()
         .unwrap_or_default();
     write!(html,r#"<div class="editor-overlay"><section class="editor-dialog game-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="editor-title"><header><h2 id="editor-title">{}</h2>{}</header><div class="editor-body"><div class="game-tool-options">"#,t(app,"detail.configure"),button("editor-close","",t(app,"common.close"),"close","quiet",app.busy())).unwrap();
-    for (action, key, checked) in [
-        (
-            "toggle-locale",
-            "tools.locale_launch",
-            edit.launch_mode == "locale",
-        ),
-        ("toggle-upscale", "tools.upscale", edit.upscale),
-        ("toggle-auto-backup", "backup.auto_short", edit.auto_backup && features::can_auto_backup(app, &game.id)),
-        ("toggle-ai-summary", "summary.option", edit.ai_summary),
-    ] {
-        let disabled = app.busy()
-            || !game.available
-            || action == "toggle-auto-backup" && !features::can_auto_backup(app, &game.id)
-            || action == "toggle-ai-summary"
-                && ((!app.ai_available && !checked) || crate::ai_summary::busy(app, &game.id));
-        write!(html,r#"<button class="game-tool-option" role="checkbox" aria-checked="{}" data-action="{}" {}><span class="tool-check">{}</span><span>{}</span></button>"#,checked,action,if disabled{"disabled"}else{""},if checked{icon("check")}else{String::new()},t(app,key)).unwrap();
-    }
+    crate::detail_tools::configuration_options(html, app, game, &edit);
     html.push_str("</div>");
     if !app.ai_available {
         write!(html, "<p class=\"detail-note\">{}</p>", t(app, "summary.tools_missing")).unwrap();

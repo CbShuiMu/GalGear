@@ -124,7 +124,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
 
 pub(crate) fn render_card(html: &mut String, app: &App, game: &str) {
     write!(html,r#"<section class="detail-card screenshot-card" data-render-key="recent-screenshot"><div class="utility-heading"><h3>{}</h3>{}</div>"#,
-        t(app,"screenshot.recent"),button("screenshot-open",game,t(app,"screenshot.open_folder"),"folder_open","quiet",app.busy())).unwrap();
+        t(app,"screenshot.recent"),button("screenshot-open",game,t(app,"screenshot.open_folder"),"folder_open","quiet icon-only",app.busy())).unwrap();
     let result = if app.screenshots.game.as_deref() == Some(game) {
         app.screenshots.result.as_ref()
     } else {

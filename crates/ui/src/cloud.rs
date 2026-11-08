@@ -1,7 +1,8 @@
 //! WebDAV connection settings and explicit save archive transfers.
 use crate::{
-    choices, models::SaveSnapshot, requests::Pending, requests::issue, state::App, view::t,
-    widgets::button, widgets::bytes, widgets::esc,
+    choices, features, models::SaveSnapshot, requests::Pending, requests::issue, state::App,
+    state::show_toast, view::t, widgets::button, widgets::bytes, widgets::esc,
+    widgets::icon_button,
 };
 use galgear_i18n::Message;
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,15 @@ pub(crate) enum Request {
     List(String),
     Upload(String),
     Download(String),
+    DetailUpload(String, UploadStage),
+}
+
+#[derive(Clone, Copy, PartialEq)]
+/// 游戏详情上传依次检查已保存配置、测试连接，再传输存档。
+pub(crate) enum UploadStage {
+    Configuration,
+    Connection,
+    Transfer,
 }
 
 #[derive(Clone, Deserialize, PartialEq, Serialize)]
@@ -72,7 +82,15 @@ pub(crate) fn busy(app: &App) -> bool {
 }
 
 fn configured(state: &State) -> bool {
-    state.status.password_saved && !state.status.settings.url.is_empty()
+    state.status.configured()
+}
+
+impl Status {
+    fn configured(&self) -> bool {
+        self.password_saved
+            && !self.settings.url.trim().is_empty()
+            && !self.settings.username.trim().is_empty()
+    }
 }
 
 fn dirty(state: &State) -> bool {
@@ -102,11 +120,31 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             | "cloud-open-game"
             | "cloud-refresh"
             | "cloud-upload"
+            | "cloud-upload-detail"
             | "cloud-download"
     ) {
         return false;
     }
     if busy(app) || app.busy() {
+        return true;
+    }
+    if action == "cloud-upload-detail" {
+        if detail_upload_available(app, value) && !features::save_busy(app) {
+            if app.cloud.loaded && dirty(&app.cloud) {
+                open_connection_settings(app, "cloud.save_first");
+            } else {
+                show_toast(app, Message::new("cloud.checking_upload"), false);
+                issue(
+                    app,
+                    Pending::Cloud(Request::DetailUpload(
+                        value.into(),
+                        UploadStage::Configuration,
+                    )),
+                    "cloud_status",
+                    json!({}),
+                );
+            }
+        }
         return true;
     }
     if action == "cloud-open-game" {
@@ -212,6 +250,13 @@ pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
 }
 
 pub(crate) fn resolve(app: &mut App, request: &Request, success: bool, payload: &str) {
+    // 离开原游戏时取消尚未开始的上传；已发出的传输仍按原游戏处理结果。
+    if let Request::DetailUpload(id, stage) = request
+        && *stage != UploadStage::Transfer
+        && !detail_upload_available(app, id)
+    {
+        return;
+    }
     let game = match request {
         Request::List(id) | Request::Upload(id) | Request::Download(id) => Some(id.as_str()),
         _ => None,
@@ -224,6 +269,7 @@ pub(crate) fn resolve(app: &mut App, request: &Request, success: bool, payload: 
         Err(Message::from_error(payload))
     } else {
         match request {
+            Request::DetailUpload(id, stage) => resolve_detail_upload(app, id, *stage, payload),
             Request::Status | Request::Save | Request::Clear => {
                 serde_json::from_str::<Status>(payload)
                     .map_err(|_| Message::new("cloud.invalid_response"))
@@ -282,8 +328,114 @@ pub(crate) fn resolve(app: &mut App, request: &Request, success: bool, payload: 
         }
     };
     if let Err(error) = result {
-        app.cloud.error = Some(error);
+        if matches!(request, Request::DetailUpload(..)) {
+            show_toast(app, error, true);
+        } else {
+            app.cloud.error = Some(error);
+        }
     }
+    if let Request::DetailUpload(id, UploadStage::Transfer) = request
+        && app.detail.selected.as_deref() == Some(id)
+        && !features::save_busy(app)
+    {
+        // 上传失败也可能已经产生本地快照，重新读取历史以展示实际结果。
+        issue(
+            app,
+            Pending::History(id.clone()),
+            "save_history",
+            json!({"id":id}),
+        );
+    }
+}
+
+fn detail_upload_available(app: &App, id: &str) -> bool {
+    app.detail.selected.as_deref() == Some(id)
+        && app
+            .catalog
+            .games
+            .iter()
+            .any(|game| game.id == id && game.available)
+        && features::can_auto_backup(app, id)
+        && app
+            .runtime
+            .get(id)
+            .is_none_or(|runtime| runtime != "running")
+}
+
+fn open_connection_settings(app: &mut App, message: &str) {
+    app.settings_section = "cloud".into();
+    crate::actions::dispatch(app, "page", "settings");
+    show_toast(app, Message::new(message), true);
+}
+
+fn resolve_detail_upload(
+    app: &mut App,
+    id: &str,
+    stage: UploadStage,
+    payload: &str,
+) -> Result<(), Message> {
+    match stage {
+        UploadStage::Configuration => {
+            let status: Status = serde_json::from_str(payload)
+                .map_err(|_| Message::new("cloud.invalid_response"))?;
+            if !status.configured() {
+                resolve(app, &Request::Status, true, payload);
+                open_connection_settings(app, "cloud.configure_first");
+                return Ok(());
+            }
+            // 使用持久化配置和凭据库密码，不覆盖设置页的表单草稿或游戏选择。
+            issue(
+                app,
+                Pending::Cloud(Request::DetailUpload(id.into(), UploadStage::Connection)),
+                "test_cloud_connection",
+                json!({"settings":status.settings,"password":""}),
+            );
+        }
+        UploadStage::Connection => {
+            show_toast(app, Message::new("cloud.uploading"), false);
+            issue(
+                app,
+                Pending::Cloud(Request::DetailUpload(id.into(), UploadStage::Transfer)),
+                "cloud_upload",
+                json!({"id":id}),
+            );
+        }
+        UploadStage::Transfer => {
+            let snapshots: Vec<Snapshot> = serde_json::from_str(payload)
+                .map_err(|_| Message::new("cloud.invalid_response"))?;
+            if snapshots.is_empty() {
+                return Err(Message::new("cloud.invalid_response"));
+            }
+            if app.cloud.game == id {
+                resolve(app, &Request::Upload(id.into()), true, payload);
+            }
+            show_toast(app, Message::new("cloud.uploaded"), false);
+        }
+    }
+    Ok(())
+}
+
+/// 绘制当前游戏的上传入口；存档不可用或请求处理中时禁用重复操作。
+pub(crate) fn detail_upload_button(html: &mut String, app: &App, id: &str) {
+    let label = app
+        .requests
+        .values()
+        .find_map(|pending| match pending {
+            Pending::Cloud(Request::DetailUpload(game, stage)) if game == id => Some(match stage {
+                UploadStage::Transfer => "cloud.uploading",
+                _ => "cloud.checking_upload",
+            }),
+            _ => None,
+        })
+        .unwrap_or("cloud.upload_save");
+    html.push_str(&icon_button(
+        "cloud-upload-detail",
+        id,
+        t(app, label),
+        "cloud_upload",
+        "quiet",
+        app.busy() || busy(app) || features::save_busy(app) || !detail_upload_available(app, id),
+    ));
 }
 
 pub(crate) fn choice_enabled(app: &App, field: &str) -> bool {
@@ -509,6 +661,150 @@ pub(crate) fn render(html: &mut String, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bridge::take_requests;
+
+    const SAVED_CONNECTION: &str = r#"{"settings":{"url":"https://dav.example/","username":"user","remote_path":"GalGear"},"password_saved":true}"#;
+
+    fn detail_app() -> App {
+        take_requests();
+        let mut app = App::default();
+        app.catalog.games.push(
+            serde_json::from_value(json!({
+                "id":"game", "title":"Game", "folder":"F:/Fixture", "engine":"unknown", "modified":0
+            }))
+            .unwrap(),
+        );
+        app.detail.selected = Some("game".into());
+        app.detail.saves.insert("game".into(), serde_json::from_value(json!({
+            "locations":[{"path":"F:/Fixture/save","exists":true,"confidence":"confirmed","source":"manual"}],
+            "limited":false
+        })).unwrap());
+        app.cloud.game = "other".into();
+        app
+    }
+
+    fn finish_request(
+        app: &mut App,
+        command: &str,
+        success: bool,
+        response: &str,
+    ) -> serde_json::Value {
+        let requests = take_requests();
+        assert_eq!(requests.len(), 1);
+        let (number, actual, payload) = &requests[0];
+        assert_eq!(actual, command);
+        let Pending::Cloud(request) = app.requests.complete(*number).unwrap() else {
+            panic!("Expected cloud request")
+        };
+        resolve(app, &request, success, response);
+        serde_json::from_str(payload).unwrap()
+    }
+
+    #[test]
+    fn detail_upload_tests_saved_connection_before_transferring_and_refreshes_local_history() {
+        let mut app = detail_app();
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        finish_request(&mut app, "cloud_status", true, SAVED_CONNECTION);
+        let test = finish_request(&mut app, "test_cloud_connection", true, "null");
+        assert_eq!(test["password"], "");
+        assert_eq!(test["settings"]["url"], "https://dav.example/");
+        let upload = finish_request(
+            &mut app,
+            "cloud_upload",
+            true,
+            r#"[{"id":"new","name":"backup","created":1,"size":2,"note":""}]"#,
+        );
+        assert_eq!(upload, json!({"id":"game"}));
+        assert_eq!(app.cloud.game, "other");
+        assert!(app.cloud.snapshots.is_empty());
+        assert_eq!(app.toast.as_ref().unwrap().0.key, "cloud.uploaded");
+        assert_eq!(take_requests()[0].1, "save_history");
+    }
+
+    #[test]
+    fn detail_upload_missing_credentials_opens_settings_without_testing_or_uploading() {
+        let mut app = detail_app();
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        let missing = SAVED_CONNECTION.replace("true", "false");
+        finish_request(&mut app, "cloud_status", true, &missing);
+        assert_eq!(app.page, "settings");
+        assert_eq!(app.settings_section, "cloud");
+        assert_eq!(app.toast.as_ref().unwrap().0.key, "cloud.configure_first");
+        assert!(take_requests().iter().all(|(_, command, _)| !matches!(
+            command.as_str(),
+            "test_cloud_connection" | "cloud_upload"
+        )));
+    }
+
+    #[test]
+    fn detail_upload_connection_failure_never_starts_transfer() {
+        let mut app = detail_app();
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        finish_request(&mut app, "cloud_status", true, SAVED_CONNECTION);
+        finish_request(
+            &mut app,
+            "test_cloud_connection",
+            false,
+            r#"{"key":"cloud.auth","args":{}}"#,
+        );
+        assert!(take_requests().is_empty());
+        assert!(app.toast.as_ref().unwrap().1);
+        assert!(!busy(&app));
+    }
+
+    #[test]
+    fn detail_upload_does_not_use_unsaved_connection_edits() {
+        let mut app = detail_app();
+        resolve(&mut app, &Request::Status, true, SAVED_CONNECTION);
+        input(&mut app, "cloud-url", "https://unsaved.example/");
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        assert_eq!(app.cloud.draft.url, "https://unsaved.example/");
+        assert_eq!(app.settings_section, "cloud");
+        assert_eq!(app.toast.as_ref().unwrap().0.key, "cloud.save_first");
+        assert!(
+            take_requests()
+                .iter()
+                .all(|(_, command, _)| command != "cloud_status" && command != "cloud_upload")
+        );
+    }
+
+    #[test]
+    fn leaving_detail_during_connection_test_cancels_upload() {
+        let mut app = detail_app();
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        finish_request(&mut app, "cloud_status", true, SAVED_CONNECTION);
+        app.detail.selected = Some("other".into());
+        finish_request(&mut app, "test_cloud_connection", true, "null");
+        assert!(take_requests().is_empty());
+    }
+
+    #[test]
+    fn failed_or_invalid_uploads_refresh_local_backups_without_reporting_success() {
+        for (success, response) in [(false, r#"{"key":"cloud.auth","args":{}}"#), (true, "[]")] {
+            let mut app = detail_app();
+            resolve(
+                &mut app,
+                &Request::DetailUpload("game".into(), UploadStage::Transfer),
+                success,
+                response,
+            );
+            assert!(app.toast.as_ref().unwrap().1);
+            assert_eq!(take_requests()[0].1, "save_history");
+        }
+    }
+
+    #[test]
+    fn detail_upload_rejects_running_games_and_unconfirmed_saves() {
+        let mut app = detail_app();
+        app.runtime.insert("game".into(), "running".into());
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        assert!(take_requests().is_empty());
+        app.runtime.clear();
+        app.detail.saves.clear();
+        dispatch(&mut app, "cloud-upload-detail", "game");
+        assert!(take_requests().is_empty());
+    }
 
     #[test]
     fn saving_applies_normalized_settings_and_forgets_the_entered_password() {
