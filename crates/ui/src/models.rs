@@ -52,6 +52,8 @@ pub(crate) struct Settings {
     #[serde(default = "default_retention")]
     pub(crate) backup_retention: usize,
     #[serde(default)]
+    pub(crate) backup_folder: String,
+    #[serde(default)]
     pub(crate) locale_emulator: String,
     #[serde(default)]
     pub(crate) magpie: String,
@@ -65,6 +67,8 @@ pub(crate) struct Settings {
     pub(crate) background_image: Option<BackgroundImage>,
     #[serde(default = "default_source")]
     pub(crate) metadata_provider: String,
+    #[serde(default)]
+    pub(crate) source_preferences: BTreeMap<String, String>,
     #[serde(default = "default_ai_provider")]
     pub(crate) ai_provider: String,
 }
@@ -72,7 +76,8 @@ pub(crate) struct Settings {
 impl Settings {
     pub(crate) fn sort_descending(&self) -> bool {
         // Older settings sorted names ascending and update times descending.
-        self.sort_descending.unwrap_or(self.sort_by == "recent")
+        self.sort_descending
+            .unwrap_or(matches!(self.sort_by.as_str(), "recent" | "last_played"))
     }
 }
 
@@ -150,6 +155,9 @@ pub(crate) struct Transfer {
 pub(crate) struct Game {
     pub(crate) id: String,
     pub(crate) title: String,
+    /// 来自 NextMoe 的多语言名称与别名；旧缓存默认为空。
+    #[serde(default)]
+    pub(crate) aliases: Vec<String>,
     pub(crate) folder: String,
     pub(crate) executable: Option<String>,
     pub(crate) engine: String,

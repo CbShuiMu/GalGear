@@ -3,7 +3,7 @@ use crate::{
     features,
     state::App,
     view::t,
-    widgets::{button, esc},
+    widgets::{button, esc, icon_button},
 };
 use serde::Deserialize;
 use std::fmt::Write;
@@ -176,8 +176,8 @@ pub(crate) fn render(html: &mut String, app: &App) {
     let Some(recording) = &app.shortcut_picker.recording else {
         return;
     };
-    write!(html, r#"<div class="editor-overlay shortcut-overlay"><section class="editor-dialog shortcut-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" aria-describedby="shortcut-help" data-shortcut-field="{}"><header><h2 id="shortcut-title">{}</h2></header><div class="editor-body"><p id="shortcut-help">{}</p><div id="shortcut-capture" class="shortcut-capture" tabindex="0" aria-live="polite">"#,
-        recording.field, t(app, label(&recording.field).unwrap_or("tools.hotkey")), t(app,"shortcut.help")).unwrap();
+    write!(html, r#"<div class="editor-overlay shortcut-overlay"><section class="editor-dialog shortcut-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-title" aria-describedby="shortcut-help" data-shortcut-field="{}"><header><h2 id="shortcut-title">{}</h2>{}</header><div class="editor-body"><p id="shortcut-help">{}</p><div id="shortcut-capture" class="shortcut-capture" tabindex="0" aria-live="polite">"#,
+        recording.field, t(app, label(&recording.field).unwrap_or("tools.hotkey")), icon_button("shortcut-cancel", "", t(app,"common.close"), "close", "", false), t(app,"shortcut.help")).unwrap();
     if recording.keys.is_empty() {
         write!(
             html,

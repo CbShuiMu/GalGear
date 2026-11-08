@@ -1295,9 +1295,9 @@
     "en-US": "Edits take priority. The external launcher receives the game executable as its first argument. Removing an entry preserves game files."
   },
   "edit.exclude": {
-    "zh-CN": "移除并排除自动识别",
-    "ja-JP": "削除して自動検出から除外",
-    "en-US": "Remove and exclude from scanning"
+    "zh-CN": "永久删除条目",
+    "ja-JP": "項目を完全に削除",
+    "en-US": "Permanently delete entry"
   },
   "settings.launch_behavior": {
     "zh-CN": "启动游戏后的窗口行为",
@@ -1800,9 +1800,9 @@
     "en-US": "Find patches for your games"
   },
   "patches.resource_help": {
-    "zh-CN": "输入游戏名称，查看 NextMoe 与 2DFan 的补丁、汉化及存档资源。",
-    "ja-JP": "ゲーム名から NextMoe と 2DFan のパッチやセーブを検索できます。",
-    "en-US": "Search a game name for patches, translations and saves from NextMoe and 2DFan."
+    "zh-CN": "输入游戏名称，查看 鲲Gal 与 2DFan 的补丁、汉化及存档资源。",
+    "ja-JP": "ゲーム名から 鲲Gal と 2DFan のパッチやセーブを検索できます。",
+    "en-US": "Search a game name for patches, translations and saves from 鲲Gal and 2DFan."
   },
   "patches.try_query": {
     "zh-CN": "尝试原名、日文名或更短的关键词，也可切换资源来源。",
@@ -1850,9 +1850,9 @@
     "en-US": "Fetching 2DFan resource details and cost…"
   },
   "network.patches": {
-    "ja-JP": "NextMoe と 2DFan のパッチ情報を検索中…",
-    "zh-CN": "正在搜索 NextMoe 与 2DFan 补丁信息…",
-    "en-US": "Searching NextMoe and 2DFan patch information…"
+    "ja-JP": "鲲Gal と 2DFan のパッチ情報を検索中…",
+    "zh-CN": "正在搜索 鲲Gal 与 2DFan 补丁信息…",
+    "en-US": "Searching 鲲Gal and 2DFan patch information…"
   },
   "network.metadata_fetch": {
     "ja-JP": "ゲーム情報とカバーを取得中…",
@@ -2725,14 +2725,14 @@
     "en-US": "Done"
   },
   "bulk.exclude": {
-    "zh-CN": "从游戏列表移除",
-    "ja-JP": "ゲーム一覧から除外",
-    "en-US": "Remove from library"
+    "zh-CN": "永久删除条目",
+    "ja-JP": "項目を完全に削除",
+    "en-US": "Permanently delete entries"
   },
   "bulk.exclude_confirm": {
-    "zh-CN": "删除所选 {count} 款游戏的条目？游戏仍在时，条目只能在设置－游戏库中恢复；游戏已不存在时，将彻底清除条目记录，重新放回后可扫描为新游戏。游戏文件、存档和备份不会删除。",
-    "ja-JP": "選択した {count} 件の項目を削除しますか？ゲームが存在する場合は設定のライブラリからのみ復元できます。存在しない場合は登録情報を消去し、再配置後は新規ゲームとして検出します。ゲームファイル、セーブ、バックアップは削除しません。",
-    "en-US": "Remove {count} selected entries? Existing games can only be restored in Settings > Library. Missing games are forgotten and can be scanned as new after being added back. Game files, saves and backups are kept."
+    "zh-CN": "将永久删除所选 {count} 个游戏条目及其资料、配置、收藏关联和游玩记录。此操作无法恢复，之后需要重新导入。游戏文件、存档和备份会保留。",
+    "ja-JP": "選択した {count} 件の項目と情報、設定、お気に入り、プレイ記録を完全に削除します。元に戻せません。再利用するには再インポートが必要です。ゲーム、セーブ、バックアップのファイルは保持されます。",
+    "en-US": "Permanently delete {count} selected entries and their details, settings, collection membership and play history. This cannot be undone. You must import them again to use them. Game files, saves and backups are retained."
   },
   "bulk.failures": {
     "zh-CN": "查看失败项",
@@ -2765,7 +2765,7 @@
     "en-US": "played"
   },
   "detail.last_played": {
-    "zh-CN": "最近游玩",
+    "zh-CN": "上次游玩",
     "ja-JP": "最終プレイ",
     "en-US": "Last played"
   },
@@ -2779,10 +2779,75 @@
     "ja-JP": "{hours}h プレイ時間",
     "en-US": "{hours}h played"
   },
+  "detail.playtime_label": {
+    "zh-CN": "游玩时间",
+    "ja-JP": "プレイ時間",
+    "en-US": "Play time"
+  },
+  "detail.playtime_value": {
+    "zh-CN": "{hours} 小时",
+    "ja-JP": "{hours} 時間",
+    "en-US": "{hours} h"
+  },
+  "date.today": {
+    "zh-CN": "今天",
+    "ja-JP": "今日",
+    "en-US": "Today"
+  },
+  "date.yesterday": {
+    "zh-CN": "昨天",
+    "ja-JP": "昨日",
+    "en-US": "Yesterday"
+  },
+  "date.day_before_yesterday": {
+    "zh-CN": "前天",
+    "ja-JP": "一昨日",
+    "en-US": "Day before yesterday"
+  },
+  "date.last_week": {
+    "zh-CN": "上{weekday}",
+    "ja-JP": "先週の{weekday}",
+    "en-US": "Last {weekday}"
+  },
+  "date.monday": {
+    "zh-CN": "周一",
+    "ja-JP": "月曜日",
+    "en-US": "Monday"
+  },
+  "date.tuesday": {
+    "zh-CN": "周二",
+    "ja-JP": "火曜日",
+    "en-US": "Tuesday"
+  },
+  "date.wednesday": {
+    "zh-CN": "周三",
+    "ja-JP": "水曜日",
+    "en-US": "Wednesday"
+  },
+  "date.thursday": {
+    "zh-CN": "周四",
+    "ja-JP": "木曜日",
+    "en-US": "Thursday"
+  },
+  "date.friday": {
+    "zh-CN": "周五",
+    "ja-JP": "金曜日",
+    "en-US": "Friday"
+  },
+  "date.saturday": {
+    "zh-CN": "周六",
+    "ja-JP": "土曜日",
+    "en-US": "Saturday"
+  },
+  "date.sunday": {
+    "zh-CN": "周日",
+    "ja-JP": "日曜日",
+    "en-US": "Sunday"
+  },
   "library.path_warning": {
-    "zh-CN": "路径失效，可能已转移；打开详情重新定位。",
-    "ja-JP": "パスが無効です。移動された可能性があります。詳細で場所を再指定してください。",
-    "en-US": "Path unavailable; the game may have moved. Open details to relocate it."
+    "zh-CN": "游戏路径不可用，请连接对应硬盘或检查游戏位置。",
+    "ja-JP": "ゲームのパスを利用できません。ドライブを接続するか、ゲームの保存場所を確認してください。",
+    "en-US": "Game path unavailable. Connect the drive or check the game's location."
   },
   "library.warnings_title": {
     "zh-CN": "扫描警告",
@@ -3090,9 +3155,9 @@
     "en-US": "View details"
   },
   "context.delete": {
-    "zh-CN": "删除游戏",
-    "ja-JP": "ゲームを削除",
-    "en-US": "Remove game"
+    "zh-CN": "永久删除条目",
+    "ja-JP": "項目を完全に削除",
+    "en-US": "Permanently delete entry"
   },
   "card.favorite": {
     "zh-CN": "收藏",
@@ -3210,9 +3275,9 @@
     "en-US": "API documentation"
   },
   "sources.default": {
-    "zh-CN": "默认资料来源",
+    "zh-CN": "默认数据源",
     "ja-JP": "既定のデータソース",
-    "en-US": "Default metadata source"
+    "en-US": "Default data source"
   },
   "sources.default_help": {
     "zh-CN": "自动获取资料时使用此来源；更改资料源时也可单独选择。",
@@ -4240,9 +4305,9 @@
     "en-US": "Patch application key"
   },
   "patches.nextmoe_key": {
-    "zh-CN": "NextMoe 补丁搜索需要应用密钥，请在设置 → 数据源 → NextMoe 中配置。",
-    "ja-JP": "NextMoe パッチ検索にはアプリケーションキーが必要です。設定 → データソース → NextMoe で設定してください。",
-    "en-US": "NextMoe patch search requires an application key in Settings → Data sources → NextMoe."
+    "zh-CN": "鲲Gal 补丁搜索需要应用密钥，请在设置 → 数据源 → 鲲Gal 中配置。",
+    "ja-JP": "鲲Gal パッチ検索にはアプリケーションキーが必要です。設定 → データソース → 鲲Gal で設定してください。",
+    "en-US": "鲲Gal patch search requires an application key in Settings → Data sources → 鲲Gal."
   },
   "patches.download_site": {
     "zh-CN": "前往补丁站下载",
@@ -4310,9 +4375,9 @@
     "en-US": "Authorization callback received. Return to GalGear to check the login result. You can close this page."
   },
   "patches.nextmoe_download_key": {
-    "zh-CN": "请先在“设置 → 数据源 → NextMoe”填写具有 moyu:files 下载权限的应用密钥，再点击下载；此权限需向 NextMoe 运营申请。",
-    "ja-JP": "「設定 → データソース → NextMoe」に moyu:files 権限のあるアプリキーを入力してから再度ダウンロードしてください。この権限は NextMoe 運営への申請が必要です。",
-    "en-US": "Enter an application key with moyu:files download permission in Settings → Data sources → NextMoe, then retry. Request this permission from NextMoe operators."
+    "zh-CN": "请先在“设置 → 数据源 → 鲲Gal”填写具有 moyu:files 下载权限的应用密钥，再点击下载；此权限需向 鲲Gal 运营申请。",
+    "ja-JP": "「設定 → データソース → 鲲Gal」に moyu:files 権限のあるアプリキーを入力してから再度ダウンロードしてください。この権限は 鲲Gal 運営への申請が必要です。",
+    "en-US": "Enter an application key with moyu:files download permission in Settings → Data sources → 鲲Gal, then retry. Request this permission from 鲲Gal operators."
   },
   "patches.nextmoe_file_missing": {
     "zh-CN": "此资源未提供可直接下载的托管文件，请使用“前往补丁站下载”。",
@@ -4543,5 +4608,45 @@
     "zh-CN": "无法准备此字体的兼容副本或度量设置，原有配置未更改。请更换字体或调整度量、伪装设置后重试。",
     "ja-JP": "フォントの互換コピーまたはメトリクスを準備できません。元の設定は維持されます。フォントや設定を変更してください。",
     "en-US": "Could not prepare the font or its metrics. Previous settings are unchanged. Try another font or adjust metrics and spoofing."
+  },
+  "home.last_played": {
+    "zh-CN": "最近游玩 {date}",
+    "ja-JP": "前回プレイ {date}",
+    "en-US": "Last played {date}"
+  },
+  "home.never_played": {
+    "zh-CN": "尚未游玩",
+    "ja-JP": "未プレイ",
+    "en-US": "Not played yet"
+  },
+  "games.sort_last_played": {
+    "zh-CN": "最近游玩",
+    "ja-JP": "最近プレイ",
+    "en-US": "Last played"
+  },
+  "tags.add": {
+    "zh-CN": "添加标签",
+    "ja-JP": "タグを追加",
+    "en-US": "Add tag"
+  },
+  "tags.edit_label": {
+    "zh-CN": "编辑标签：{tag}",
+    "ja-JP": "タグを編集：{tag}",
+    "en-US": "Edit tag: {tag}"
+  },
+  "tags.input": {
+    "zh-CN": "输入标签，按回车保存",
+    "ja-JP": "タグを入力して Enter で保存",
+    "en-US": "Enter a tag and press Enter to save"
+  },
+  "backup.folder": {
+    "zh-CN": "全局存档备份目录",
+    "ja-JP": "共通セーブバックアップフォルダー",
+    "en-US": "Global save backup folder"
+  },
+  "backup.folder_help": {
+    "zh-CN": "按游戏名称分类，备份名称使用本地保存时间。同一分钟的多份备份会追加编号。旧历史会校验后迁移。",
+    "ja-JP": "ゲーム名ごとに分類し、保存時刻をバックアップ名に使います。同じ分のバックアップには連番を付けます。既存の履歴は検証後に移行します。",
+    "en-US": "Grouped by game name and named with local save time. Backups within the same minute receive a suffix. Existing history is verified before migration."
   }
 }

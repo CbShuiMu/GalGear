@@ -1,5 +1,6 @@
 use super::{Snapshot, copy_file, directory, error, hash, relative, safe_id, write_sequence};
 use galgear_i18n::Message;
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -32,7 +33,7 @@ fn is_link(metadata: &fs::Metadata) -> bool {
     }
 }
 
-fn reject_links(path: &Path) -> Result<(), Message> {
+pub(super) fn reject_links(path: &Path) -> Result<(), Message> {
     for ancestor in path.ancestors() {
         match fs::symlink_metadata(ancestor) {
             Ok(metadata) if is_link(&metadata) => {
@@ -159,7 +160,25 @@ fn publish_file(path: &Path, bytes: &[u8]) -> Result<(), Message> {
 /// Move one game's old history only after publishing and verifying complete copies.
 /// A failed or interrupted call retains old files that still need migration and can be retried.
 pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, Message> {
-    let source = directory(legacy_data, game_id)?;
+    migrate_history(legacy_data, data, game_id, true)
+}
+
+/// 校验并复制历史，原副本保留至调用者提交目录设置。
+pub fn copy_history(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, Message> {
+    migrate_history(legacy_data, data, game_id, false)
+}
+
+fn migrate_history(
+    legacy_data: &Path,
+    data: &Path,
+    game_id: &str,
+    cleanup: bool,
+) -> Result<usize, Message> {
+    let source = if legacy_data.join(game_id).is_dir() {
+        legacy_data.join(game_id)
+    } else {
+        directory(legacy_data, game_id)?
+    };
     // Validate the new root even when there is no old history to migrate, since
     // callers use this check before creating their first local snapshot.
     reject_links(&directory(data, game_id)?)?;
@@ -172,19 +191,11 @@ pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, 
         Err(err) => return Err(error(err)),
     }
     reject_links(&source)?;
-    let game_folder = data
-        .parent()
-        .and_then(Path::parent)
-        .filter(|folder| game_data(folder) == data)
-        .ok_or_else(|| error("Backups must be stored in the installed game directory"))?;
-    if !game_folder.is_dir() {
-        return Err(error(
-            "Game folder is unavailable; old backups were retained",
-        ));
-    }
     let source = fs::canonicalize(source).map_err(error)?;
-    let game_folder = fs::canonicalize(game_folder).map_err(error)?;
-    let destination = directory(&game_data(&game_folder), game_id)?;
+    reject_links(data)?;
+    fs::create_dir_all(data).map_err(error)?;
+    let data = fs::canonicalize(data).map_err(error)?;
+    let destination = directory(&data, game_id)?;
     reject_links(&destination)?;
     if destination.exists() && fs::canonicalize(&destination).map_err(error)? == source {
         return Ok(0);
@@ -194,7 +205,7 @@ pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, 
     }
 
     // Preflight the complete history before committing any move.
-    let mut snapshots = Vec::new();
+    let mut snapshots: Vec<(String, Snapshot, Tree, Tree)> = Vec::new();
     let mut maximum_sequence = 0;
     for entry in fs::read_dir(&source).map_err(error)? {
         let entry = entry.map_err(error)?;
@@ -207,15 +218,39 @@ pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, 
             && entry.path().join("manifest.json").exists()
         {
             let (snapshot, contents) = verify_snapshot(&entry.path(), game_id)?;
-            let target = destination.join(&snapshot.id);
-            if target.exists() && tree(&target)? != contents {
-                return Err(error(format!(
-                    "Conflicting backup {}; old copy was retained",
-                    snapshot.id
-                )));
-            }
+            let original_id = snapshot.id.clone();
+            let mut renamed = snapshot.clone();
+            let base = super::storage::timestamp_name(snapshot.created)?;
+            let mut number = 1;
+            let expected = loop {
+                renamed.id = if number == 1 {
+                    base.clone()
+                } else {
+                    format!("{base}-{number}")
+                };
+                renamed.name.clone_from(&renamed.id);
+                let mut expected = contents.clone();
+                let bytes = serde_json::to_vec_pretty(&renamed).map_err(error)?;
+                expected.insert(
+                    PathBuf::from("manifest.json"),
+                    Entry::File {
+                        size: bytes.len() as u64,
+                        hash: format!("{:x}", Sha256::digest(&bytes)),
+                    },
+                );
+                let target = destination.join(&renamed.id);
+                let planned = snapshots
+                    .iter()
+                    .any(|(_, other, _, _)| other.id == renamed.id);
+                if !planned
+                    && (!target.exists() || verify_snapshot(&target, game_id)?.1 == expected)
+                {
+                    break expected;
+                }
+                number += 1;
+            };
             maximum_sequence = maximum_sequence.max(snapshot.sequence);
-            snapshots.push((snapshot.id, contents));
+            snapshots.push((original_id, renamed, contents, expected));
         }
     }
     let sequence_source = source.join("sequence.json");
@@ -246,27 +281,32 @@ pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, 
     let journal_source = source.join("restore-journal.json");
     let journal = match fs::read(&journal_source) {
         Ok(bytes) => {
-            let journal: super::Journal = serde_json::from_slice(&bytes).map_err(error)?;
+            let mut journal: super::Journal = serde_json::from_slice(&bytes).map_err(error)?;
             if journal.plan.snapshot.game_id != game_id {
                 return Err(error("Restore journal belongs to a different game"));
             }
+            if let Some((_, snapshot, _, _)) = snapshots
+                .iter()
+                .find(|(id, _, _, _)| id == &journal.plan.snapshot.id)
+            {
+                journal.plan.snapshot.clone_from(snapshot);
+            }
+            let bytes = serde_json::to_vec(&journal).map_err(error)?;
             let target = destination.join("restore-journal.json");
             if target.exists() && fs::read(target).map_err(error)? != bytes {
                 return Err(error(
                     "Existing restore journal conflicts with the old backup location",
                 ));
             }
-            Some(bytes)
+            Some((fs::read(&journal_source).map_err(error)?, bytes))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
         Err(err) => return Err(error(err)),
     };
 
-    ensure_directory(&game_folder.join(".galgear-backups"))?;
-    ensure_directory(&game_data(&game_folder))?;
     ensure_directory(&destination)?;
-    for (id, contents) in &snapshots {
-        let target = destination.join(id);
+    for (id, snapshot, contents, expected) in &snapshots {
+        let target = destination.join(&snapshot.id);
         if target.exists() {
             continue;
         }
@@ -286,14 +326,21 @@ pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, 
                 "Backup changed while migrating; old copy was retained",
             ));
         }
+        super::write_manifest(&stage.path().join("manifest.json"), snapshot)?;
+        if tree(stage.path())? != *expected {
+            return Err(error("Migrated backup failed verification"));
+        }
         fs::rename(stage.path(), &target).map_err(error)?;
     }
-    if let Some(bytes) = &journal {
+    if let Some((_, bytes)) = &journal {
         publish_file(&destination.join("restore-journal.json"), bytes)?;
     }
     write_sequence(&destination, maximum_sequence)?;
 
-    for (id, contents) in &snapshots {
+    if !cleanup {
+        return Ok(snapshots.len());
+    }
+    for (id, snapshot, contents, expected) in &snapshots {
         let old = source.join(id);
         // Check the resolved recursive-delete target remains an immediate child of
         // the verified old game backup directory, including on Windows junctions.
@@ -301,7 +348,7 @@ pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, 
         let resolved = fs::canonicalize(&old).map_err(error)?;
         if resolved.parent() != Some(source.as_path())
             || tree(&resolved)? != *contents
-            || tree(&destination.join(id))? != *contents
+            || tree(&destination.join(&snapshot.id))? != *expected
         {
             return Err(error(
                 "Backup changed before cleanup; old copy was retained",
@@ -309,8 +356,8 @@ pub fn migrate(legacy_data: &Path, data: &Path, game_id: &str) -> Result<usize, 
         }
         fs::remove_dir_all(&resolved).map_err(error)?;
     }
-    if let Some(bytes) = &journal {
-        if fs::read(&journal_source).map_err(error)? != *bytes
+    if let Some((original, bytes)) = &journal {
+        if fs::read(&journal_source).map_err(error)? != *original
             || fs::read(destination.join("restore-journal.json")).map_err(error)? != *bytes
         {
             return Err(error("Restore journal changed before cleanup"));
@@ -375,6 +422,41 @@ mod tests {
         fn target(&self) -> PathBuf {
             self.data.join("game")
         }
+    }
+
+    #[test]
+    fn long_legacy_ids_are_shortened_and_copy_retry_does_not_duplicate_history() {
+        let fixture = Fixture::new();
+        let mut old = fixture.snapshot.clone();
+        let old_path = fixture.old().join(&old.id);
+        old.id = "a".repeat(96);
+        old.name = "Long game title".repeat(10);
+        old.locked = true;
+        fs::rename(&old_path, fixture.old().join(&old.id)).unwrap();
+        super::super::write_manifest(&fixture.old().join(&old.id).join("manifest.json"), &old)
+            .unwrap();
+        snapshots::register_game(&fixture.data, "game", "ATRI").unwrap();
+        copy_history(&fixture.legacy, &fixture.data, "game").unwrap();
+        assert!(fixture.old().join(&old.id).exists());
+        copy_history(&fixture.legacy, &fixture.data, "game").unwrap();
+        let copied = snapshots::list(&fixture.data, "game").unwrap();
+        assert_eq!(copied.len(), 1);
+        assert_eq!(copied[0].id.len(), 16);
+        assert_eq!(copied[0].name, copied[0].id);
+        assert!(copied[0].locked);
+        migrate(&fixture.legacy, &fixture.data, "game").unwrap();
+        assert!(!fixture.old().exists());
+        assert_eq!(
+            fs::read(
+                fixture
+                    .data
+                    .join("ATRI")
+                    .join(&copied[0].id)
+                    .join("0/slot.sav")
+            )
+            .unwrap(),
+            b"saved contents"
+        );
     }
 
     #[test]
@@ -466,12 +548,12 @@ mod tests {
     }
 
     #[test]
-    fn missing_game_does_not_create_a_replacement_install_directory() {
+    fn global_destination_is_created_independently_of_install_directory() {
         let fixture = Fixture::new();
-        let game = fixture._temp.path().join("missing-game");
-        assert!(migrate(&fixture.legacy, &game_data(&game), "game").is_err());
-        assert!(!game.exists());
-        assert!(fixture.old().exists());
+        let data = fixture._temp.path().join("global-backups");
+        assert_eq!(migrate(&fixture.legacy, &data, "game").unwrap(), 1);
+        assert_eq!(snapshots::list(&data, "game").unwrap().len(), 1);
+        assert!(!fixture.old().exists());
     }
 
     #[test]

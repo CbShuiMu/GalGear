@@ -16,7 +16,9 @@ pub(crate) struct ScanState {
 }
 
 impl ScanState {
-    pub(crate) fn is_scanning(&self) -> bool { self.scanning.load(Ordering::SeqCst) }
+    pub(crate) fn is_scanning(&self) -> bool {
+        self.scanning.load(Ordering::SeqCst)
+    }
     pub(crate) fn forget(&self, ids: &std::collections::BTreeSet<String>) {
         if let Ok(mut forgotten) = self.forgotten.lock() {
             forgotten.extend(ids.iter().cloned());
@@ -45,7 +47,12 @@ pub(crate) async fn refresh(
         return Err(Message::new("error.scan_running"));
     }
     let _guard = ScanGuard(&state.scan.scanning);
-    state.scan.forgotten.lock().map_err(|_| Message::new("error.catalog_state"))?.clear();
+    state
+        .scan
+        .forgotten
+        .lock()
+        .map_err(|_| Message::new("error.catalog_state"))?
+        .clear();
     state.scan.cancel.store(false, Ordering::SeqCst);
     let settings = snapshot(state)?;
     let previous = state
@@ -80,7 +87,10 @@ pub(crate) async fn refresh(
                     catalog::apply_edits(game, &settings);
                 }
                 if let Ok(mut current) = handle.state::<AppState>().catalog.lock() {
-                    handle.state::<AppState>().scan.retain_current(&mut current.games);
+                    handle
+                        .state::<AppState>()
+                        .scan
+                        .retain_current(&mut current.games);
                     handle.state::<AppState>().scan.retain_current(&mut batch);
                     for game in &batch {
                         if !current.games.iter().any(|g| g.id == game.id) {
@@ -126,26 +136,23 @@ pub(crate) async fn refresh(
             }
         }
     }
-    let mut settings = state.settings.lock().map_err(|_| Message::new("error.config_state"))?;
-    // Match the playtime tracker's lock order before taking the catalog lock.
-    let mut records = state.playtime.lock().map_err(|_| Message::new("error.catalog_state"))?;
-    let mut current = state.catalog.lock().map_err(|_| Message::new("error.catalog_state"))?;
+    let mut settings = state
+        .settings
+        .lock()
+        .map_err(|_| Message::new("error.config_state"))?;
+    let mut current = state
+        .catalog
+        .lock()
+        .map_err(|_| Message::new("error.catalog_state"))?;
     let mut next = settings.clone();
     state.scan.retain_current(&mut fresh.games);
     state.scan.retain_current(&mut current.games);
-    let mut retained = current.clone();
-    let mut forgotten = catalog::purge_missing(&mut next, &mut retained);
-    forgotten.extend(catalog::purge_missing(&mut next, &mut fresh));
+    let retained = current.clone();
     galgear_core::game_setup::mark_new(&mut next, &fresh.games, &known);
     let catalog = catalog::merge(fresh, &retained, &next);
     if next != *settings {
         state.store.save(&next)?;
         *settings = next;
-    }
-    if !forgotten.is_empty() {
-        state.scan.forget(&forgotten);
-        records.retain(|id, _| !forgotten.contains(id));
-        galgear_core::playtime::save(&state.store.path.with_file_name("playtime.json"), &records)?;
     }
     catalog::save(&state.store.path.with_file_name("catalog.json"), &catalog)?;
     *current = catalog.clone();
@@ -290,9 +297,7 @@ pub(crate) async fn add_manual_game(state: State<'_, AppState>) -> Result<Option
             .lock()
             .map_err(|_| Message::new("error.config_state"))?;
         let mut next = settings.clone();
-        if catalog::is_excluded(&game, &next) {
-            return Err(Message::new("library.restore_required"));
-        }
+        catalog::allow_import(&mut next, &game);
         if !next.manual_games.iter().any(|g| g.id == game.id) {
             next.manual_games.push(game.clone());
         }
@@ -362,6 +367,9 @@ pub(crate) async fn relocate_game(
 }
 
 #[tauri::command]
-pub(crate) fn exclude_game(id: String, state: State<'_, AppState>) -> Result<crate::collections::BatchResult, Message> {
+pub(crate) fn exclude_game(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::collections::BatchResult, Message> {
     crate::collections::change_games(&state, "exclude", vec![id], None)
 }

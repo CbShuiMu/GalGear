@@ -29,6 +29,20 @@ pub(crate) fn save_game_details(
 ) -> Result<Game, Message> {
     let mut game = find_game(&state, &id)?;
     let settings = update(&state, |settings| {
+        let previous = settings.game_edits.get(&id).cloned().unwrap_or_default();
+        // 路径可能在打开编辑器之后离线，提交时重新检查启动配置。
+        if !game
+            .executable
+            .as_ref()
+            .is_some_and(|path| std::path::Path::new(path).is_file())
+            && (draft.executable != game.executable.as_deref().unwrap_or_default()
+                || draft.arguments != previous.arguments
+                || draft.working_directory != previous.working_directory
+                || draft.launcher != previous.launcher
+                || draft.locale_profile != previous.locale_profile)
+        {
+            return Err(Message::new("games.unavailable"));
+        }
         let edit = galgear_core::game_details::prepare(&game, settings.game_edits.get(&id), draft)?;
         settings.game_edits.insert(id, edit);
         Ok(())
@@ -132,6 +146,13 @@ pub(crate) fn edit_game(
     state: State<'_, AppState>,
 ) -> Result<Game, Message> {
     let mut game = find_game(&state, &id)?;
+    if !game
+        .executable
+        .as_ref()
+        .is_some_and(|path| std::path::Path::new(path).is_file())
+    {
+        return Err(Message::new("games.unavailable"));
+    }
     edit.tags = tags::normalize(edit.tags);
     if edit.title.as_ref().is_some_and(|t| t.trim().is_empty()) {
         return Err(Message::new("error.title_required"));

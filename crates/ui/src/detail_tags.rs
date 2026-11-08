@@ -1,4 +1,4 @@
-//! 详情顶部本地标签的删除交互；资料中的人物、品牌等标签仍仅用于筛选。
+//! 详情顶部本地标签的增删改；资料中的人物、品牌等标签仍仅用于筛选。
 use crate::{
     requests::{Pending, issue},
     state::App,
@@ -8,8 +8,83 @@ use crate::{
 use serde_json::json;
 use std::fmt::Write;
 
+#[derive(Default)]
+pub(crate) struct Draft {
+    pub(crate) original: Option<String>,
+    pub(crate) value: String,
+}
+
+pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
+    if field != "detail-tag-input" {
+        return false;
+    }
+    if let Some(draft) = &mut app.detail.tag_draft {
+        draft.value = value.into();
+    }
+    true
+}
+
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     match action {
+        "detail-tag-add" | "detail-tag-edit" => {
+            if app.busy() || app.detail.editing || app.detail.editor.is_some() {
+                return true;
+            }
+            let Some(game) = app
+                .catalog
+                .games
+                .iter()
+                .find(|game| Some(&game.id) == app.detail.selected.as_ref())
+            else {
+                return true;
+            };
+            if action == "detail-tag-edit" && !game.tags.iter().any(|tag| tag == value) {
+                return true;
+            }
+            app.detail.tag_draft = Some(Draft {
+                original: (action == "detail-tag-edit").then(|| value.into()),
+                value: if action == "detail-tag-edit" {
+                    value.into()
+                } else {
+                    String::new()
+                },
+            });
+        }
+        "detail-tag-cancel" => app.detail.tag_draft = None,
+        "detail-tag-save" => {
+            if app.busy() {
+                return true;
+            }
+            let Some(draft) = &app.detail.tag_draft else {
+                return true;
+            };
+            if draft.value.trim().is_empty() {
+                return true;
+            }
+            let Some(game) = app
+                .catalog
+                .games
+                .iter()
+                .find(|game| Some(&game.id) == app.detail.selected.as_ref())
+            else {
+                return true;
+            };
+            let mut names = game.tags.clone();
+            if let Some(original) = &draft.original {
+                let Some(name) = names.iter_mut().find(|name| *name == original) else {
+                    return true;
+                };
+                *name = draft.value.trim().into();
+            } else {
+                names.push(draft.value.trim().into());
+            }
+            issue(
+                app,
+                Pending::Edit,
+                "edit_tags",
+                json!({"id":game.id,"names":galgear_tags::normalize(names)}),
+            );
+        }
         "detail-tag-remove" => {
             if !app.busy()
                 && !app.detail.editing
@@ -65,12 +140,29 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
 }
 
 pub(crate) fn render_tag(html: &mut String, app: &App, tag: &str) {
+    if app
+        .detail
+        .tag_draft
+        .as_ref()
+        .is_some_and(|draft| draft.original.as_deref() == Some(tag))
+    {
+        render_input(html, app);
+        return;
+    }
     let label =
         galgear_i18n::format_text(app.settings.language, "tags.remove_label", &[("tag", tag)]);
     let _ = write!(
         html,
-        r#"<span class="detail-tag-chip" data-render-key="detail-tag:{}">{}{}</span>"#,
+        r#"<span class="detail-tag-chip" data-render-key="detail-tag:{}">{}{}{}</span>"#,
         esc(tag),
+        icon_button(
+            "detail-tag-edit",
+            tag,
+            &galgear_i18n::format_text(app.settings.language, "tags.edit_label", &[("tag", tag)]),
+            "edit",
+            "tag-edit-button",
+            app.busy() || app.detail.editing
+        ),
         button("detail-tag", tag, &esc(tag), "", "tag-button", false),
         icon_button(
             "detail-tag-remove",
@@ -83,6 +175,48 @@ pub(crate) fn render_tag(html: &mut String, app: &App, tag: &str) {
     );
 }
 
+fn render_input(html: &mut String, app: &App) {
+    let Some(draft) = &app.detail.tag_draft else {
+        return;
+    };
+    let _ = write!(
+        html,
+        r#"<span class="detail-tag-chip tag-input-chip" data-render-key="detail-tag-input"><span class="tag-input-wrap" data-value="{}"><input id="detail-tag-input" size="1" data-input="detail-tag-input" value="{}" aria-label="{}" autocomplete="off" {}/></span>{}</span>"#,
+        esc(&draft.value),
+        esc(&draft.value),
+        t(app, "tags.name"),
+        if app.busy() { "disabled" } else { "" },
+        icon_button(
+            "detail-tag-cancel",
+            "",
+            t(app, "common.cancel"),
+            "close",
+            "tag-cancel-button",
+            app.busy()
+        )
+    );
+}
+
+pub(crate) fn render_add(html: &mut String, app: &App) {
+    if app
+        .detail
+        .tag_draft
+        .as_ref()
+        .is_some_and(|draft| draft.original.is_none())
+    {
+        render_input(html, app);
+    } else {
+        html.push_str(&icon_button(
+            "detail-tag-add",
+            "",
+            t(app, "tags.add"),
+            "plus",
+            "tag-add-button",
+            app.busy(),
+        ));
+    }
+}
+
 pub(crate) fn render_dialog(html: &mut String, app: &App) {
     let Some((kind, tag)) = &app.detail.confirmation else {
         return;
@@ -92,8 +226,16 @@ pub(crate) fn render_dialog(html: &mut String, app: &App) {
     }
     let _ = write!(
         html,
-        r#"<div class="editor-overlay"><section class="editor-dialog tag-remove-dialog" role="alertdialog" aria-modal="true" aria-labelledby="tag-remove-title" aria-describedby="tag-remove-description"><header><h2 id="tag-remove-title">{}</h2></header><div class="editor-body"><p id="tag-remove-description">{}</p></div><footer class="tag-remove-actions">{}{}</footer></section></div>"#,
+        r#"<div class="editor-overlay"><section class="editor-dialog tag-remove-dialog" role="alertdialog" aria-modal="true" aria-labelledby="tag-remove-title" aria-describedby="tag-remove-description"><header><h2 id="tag-remove-title">{}</h2>{}</header><div class="editor-body"><p id="tag-remove-description">{}</p></div><footer class="tag-remove-actions">{}{}</footer></section></div>"#,
         t(app, "tags.remove_title"),
+        icon_button(
+            "detail-tag-remove-cancel",
+            "",
+            t(app, "common.close"),
+            "close",
+            "",
+            false
+        ),
         f(app, "tags.remove_confirm", &[("tag", tag)]),
         button(
             "detail-tag-remove-cancel",
@@ -136,6 +278,27 @@ mod tests {
         );
         app.detail.selected = Some("game".into());
         app
+    }
+
+    #[test]
+    fn inline_add_and_rename_preserve_other_tags_and_wait_for_success() {
+        let mut app = fixture(&["ADV", "学园"]);
+        dispatch(&mut app, "detail-tag-add", "");
+        super::input(&mut app, "detail-tag-input", "  剧情  ");
+        dispatch(&mut app, "detail-tag-save", "");
+        let request = take_requests().remove(0);
+        let payload: Value = serde_json::from_str(&request.2).unwrap();
+        assert_eq!(payload["names"], json!(["ADV", "学园", "剧情"]));
+        assert_eq!(app.catalog.games[0].tags, ["ADV", "学园"]);
+        assert!(app.detail.tag_draft.is_some());
+        app.requests.complete(request.0);
+        dispatch(&mut app, "detail-tag-cancel", "");
+        dispatch(&mut app, "detail-tag-edit", "学园");
+        super::input(&mut app, "detail-tag-input", "校园");
+        dispatch(&mut app, "detail-tag-save", "");
+        let request = take_requests().remove(0);
+        let payload: Value = serde_json::from_str(&request.2).unwrap();
+        assert_eq!(payload["names"], json!(["ADV", "校园"]));
     }
 
     #[test]

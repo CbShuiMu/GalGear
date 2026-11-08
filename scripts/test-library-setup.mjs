@@ -44,7 +44,7 @@ async function emptyHome() {
   assert.match(html, /class="home-empty"/);
   assert.doesNotMatch(html, /class="setup-overlay"/);
   return {
-    ui, settings, reply, finishScan,
+    ui, settings, reply, finishScan, requests,
     get html() { return html; },
     addFolder() {
       ui.dispatch('choose-folder', '');
@@ -108,4 +108,53 @@ test('scanning an empty directory does not open an empty setup dialog', async ()
   app.finishScan([]);
   assert.match(app.html, /class="home-empty"/);
   assert.doesNotMatch(app.html, /class="setup-overlay"/);
+});
+
+
+test('offline game remains accessible with a permanent path warning and disabled configuration', async () => {
+  const app = await emptyHome();
+  app.settings.game_edits.offline = {setup_confirmed: true};
+  app.ui.library_devices_changed();
+  app.finishScan([{...game('offline'), available: false}]);
+  app.ui.dispatch('page', 'games');
+  assert.match(app.html, /class="path-warning"/);
+  app.ui.dispatch('game-detail', 'offline');
+  assert.match(app.html, /id="detail-title">offline/);
+  assert.match(app.html, /data-action="game-settings"[^>]*disabled/);
+  assert.match(app.html, /data-action="launch"[^>]*disabled/);
+  app.ui.dispatch('game-settings', '');
+  assert.doesNotMatch(app.html, /class="editor-dialog game-settings-dialog"/);
+  app.ui.dispatch('page', 'games');
+  app.ui.dispatch('card-delete', 'offline');
+  assert.match(app.html, /永久删除/);
+  assert.match(app.html, /重新导入/);
+});
+
+test('device changes coalesce and rescan after an in-flight scan', async () => {
+  const app = await emptyHome();
+  app.ui.library_devices_changed();
+  app.ui.library_devices_changed();
+  app.ui.library_devices_changed();
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 1);
+  app.finishScan([]);
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 1);
+  app.finishScan([]);
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 0);
+  assert.doesNotMatch(app.html, /扫描完成/);
+});
+
+test('disconnecting a drive disables an already open configuration editor', async () => {
+  const app = await emptyHome();
+  app.settings.game_edits.game = {setup_confirmed: true};
+  app.ui.library_devices_changed();
+  app.finishScan([{...game('game'), available: true}]);
+  app.ui.dispatch('game-detail', 'game');
+  app.ui.dispatch('game-settings', '');
+  app.ui.dispatch('detail-edit', '');
+  assert.match(app.html, /class="configuration-fields"/);
+  assert.doesNotMatch(app.html, /class="configuration-fields" disabled/);
+  app.ui.library_devices_changed();
+  app.finishScan([{...game('game'), available: false}]);
+  assert.match(app.html, /class="configuration-fields" disabled/);
+  assert.match(app.html, /data-action="detail-save"[^>]*disabled/);
 });

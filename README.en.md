@@ -18,14 +18,14 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> The current release is **v0.4.0 (November 7, 2026)**, adding an in-game font Hook, a Shift+T floating panel, and runtime diagnostics, with improved screenshot and shared input handling.
+> **v0.4.1 (November 8, 2026)** adds a configurable shared save backup folder and improves offline library entries, alias search, and playtime tracking.
 
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.4.0_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.4.0-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.4.1_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.4.1-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -37,13 +37,13 @@ For your first launch:
 
 | Feature | Description |
 | --- | --- |
-| Library | Manage multiple folders, search, sort, organize nested favorites, drag and drop, and track playtime and last played dates. |
+| Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. |
 | Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕 Galgame, and 2DFan. Search covers independently or use local images. Thanks to these platforms. |
 | Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
 | Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
 | Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, supports capture in Magpie mode, and shows the latest screenshot below the game details. |
-| Backups | Find or confirm save locations; back up multiple folders, add notes, lock backups, preview restores, and enable backups after game exit. Set the maximum backup count under Settings → Paths and backups. WebDAV transfers are manual. [Cloud storage](docs/cloud-storage.md). |
+| Backups | Organize backups by game and save time in a configurable shared folder. Back up multiple save folders, add notes, lock backups, preview restores, and back up after a game exits. Existing backups migrate after validation. Start WebDAV transfers manually. [Backups and cloud storage](docs/cloud-storage.md). |
 | Patches | **Linked to your library**: select a library game to search and save patches directly in its patch folder. NextMoe hosted downloads require an application key with `moyu:files` permission. Search KunGal and 2DFan, import local patches, automatically extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy and account token. NextMoe is recommended for patch downloads: no points required, with direct download links. |
 | AI (experimental) | **AI-assisted save path discovery**, story recaps, and walkthrough route maps. Requires your own API token, sends necessary game text, and incurs API costs. Route maps may contain spoilers. [AI settings](docs/ai-settings.md). Recaps and route maps are still being tested; before using AI save discovery for the first time, launch the game and create a save. |
 | Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
@@ -151,13 +151,13 @@ Screenshots are from v0.3.1 (November 5, 2026). Click an image to view the origi
 | --- | --- |
 | Configuration and game list for installed / normal runs | `%APPDATA%/com.galgear.desktop` |
 | Configuration and game list in portable mode | `data/` beside the executable, enabled by `portable.flag` in the same folder |
-| Save backups | `.galgear-backups/saves/` inside the game folder |
+| Save backups | `save-backups/<game title>/<YYYY-MM-DD-HH-mm>/` under the application data folder; change the global folder in Settings → Paths and backups. Multiple backups in one minute receive `-2`, `-3`, etc. |
 | Game screenshots | `screenshots/` inside the game folder (original-resolution PNGs) |
 | AI preparation files and cache | `.galgear-ai-summary/` inside the game folder |
 
-Keep the application folder, `data/`, `tools/`, game backups, and installed `Galgear-GalgameReverse-Skill/` when moving a portable installation. GalGear checks application and Skill versions in the background at startup and shows update notices without installing automatically. Skills are not bundled; install them with Update under Settings → Updates → Skill.
+Keep the application folder, `data/`, `tools/`, the configured global backup folder, and installed `Galgear-GalgameReverse-Skill/` when moving a portable installation. GalGear checks application and Skill versions in the background at startup and shows update notices without installing automatically. Skills are not bundled; install them with Update under Settings → Updates → Skill.
 
-Account tokens, cookies, and cloud storage passwords are stored in the local Windows Credential Manager and must be configured again on another computer. Removing a game from the library only changes the list; it does not delete the game, saves, or backups. For 2DFan, you need to obtain the token and cookies yourself.
+Account tokens, cookies, and cloud storage passwords are stored in the local Windows Credential Manager and must be configured again on another computer. Permanently deleting a library entry removes its details, settings, collection membership, and play history; using it again requires reimporting. Game files, saves, and backups remain on disk. Unavailable games stay in the library, and drive changes trigger a background rescan. For 2DFan, you need to obtain the token and cookies yourself.
 
 ## 📌 Usage notes
 
@@ -183,6 +183,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## 📝 Release history
+
+### v0.4.1
+
+- Added shared save backup storage with migration, kept offline games in the library, and added rescans on drive changes. Improved title and alias search, launcher handoff detection, home sorting, metadata and tag editing, and playtime display. [Release notes](docs/releases/v0.4.1.md).
 
 ### v0.4.0
 

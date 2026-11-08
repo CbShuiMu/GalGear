@@ -47,7 +47,7 @@ pub(crate) fn resource_row(html: &mut String, app: &App, result: &Resource) {
     } else {
         "./assets/nextmoe.webp"
     };
-    write!(html,r#"<article class="resource-row resource-entry"><span class="resource-logo"><img src="{logo}" alt="{}" width="28" height="28"/></span><div class="resource-copy"><div class="resource-origin"><span class="resource-source">{}</span>"#,esc(&result.source),esc(&result.source)).unwrap();
+    write!(html,r#"<article class="resource-row resource-entry"><span class="resource-logo"><img src="{logo}" alt="{}" width="28" height="28"/></span><div class="resource-copy"><div class="resource-origin"><span class="resource-source">{}</span>"#,esc(if result.source == "NextMoe" { "鲲Gal" } else { &result.source }),esc(if result.source == "NextMoe" { "鲲Gal" } else { &result.source })).unwrap();
     if !result.game_title.is_empty() {
         write!(
             html,
@@ -193,7 +193,7 @@ pub(crate) fn patches_page(html: &mut String, app: &App) {
     .unwrap();
     for (source, label) in [
         ("all", t(app, "patches.all_sources")),
-        ("nextmoe", "NextMoe"),
+        ("nextmoe", "鲲Gal"),
         ("2DFan", "2DFan"),
     ] {
         let count = app
@@ -367,7 +367,12 @@ pub(crate) fn download_panel(html: &mut String, app: &App) {
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> Option<bool> {
     match action {
         "patch-source" if matches!(value, "all" | "2DFan" | "nextmoe") => {
-            app.patches.patch_source = value.into()
+            app.patches.patch_source = value.into();
+            crate::preferences::remember_source(
+                app,
+                "patches",
+                if value == "2DFan" { "2dfan" } else { value },
+            );
         }
         "use-download" if !app.patches.patch_game.is_empty() => {
             let id = app.patches.patch_game.clone();

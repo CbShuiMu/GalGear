@@ -1,21 +1,17 @@
-//! Recent-game shelf. Selection is independent of library filters and detail state.
+//! Home game shelf. Selection is independent of library filters and detail state.
 use crate::{
     game_actions,
     models::Game,
     playtime,
     state::App,
     view::{poster, t},
-    widgets::{button, esc},
+    widgets::{button, esc, icon},
 };
 use std::fmt::Write;
 
 fn ordered(app: &App) -> Vec<&Game> {
     let mut games: Vec<_> = app.catalog.games.iter().filter(|game| crate::game_setup::visible(&app.settings, game)).collect();
-    games.sort_by(|a, b| {
-        b.last_played
-            .cmp(&a.last_played)
-            .then_with(|| a.title.cmp(&b.title))
-    });
+    crate::library::sort_games(&mut games, &app.settings);
     games
 }
 
@@ -52,7 +48,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
             r#"<div class="home-shelf" data-render-key="home-shelf" data-focus-scroll="managed" aria-label="{}">"#,
             t(app, "home.recent")
         );
-        for item in games.iter().take(24) {
+        for item in games {
             let _ = write!(
                 html,
                 r#"<button id="home-game-{}" class="home-game {}" data-action="home-select" data-value="{}" aria-label="{}" aria-pressed="{}"><span class="poster">"#,
@@ -63,6 +59,9 @@ pub(crate) fn render(html: &mut String, app: &App) {
                 item.id == game.id
             );
             poster(html, app, item);
+            if !item.available {
+                let _ = write!(html, r#"<span class="path-warning" role="img" aria-label="{}" title="{}">{}</span>"#, t(app,"library.path_warning"), t(app,"library.path_warning"), icon("error"));
+            }
             html.push_str("</span></button>");
         }
         html.push_str(r#"</div><div class="home-feature" data-render-key="home-feature"><div class="home-copy">"#);
@@ -101,8 +100,14 @@ pub(crate) fn render(html: &mut String, app: &App) {
         game_actions::render(html, app, game);
         let _ = write!(
             html,
-            r#"<span class="home-playtime">{}h</span></div>"#,
-            playtime::hours(game.playtime_seconds)
+            r#"<span class="home-playtime">{}</span></div>"#,
+            game.last_played
+                .map(|date| crate::view::f(
+                    app,
+                    "home.last_played",
+                    &[("date", &playtime::date(date))]
+                ))
+                .unwrap_or_else(|| t(app, "home.never_played").into())
         );
         html.push_str("</div></div></div>");
     } else {
@@ -143,7 +148,7 @@ mod tests {
         assert!(html.contains("data-cover=\"http://galgear-cover.localhost/cover\""));
     }
     #[test]
-    fn home_uses_recent_play_and_ignores_library_filters() {
+    fn home_uses_library_order_and_ignores_library_filters() {
         let mut app = App::default();
         app.library.search = "no match".into();
         app.catalog.games = [1,3,2].into_iter().map(|n| serde_json::from_value(serde_json::json!({
@@ -155,7 +160,7 @@ mod tests {
                 .iter()
                 .map(|game| game.id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["3", "2", "1"]
+            vec!["1", "2", "3"]
         );
     }
     #[test]
@@ -169,5 +174,32 @@ mod tests {
         let mut html = String::new();
         render(&mut html, &app);
         assert!(html.contains("data-value=\"live\"") && !html.contains("removed"));
+    }
+
+    #[test]
+    fn home_renders_every_visible_game() {
+        let mut app = App::default();
+        for index in 1..=25 {
+            let id = format!("game-{index:02}");
+            let game = serde_json::from_value(serde_json::json!({
+                "id": id,
+                "title": id,
+                "folder": "X:/Fixture",
+                "engine": "unknown",
+                "modified": 0
+            }))
+            .unwrap();
+            app.catalog.games.push(game);
+            app.settings
+                .game_edits
+                .entry(id)
+                .or_default()
+                .setup_confirmed = true;
+        }
+
+        let mut html = String::new();
+        render(&mut html, &app);
+
+        assert_eq!(html.matches(r#"data-action="home-select""#).count(), 25);
     }
 }

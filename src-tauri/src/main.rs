@@ -26,6 +26,7 @@ mod game_window;
 #[cfg(windows)]
 mod game_input;
 mod library;
+mod library_devices;
 mod import;
 mod local_patches;
 mod metadata;

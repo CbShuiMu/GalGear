@@ -16,8 +16,15 @@ type MagpieProcess = std::process::Child;
 #[derive(Default)]
 pub(crate) struct RuntimeState {
     running: Mutex<BTreeMap<String, std::process::Child>>,
+    observer: std::sync::Arc<runtime::Monitor>,
     magpie: Mutex<Option<MagpieProcess>>,
     shutting_down: std::sync::atomic::AtomicBool,
+}
+
+impl RuntimeState {
+    pub(crate) fn observer(&self) -> std::sync::Arc<runtime::Monitor> {
+        std::sync::Arc::clone(&self.observer)
+    }
 }
 
 pub(crate) fn shutdown_magpie(state: &AppState) -> Result<(), Message> {
@@ -171,7 +178,7 @@ fn launch_game_at(
 ) -> Result<(), Message> {
     let _guard = state::begin_write(&state)?;
     let game = find_game(&state, &id)?;
-    let status = runtime::detect(game.executable.as_deref());
+    let status = state.tools.observer.detect(game.executable.as_deref());
     if status == runtime::Status::Running {
         return Err(Message::new("error.already_running"));
     }
@@ -193,6 +200,7 @@ fn launch_game_at(
         .lock()
         .map_err(|_| Message::new("error.catalog_state"))?;
     if let Some(child) = running.get_mut(&id)
+        && status != Status::Stopped
         && child
             .try_wait()
             .map_err(|e| Message::detail("error.launch", e))?
@@ -220,6 +228,9 @@ fn launch_game_at(
     let directory = edit.working_directory.as_deref().unwrap_or(&game.folder);
     let child = command.args(&edit.arguments).current_dir(directory).spawn()
         .map_err(|e| Message::detail("error.launch", e))?;
+    if let Err(error) = state.tools.observer.launched(Path::new(&executable), &child) {
+        log::warn!("runtime_tracking_failed game_id={id}: {error}");
+    }
     log::info!("game_spawned game_id={id} pid={} locale={locale} upscale={}", child.id(), edit.upscale);
     state.tools.running.lock().map_err(|_| Message::new("error.catalog_state"))?.insert(id, child);
     if let Some(hotkey) = upscale_hotkey {
@@ -331,6 +342,9 @@ pub(crate) fn set_game_tools(
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
     let game = find_game(&state, &id)?;
+    if !game.executable.as_ref().is_some_and(|path| std::path::Path::new(path).is_file()) {
+        return Err(Message::new("games.unavailable"));
+    }
     if !["normal", "locale"].contains(&launch_mode.as_str()) {
         return Err(Message::new("error.operation"));
     }
@@ -349,17 +363,18 @@ pub(crate) fn set_game_tools(
 }
 
 #[tauri::command]
-pub(crate) fn game_runtime(id: String, state: State<'_, AppState>) -> Result<Status, Message> {
-    Ok(runtime::detect(
-        find_game(&state, &id)?.executable.as_deref(),
-    ))
+pub(crate) async fn game_runtime(id: String, state: State<'_, AppState>) -> Result<Status, Message> {
+    let game = find_game(&state, &id)?;
+    let observer = state.tools.observer();
+    tauri::async_runtime::spawn_blocking(move || observer.detect(game.executable.as_deref()))
+        .await.map_err(|e| Message::detail("error.operation", e))
 }
 
 #[tauri::command]
 pub(crate) fn upscale_game(id: String, state: State<'_, AppState>) -> Result<(), Message> {
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
-    if runtime::detect(game.executable.as_deref()) != Status::Running {
+    if state.tools.observer.detect(game.executable.as_deref()) != Status::Running {
         return Err(Message::new("tools.game_stopped"));
     }
     let executable = game
@@ -413,7 +428,7 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
         let mut tracker = playtime::Tracker::default();
         let mut playtime_dirty = false;
         loop {
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             let state = app.state::<AppState>();
             let games = match state.catalog.lock() {
                 Ok(c) => c
@@ -423,8 +438,9 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
                     .collect::<Vec<_>>(),
                 Err(_) => continue,
             };
+            let observer = state.tools.observer();
             let current =
-                match tauri::async_runtime::spawn_blocking(move || runtime::detect_many(&games))
+                match tauri::async_runtime::spawn_blocking(move || observer.detect_many(&games))
                     .await
                 {
                     Ok(c) => c,
@@ -470,10 +486,10 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
                 let recovery_settings = settings.clone();
                 if let Ok(_guard) = begin_write(&state) {
                     let handle = app.clone();
+                    let data = backup_data(&state.store.path, &settings);
                     let _ = tauri::async_runtime::spawn_blocking(move || {
                         for game in recovery_games {
-                            let data = backup_data(&game);
-                            if !data.join(&game.id).join("restore-journal.json").exists() {
+                            if !snapshots::recovery_pending(&data, &game.id).unwrap_or(true) {
                                 continue;
                             }
                             let roots =
@@ -487,7 +503,7 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
                                 &data,
                                 &game.id,
                                 &roots,
-                                runtime::detect(game.executable.as_deref()),
+                                handle.state::<AppState>().tools.observer.detect(game.executable.as_deref()),
                             ) {
                                 let _ = handle.emit(
                                     "backup-completed",

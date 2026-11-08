@@ -165,9 +165,10 @@ pub(crate) async fn install_patch(
         .ok_or_else(|| Message::detail("error.patch", "Select a patch and preview it first"))?;
     let data = patch_data(&state);
     let game = find_game(&state, &plan.preview.game_id)?;
-    snapshots::require_stopped(runtime::detect(game.executable.as_deref()))?;
     validate_patch_target(&game, &plan.preview.target, &snapshot(&state)?)?;
+    let observer = state.tools.observer();
     tauri::async_runtime::spawn_blocking(move || {
+        snapshots::require_stopped(observer.detect(game.executable.as_deref()))?;
         patches::install(plan, &data)?;
         patches::list(&data)
     })
@@ -187,9 +188,10 @@ pub(crate) async fn restore_patch(
         .find(|r| r.id == id)
         .ok_or_else(|| Message::new("error.game_missing"))?;
     let game = find_game(&state, &record.preview.game_id)?;
-    snapshots::require_stopped(runtime::detect(game.executable.as_deref()))?;
     validate_patch_target(&game, &record.preview.target, &snapshot(&state)?)?;
+    let observer = state.tools.observer();
     tauri::async_runtime::spawn_blocking(move || {
+        snapshots::require_stopped(observer.detect(game.executable.as_deref()))?;
         patches::restore(&data, &id)?;
         patches::list(&data)
     })

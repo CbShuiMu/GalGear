@@ -111,6 +111,70 @@ pub(super) fn search(
     parse_search(&value)
 }
 
+fn names(work: &Value) -> Vec<String> {
+    let mut names = vec![text(work, "display_name"), text(work, "latin")];
+    if let Some(localized) = work["localized"].as_object() {
+        names.extend(localized.values().map(|name| text(name, "value")));
+    }
+    for title in work["titles"].as_array().into_iter().flatten() {
+        names.push(text(title, "title"));
+        names.push(text(title, "latin"));
+    }
+    galgear_tags::normalize(names)
+}
+
+fn matching_work<'a>(value: &'a Value, query: &str) -> Result<Option<&'a Value>, Message> {
+    // Validate shape even when no candidate matches: malformed responses must not be cached as success.
+    parse_search(value)?;
+    let key = galgear_tags::key(query);
+    let mut matches = value["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|work| {
+            is_game(work)
+                && names(work)
+                    .iter()
+                    .any(|name| galgear_tags::key(name) == key)
+        });
+    let first = matches.next();
+    Ok(if matches.next().is_none() {
+        first
+    } else {
+        None
+    })
+}
+
+pub(super) fn aliases(
+    client: &Client,
+    query: &str,
+    id: Option<&str>,
+    credentials: &Credentials,
+) -> Result<Vec<String>, Message> {
+    let id = if let Some(id) = id {
+        id.to_owned()
+    } else {
+        let results = request_json(auth(client.get(API), "nextmoe", credentials).query(&[
+            ("q", query),
+            ("limit", "20"),
+            ("nsfw", "true"),
+            ("include", "titles"),
+        ]))?;
+        let Some(work) = matching_work(&results, query)? else {
+            return Ok(Vec::new());
+        };
+        work_id(work)?.to_owned()
+    };
+    let work = request_json(
+        auth(client.get(format!("{API}/{id}")), "nextmoe", credentials)
+            .query(&[("nsfw", "true"), ("include", "titles")]),
+    )?;
+    if work["object"] != "work" || !is_game(&work) || work_id(&work)? != id {
+        return Err(api_error("Invalid NextMoe alias response"));
+    }
+    Ok(names(&work))
+}
+
 fn credit_role(group: &Value) -> &str {
     match group["role_key"].as_str().unwrap_or_default() {
         "developer" => "开发",
@@ -263,6 +327,25 @@ pub(super) fn covers(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn aliases_match_unique_multilingual_work_and_reject_sequels() {
+        let work = serde_json::json!({"object":"work","id":"41","medium":"galgame","display_name":"終のステラ",
+            "localized":{"en":{"value":"Stella of The End"},"zh-Hans":{"value":"星之终途"}},
+            "titles":[{"title":"Tsui no Stella","latin":null},{"title":"星之终途"}]});
+        let sequel = serde_json::json!({"object":"work","id":"440","medium":"galgame","display_name":"Stella of The End: Diary"});
+        let result = serde_json::json!({"object":"list","items":[sequel,work.clone()]});
+        let found = matching_work(&result, "stella of the end")
+            .unwrap()
+            .unwrap();
+        assert_eq!(work_id(found).unwrap(), "41");
+        assert!(names(found).contains(&"星之终途".into()));
+        assert!(names(found).contains(&"Tsui no Stella".into()));
+        assert!(matching_work(&result, "Stella").unwrap().is_none());
+        let ambiguous = serde_json::json!({"object":"list","items":[work.clone(),work]});
+        assert!(matching_work(&ambiguous, "星之终途").unwrap().is_none());
+        assert!(matching_work(&serde_json::json!({}), "Game").is_err());
+    }
 
     #[test]
     fn search_uses_localized_names_string_ids_and_only_games() {

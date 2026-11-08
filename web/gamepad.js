@@ -52,6 +52,7 @@ function textKeyboard(input) {
     if (input.isConnected) {
       input.focus({preventScroll:true});
       if (commit) { input.value = value; input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); }
+      if (commit && input.id === 'detail-tag-input') input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
     }
   };
   keyboard = {cancel:() => finish(false)};

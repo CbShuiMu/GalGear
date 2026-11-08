@@ -19,7 +19,7 @@ reqwest = { version = "0.12", features = ["blocking", "json", "rustls-tls", "sys
 scraper = "0.24"
 zip = { version = "4", default-features = false, features = ["deflate"] }
 encoding_rs = "0.8"
-time = "0.3"
+time = { version = "0.3", features = ["local-offset"] }
 rhai = { version = "1", features = ["serde", "sync"] }
 regex = "1"
 roxmltree = "0.21"

@@ -553,6 +553,25 @@ fn page_content(html: &mut String, app: &App) {
                 index % 5
             );
             poster(html, app, game);
+            if !game.available {
+                let _ = write!(
+                    html,
+                    r#"<span class="path-warning" role="img" aria-label="{}" title="{}">{}</span>"#,
+                    t(app, "library.path_warning"),
+                    t(app, "library.path_warning"),
+                    icon("error")
+                );
+            }
+
+            if game.play_status == "finished" && !app.library.batch {
+                let _ = write!(
+                    html,
+                    r#"<span class="game-finished-badge" title="{}" aria-label="{}">{}</span>"#,
+                    t(app, "tags.finished"),
+                    t(app, "tags.finished"),
+                    icon("trophy-filled")
+                );
+            }
             if app.library.batch {
                 let _ = write!(
                     html,
@@ -593,15 +612,6 @@ fn card_overlay(html: &mut String, app: &App, game: &Game) {
         esc(&game.title),
         esc(&game.title)
     );
-    if !game.available {
-        let _ = write!(
-            html,
-            r#"<span class="path-warning" role="img" aria-label="{}" title="{}">{}</span>"#,
-            t(app, "library.path_warning"),
-            t(app, "library.path_warning"),
-            icon("error")
-        );
-    }
     let _ = write!(
         html,
         r#"</div><div class="card-tags" aria-label="{}">"#,

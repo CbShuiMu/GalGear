@@ -2,7 +2,7 @@ use crate::{
     requests::{Pending, issue},
     state::{App, show_toast},
     view::{f, t},
-    widgets::{button, esc},
+    widgets::{button, esc, icon_button},
 };
 use galgear_i18n::Message;
 use serde::Deserialize;
@@ -147,9 +147,17 @@ pub(crate) fn render(html: &mut String, app: &App) {
     let Some(release) = &app.update.release else {
         return;
     };
-    write!(html, r#"<div class="editor-overlay update-overlay"><section class="editor-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><header><h2 id="update-title">{}</h2></header><div class="editor-body"><p>{}</p><p>{}</p><div class="detail-actions">"#,
-        t(app,"settings.update"), f(app,"settings.latest",&[("version",&release.version)]),
+    write!(html, r#"<div class="editor-overlay update-overlay"><section class="editor-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><header><h2 id="update-title">{}</h2>{}</header><div class="editor-body"><p>{}</p><p>{}</p></div><footer class="dialog-actions">"#,
+        t(app,"settings.update"), icon_button("update-cancel", "", t(app,"common.close"), "close", "", app.update.installing), f(app,"settings.latest",&[("version",&release.version)]),
         t(app,if app.update.installing {"update.stopping"} else if !release.available {"update.current"} else if release.asset.is_none() {"update.unavailable"} else {"update.confirm"})).unwrap();
+    html.push_str(&button(
+        "update-cancel",
+        "",
+        t(app, "common.close"),
+        "",
+        "quiet",
+        app.update.installing,
+    ));
     if release.available && release.asset.is_some() {
         html.push_str(&button(
             "update-confirm",
@@ -160,15 +168,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
             app.update.installing,
         ));
     }
-    html.push_str(&button(
-        "update-cancel",
-        "",
-        t(app, "common.close"),
-        "",
-        "quiet",
-        app.update.installing,
-    ));
-    html.push_str("</div></div></section></div>");
+    html.push_str("</footer></section></div>");
 }
 
 #[cfg(test)]

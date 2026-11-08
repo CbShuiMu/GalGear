@@ -69,7 +69,12 @@ pub(crate) fn change_games(
         .lock()
         .map_err(|_| Message::new("error.config_state"))?;
     let mut records = if matches!(operation, "exclude" | "restore") {
-        Some(state.playtime.lock().map_err(|_| Message::new("error.catalog_state"))?)
+        Some(
+            state
+                .playtime
+                .lock()
+                .map_err(|_| Message::new("error.catalog_state"))?,
+        )
     } else {
         None
     };
@@ -79,33 +84,39 @@ pub(crate) fn change_games(
         .map_err(|_| Message::new("error.catalog_state"))?;
     let mut next = settings.clone();
     let mut next_list = list.clone();
-    let (succeeded, failed, unchanged) = apply_batch(
-        &mut next,
-        &mut next_list,
-        operation,
-        ids,
-        collection,
-    );
-    let forgotten: BTreeSet<_> = list.games.iter().chain(settings.excluded_entries.values())
-        .filter(|game| !next_list.games.iter().any(|other| other.id == game.id)
-            && !next.excluded_entries.contains_key(&game.id))
-        .map(|game| game.id.clone()).collect();
+    let (succeeded, failed, unchanged) =
+        apply_batch(&mut next, &mut next_list, operation, ids, collection);
+    let forgotten: BTreeSet<_> = list
+        .games
+        .iter()
+        .chain(settings.excluded_entries.values())
+        .filter(|game| {
+            !next_list.games.iter().any(|other| other.id == game.id)
+                && !next.excluded_entries.contains_key(&game.id)
+        })
+        .map(|game| game.id.clone())
+        .collect();
     state.store.save(&next)?;
     *settings = next.clone();
     *list = next_list.clone();
     let mut playtime_warning = None;
     if matches!(operation, "exclude" | "restore") {
         state.scan.forget(&forgotten);
-        if !forgotten.is_empty() && let Some(records) = records.as_mut() {
+        if !forgotten.is_empty()
+            && let Some(records) = records.as_mut()
+        {
             records.retain(|id, _| !forgotten.contains(id));
             playtime_warning = galgear_core::playtime::save(
-                &state.store.path.with_file_name("playtime.json"), records,
-            ).err();
+                &state.store.path.with_file_name("playtime.json"),
+                records,
+            )
+            .err();
         }
     }
     // Settings are authoritative; a cache failure must not misreport committed actions.
-    let cache_warning =
-        catalog::save(&state.store.path.with_file_name("catalog.json"), &next_list).err().or(playtime_warning);
+    let cache_warning = catalog::save(&state.store.path.with_file_name("catalog.json"), &next_list)
+        .err()
+        .or(playtime_warning);
     Ok(BatchResult {
         settings: next,
         catalog: next_list,
@@ -146,9 +157,13 @@ fn apply_batch(
             continue;
         };
         let result = match operation {
-            "add" if settings.collections.iter().any(|folder| {
-                collection.is_some() && folder.parent.as_deref() == collection
-            }) => Err(Message::new("folders.leaf_only")),
+            "add"
+                if settings.collections.iter().any(|folder| {
+                    collection.is_some() && folder.parent.as_deref() == collection
+                }) =>
+            {
+                Err(Message::new("folders.leaf_only"))
+            }
             "add" | "detach" => {
                 if let Some(folder) = settings
                     .collections
@@ -169,11 +184,6 @@ fn apply_batch(
                 }
             }
             "exclude" => catalog::remove_entry(settings, list, &id),
-            "restore" if catalog::directory_missing(&game) => {
-                catalog::forget_entry(settings, &id);
-                list.games.retain(|game| game.id != id);
-                Err(Message::new("error.game_missing"))
-            }
             "restore" => {
                 let mut restored = game.clone();
                 settings.excluded_games.retain(|g| g != &id);
@@ -203,7 +213,6 @@ fn apply_batch(
 
 #[tauri::command]
 pub fn excluded_entries(state: State<'_, AppState>) -> Result<Vec<Game>, Message> {
-    crate::state::purge_missing(&state)?;
     let settings = snapshot(&state)?;
     Ok(settings
         .excluded_entries
@@ -272,7 +281,11 @@ mod tests {
         std::fs::write(folder.join("game.exe"), b"game").unwrap();
         let game = catalog::manual_game(&folder.join("game.exe"), "Game".into()).unwrap();
         state.catalog.lock().unwrap().games.push(game.clone());
-        state.playtime.lock().unwrap().insert(game.id.clone(), Default::default());
+        state
+            .playtime
+            .lock()
+            .unwrap()
+            .insert(game.id.clone(), Default::default());
         change_games(&state, "exclude", vec![game.id.clone()], None).unwrap();
         std::fs::remove_dir_all(folder).unwrap();
         let result = change_games(&state, "restore", vec![game.id], None).unwrap();
@@ -339,27 +352,39 @@ mod tests {
         collections::edit(&mut settings, "create", "", "Child", Some("collection-1")).unwrap();
         let before = settings.clone();
         let (done, failed, _) = apply_batch(
-            &mut settings, &mut list, "add", vec![id.clone()], Some("collection-1"),
+            &mut settings,
+            &mut list,
+            "add",
+            vec![id.clone()],
+            Some("collection-1"),
         );
         assert!(done.is_empty());
         assert_eq!(failed[0].error.key, "folders.leaf_only");
         assert_eq!(settings, before);
         let (done, failed, _) = apply_batch(
-            &mut settings, &mut list, "add", vec![id.clone()], Some("collection-3"),
+            &mut settings,
+            &mut list,
+            "add",
+            vec![id.clone()],
+            Some("collection-3"),
         );
         assert_eq!(done, vec![id.clone()]);
         assert!(failed.is_empty());
         assert!(settings.collections[2].games.contains(&id));
         collections::edit(&mut settings, "delete", "collection-3", "", None).unwrap();
         let (done, failed, _) = apply_batch(
-            &mut settings, &mut list, "add", vec![id.clone()], Some("collection-1"),
+            &mut settings,
+            &mut list,
+            "add",
+            vec![id.clone()],
+            Some("collection-1"),
         );
         assert_eq!(done, vec![id.clone()]);
         assert!(failed.is_empty());
         assert!(settings.collections[0].games.contains(&id));
     }
     #[test]
-    fn exclusion_and_restore_preserve_identity_cover_membership_and_edits_across_restart() {
+    fn permanent_deletion_clears_records_across_restart_and_keeps_files() {
         let (mut settings, mut list) = fixture();
         let temp = tempfile::tempdir().unwrap();
         let executable = temp.path().join("game.exe");
@@ -374,27 +399,45 @@ mod tests {
         let data = serde_json::to_vec(&settings).unwrap();
         let mut settings: Settings = serde_json::from_slice(&data).unwrap();
         collections::edit(&mut settings, "delete", "collection-2", "", None).unwrap();
-        apply_batch(&mut settings, &mut list, "restore", vec![id.clone()], None);
-        assert_eq!(list.games[0].id, id);
-        assert_eq!(list.games[0].title, "Edited");
-        assert_eq!(list.games[0].cover.as_deref(), Some("cached-cover"));
-        assert!(settings.collections[0].games.contains(&id));
-        assert!(settings.excluded_games.is_empty());
-        assert_eq!(settings.collections.len(), 1);
-        let recovered = catalog::merge(ScanResult::default(), &ScanResult::default(), &settings);
-        assert_eq!(recovered.games[0].id, id);
-        assert_eq!(recovered.games[0].cover.as_deref(), Some("cached-cover"));
+        let (_, failed, _) =
+            apply_batch(&mut settings, &mut list, "restore", vec![id.clone()], None);
+        assert_eq!(failed.len(), 1);
+        assert!(list.games.is_empty());
+        assert!(!settings.game_edits.contains_key(&id));
+        assert!(!settings.collections[0].games.contains(&id));
+        assert!(settings.excluded_entries.is_empty());
+        assert!(executable.is_file());
+        assert!(
+            catalog::merge(ScanResult::default(), &ScanResult::default(), &settings)
+                .games
+                .is_empty()
+        );
     }
     #[test]
     fn forgetting_missing_games_clears_persistent_playtime_and_in_flight_scan_results() {
         let temp = tempfile::tempdir().unwrap();
         let state = AppState::load(temp.path().join("config")).unwrap();
-        let game = catalog::manual_game(&temp.path().join("missing-folder").join("game.exe"), "Missing".into()).unwrap();
+        let game = catalog::manual_game(
+            &temp.path().join("missing-folder").join("game.exe"),
+            "Missing".into(),
+        )
+        .unwrap();
         state.catalog.lock().unwrap().games.push(game.clone());
-        state.settings.lock().unwrap().game_edits.entry(game.id.clone()).or_default().setup_confirmed = true;
-        state.playtime.lock().unwrap().insert(game.id.clone(), galgear_core::playtime::Record {
-            playtime_seconds: 600, last_played: Some(1),
-        });
+        state
+            .settings
+            .lock()
+            .unwrap()
+            .game_edits
+            .entry(game.id.clone())
+            .or_default()
+            .setup_confirmed = true;
+        state.playtime.lock().unwrap().insert(
+            game.id.clone(),
+            galgear_core::playtime::Record {
+                playtime_seconds: 600,
+                last_played: Some(1),
+            },
+        );
         let result = change_games(&state, "exclude", vec![game.id.clone()], None).unwrap();
         assert_eq!(result.succeeded, vec![game.id.clone()]);
         assert!(result.failed.is_empty());
@@ -405,10 +448,21 @@ mod tests {
         let mut stale_scan = vec![game.clone()];
         state.scan.retain_current(&mut stale_scan);
         assert!(stale_scan.is_empty());
-        assert!(galgear_core::playtime::load(&state.store.path.with_file_name("playtime.json")).unwrap().is_empty());
+        assert!(
+            galgear_core::playtime::load(&state.store.path.with_file_name("playtime.json"))
+                .unwrap()
+                .is_empty()
+        );
         let reloaded = AppState::load(temp.path().join("config")).unwrap();
         assert!(reloaded.catalog.lock().unwrap().games.is_empty());
-        assert!(reloaded.settings.lock().unwrap().excluded_entries.is_empty());
+        assert!(
+            reloaded
+                .settings
+                .lock()
+                .unwrap()
+                .excluded_entries
+                .is_empty()
+        );
     }
     #[test]
     fn stale_collection_returns_failures_without_mutating_memberships() {

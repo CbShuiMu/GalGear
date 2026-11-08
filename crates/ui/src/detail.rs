@@ -24,6 +24,7 @@ pub(crate) struct State {
     pub(crate) editor: Option<Editor>,
     pub(crate) editing: bool,
     pub(crate) editing_configuration: bool,
+    pub(crate) tag_draft: Option<crate::detail_tags::Draft>,
 }
 
 impl Default for State {
@@ -44,6 +45,7 @@ impl Default for State {
             editor: None,
             editing: false,
             editing_configuration: false,
+            tag_draft: None,
         }
     }
 }
@@ -242,9 +244,6 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         )
         .unwrap();
     }
-    html.push_str("<div class=\"detail-state-actions\">");
-    crate::game_actions::render(html, app, game);
-    html.push_str("</div>");
     if !game.play_status.is_empty() && !matches!(game.play_status.as_str(), "unmarked" | "finished")
     {
         write!(
@@ -262,36 +261,43 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     } else {
         write!(html, r#"<h2 id="detail-title">{}</h2>"#, esc(&game.title)).unwrap();
     }
-    html.push_str("<div class=\"hero-facts\">");
+    write!(
+        html,
+        "<dl class=\"hero-facts\"><div><dt>{}</dt><dd>",
+        t(app, "metadata.brand")
+    )
+    .unwrap();
     if let Some(meta) = &game.metadata {
         // 顶部与制作资料共用当前品牌，不能被旧资料源的摘要快照覆盖。
-        let brand = &meta.brand;
-        let release_date = edit
-            .summary_release_date
-            .as_deref()
-            .unwrap_or(&meta.release_date);
-        if !brand.is_empty() {
-            html.push_str("<span>");
-            credit(html, meta, "brand", brand);
-            html.push_str("</span>");
+        if meta.brand.is_empty() {
+            html.push_str(t(app, "detail.not_set"));
+        } else {
+            credit(html, meta, "brand", &meta.brand);
         }
-        if !release_date.is_empty() {
-            write!(html, "<span>{}</span>", esc(release_date)).unwrap();
-        }
+    } else {
+        html.push_str(t(app, "detail.not_set"));
     }
+    let release_date = edit.summary_release_date.as_deref().unwrap_or_else(|| {
+        game.metadata
+            .as_ref()
+            .map_or("", |meta| meta.release_date.as_str())
+    });
     let last_played = game
         .last_played
-        .map(playtime::date)
+        .map(|seconds| playtime::recent_date(app.settings.language, seconds))
         .filter(|date| !date.is_empty());
     write!(
         html,
-        r#"<span class="last-played">{} <span>{}</span></span><span class="game-playtime">{}</span>"#,
+        r#"</dd></div><div><dt>{}</dt><dd>{}</dd></div><div class="game-playtime"><dt>{}</dt><dd>{}</dd></div><div class="last-played"><dt>{}</dt><dd>{}</dd></div></dl>"#,
+        t(app, "metadata.date"),
+        esc(value(app, release_date)),
+        t(app, "detail.playtime_label"),
+        f(app, "detail.playtime_value", &[("hours", &playtime::hours(game.playtime_seconds))]),
         t(app, "detail.last_played"),
-        last_played.as_deref().unwrap_or(t(app, "detail.never_played")),
-        f(app, "detail.playtime", &[("hours", &playtime::hours(game.playtime_seconds))])
+        last_played.as_deref().unwrap_or(t(app, "detail.never_played"))
     )
     .unwrap();
-    html.push_str("</div></div><div class=\"detail-actions hero-actions\">");
+    html.push_str("</div><div class=\"detail-actions hero-actions\">");
     if game.executable.is_some() {
         html.push_str(&button(
             "launch",
@@ -302,12 +308,14 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             app.busy() || !game.available || runtime == "running",
         ));
     }
-    write!(html,r#"<button class="icon-button game-settings-button" data-action="game-settings" aria-label="{}" title="{}">{}</button>"#,t(app,"detail.configure"),t(app,"detail.configure"),icon("settings")).unwrap();
+    write!(html,r#"<button class="icon-button game-settings-button" data-action="game-settings" aria-label="{}" title="{}" {}>{}</button>"#,t(app,"detail.configure"),t(app,"detail.configure"),if game.available {""} else {"disabled"},icon("settings")).unwrap();
+    html.push_str("<div class=\"detail-state-actions\">");
+    crate::game_actions::render(html, app, game);
+    html.push_str("</div>");
     write!(
         html,
-        "</div><section class=\"hero-tags\" aria-label=\"{}\"><div class=\"utility-heading\"><h3>{}</h3>{}</div><div class=\"game-tags\">",
-        t(app, "detail.tags"), t(app,"detail.tags"),
-        button("tags-association", "", t(app, "detail.change_tag_source"), "database", "quiet tag-source-button", (app.detail.editing && !app.detail.editing_configuration) || app.busy())
+        "</div><section class=\"hero-tags\" aria-label=\"{}\"><div class=\"game-tags\">",
+        t(app, "detail.tags")
     )
     .unwrap();
     if app.detail.editing && !app.detail.editing_configuration {
@@ -324,11 +332,20 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         for tag in &game.tags {
             crate::detail_tags::render_tag(html, app, tag);
         }
-        if game.tags.is_empty() {
-            write!(html, "<p class=\"muted\">{}</p>", t(app, "detail.no_tags")).unwrap();
-        }
     }
-    html.push_str("</div></section></div></div>");
+    html.push_str("<span class=\"tag-inline-actions\">");
+    if !app.detail.editing || app.detail.editing_configuration {
+        crate::detail_tags::render_add(html, app);
+    }
+    html.push_str(&button(
+        "tags-association",
+        "",
+        t(app, "detail.change_tag_source"),
+        "database",
+        "icon-only tag-source-button",
+        (app.detail.editing && !app.detail.editing_configuration) || app.busy(),
+    ));
+    html.push_str("</span></div></section></div></div>");
     if app.detail.editor.is_none()
         && app.detail.confirmation.as_ref().is_none_or(|(action, _)| {
             !matches!(action.as_str(), "snapshot-delete" | "detail-tag-remove")
@@ -371,12 +388,7 @@ fn reading(html: &mut String, app: &App, game: &Game) {
     }
     html.push_str("</div><div class=\"reading-controls metadata-actions\">");
     metadata_actions(html, app, game);
-    write!(
-        html,
-        "</div></div><section class=\"story-section\"><h3>{}</h3><div class=\"story-body\">",
-        t(app, "metadata.story")
-    )
-    .unwrap();
+    html.push_str("</div></div><section class=\"story-section\"><div class=\"story-body\">");
     let story = game
         .metadata
         .as_ref()
@@ -390,12 +402,7 @@ fn reading(html: &mut String, app: &App, game: &Game) {
             write!(html, "<p>{}</p>", esc(paragraph.trim())).unwrap();
         }
     }
-    write!(
-        html,
-        "</div></section><section class=\"credits-section\"><h3>{}</h3><dl>",
-        t(app, "detail.credits")
-    )
-    .unwrap();
+    html.push_str("</div></section><section class=\"credits-section\"><dl>");
     if app.detail.editing && !app.detail.editing_configuration {
         for (field, label) in features::METADATA_FIELDS
             .iter()
@@ -446,7 +453,7 @@ fn metadata_actions(html: &mut String, app: &App, game: &Game) {
             &meta.url,
             t(app, "metadata.source"),
             "open_in_new",
-            "quiet",
+            "quiet icon-only",
             false,
         ));
         html.push_str(&button(
@@ -454,7 +461,7 @@ fn metadata_actions(html: &mut String, app: &App, game: &Game) {
             &meta.url,
             t(app, "detail.refresh_metadata"),
             "refresh",
-            "quiet",
+            "quiet icon-only",
             false,
         ));
     }
@@ -463,7 +470,7 @@ fn metadata_actions(html: &mut String, app: &App, game: &Game) {
         "",
         t(app, "detail.change_association"),
         "database",
-        "quiet",
+        "quiet icon-only",
         (app.detail.editing && !app.detail.editing_configuration) || app.busy(),
     ));
 }
@@ -475,9 +482,15 @@ fn configuration(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
         t(app, if app.detail.editing { "common.save" } else { "detail.edit_configuration" }),
         if app.detail.editing { "check" } else { "edit" },
         if app.detail.editing { "primary" } else { "secondary" },
-        app.busy(),
+        app.busy() || !game.available,
     )).unwrap();
     if app.detail.editing {
+        write!(
+            html,
+            "<fieldset class=\"configuration-fields\" {}>",
+            if game.available { "" } else { "disabled" }
+        )
+        .unwrap();
         for (field, label, multiline) in [
             ("draft-executable", "edit.executable", false),
             ("draft-workdir", "edit.workdir", false),
@@ -487,7 +500,7 @@ fn configuration(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
         ] {
             form_field(html, app, field, label, multiline);
         }
-        html.push_str("</section>");
+        html.push_str("</fieldset></section>");
         return;
     }
     html.push_str("<dl class=\"configuration-summary\">");
@@ -647,6 +660,7 @@ fn tools_dialog(html: &mut String, app: &App, game: &Game) {
         ("toggle-ai-summary", "summary.option", edit.ai_summary),
     ] {
         let disabled = app.busy()
+            || !game.available
             || action == "toggle-auto-backup" && !features::can_auto_backup(app, &game.id)
             || action == "toggle-ai-summary"
                 && ((!app.ai_available && !checked) || crate::ai_summary::busy(app, &game.id));
@@ -771,21 +785,24 @@ mod tests {
         .unwrap();
         let mut html = String::new();
         render(&mut html, &app, &game);
-        assert!(html.contains(r#"class="last-played">最近游玩 <span>未游玩</span></span><span class="game-playtime">0h游玩时长</span>"#));
+        assert!(html.contains("<dt>品牌</dt><dd>未设置</dd>"));
+        assert!(html.contains("<dt>发售日期</dt><dd>未设置</dd>"));
+        assert!(html.contains(r#"class="game-playtime"><dt>游玩时间</dt><dd>0 小时</dd></div><div class="last-played"><dt>上次游玩</dt><dd>未游玩</dd>"#));
     }
     #[test]
-    fn detail_places_last_played_and_hours_after_release_date() {
+    fn detail_orders_brand_release_playtime_and_last_played() {
         let app = App::default();
         let game: Game = serde_json::from_value(json!({
             "id": "game", "title": "Title", "folder": "F:/Games/Title",
             "engine": "unknown", "modified": 0,
-            "metadata": {"release_date": "2025-03-01"},
-            "last_played": 1767225600_u64, "playtime_seconds": 4500
+            "metadata": {"brand": "Key", "release_date": "2025-03-01"},
+            "last_played": 946684800_u64, "playtime_seconds": 4500
         }))
         .unwrap();
         let mut html = String::new();
         render(&mut html, &app, &game);
-        assert!(html.contains(r#"<span>2025-03-01</span><span class="last-played">最近游玩 <span>2026-01-01</span></span><span class="game-playtime">1.3h游玩时长</span>"#));
+        assert!(html.find("<dt>品牌</dt>").unwrap() < html.find("<dt>发售日期</dt>").unwrap());
+        assert!(html.contains(r#"<dt>发售日期</dt><dd>2025-03-01</dd></div><div class="game-playtime"><dt>游玩时间</dt><dd>1.3 小时</dd></div><div class="last-played"><dt>上次游玩</dt><dd>2000-01-01</dd>"#));
     }
     #[test]
     fn detail_brand_uses_current_metadata_even_with_a_legacy_summary() {
@@ -815,10 +832,10 @@ mod tests {
                 let mut html = String::new();
                 render(&mut html, &app, &game);
                 let facts = html
-                    .split_once("<div class=\"hero-facts\">")
+                    .split_once("<dl class=\"hero-facts\">")
                     .unwrap()
                     .1
-                    .split_once("</div>")
+                    .split_once("</dl>")
                     .unwrap()
                     .0;
                 assert!(!html.contains("5pb."));

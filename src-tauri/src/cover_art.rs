@@ -93,7 +93,7 @@ fn tick(app: &tauri::AppHandle, engine: &Path) -> Result<(), String> {
         .collect();
     let paused = || {
         state.scan.is_scanning()
-            || runtime::detect_many(&running)
+            || state.tools.observer().detect_many(&running)
                 .values()
                 .any(|status| *status == runtime::Status::Running)
     };

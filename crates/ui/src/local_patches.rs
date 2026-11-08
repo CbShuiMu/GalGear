@@ -175,7 +175,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     let loading = pending(app, &game.id);
     let disabled = app.busy() || loading || !game.available;
     write!(html, r#"<section class="detail-card patch-card" data-render-key="local-patches"><div class="utility-heading"><h3>{}</h3><div class="card-heading-actions">{}<button class="icon-button" data-action="local-patches-refresh" aria-label="{}" title="{}" {}>{}</button></div></div>"#,
-        t(app,"local_patches.title"), button("local-patches-open", "", t(app,"local_patches.open"), "folder", "quiet", disabled), t(app,"local_patches.refresh"), t(app,"local_patches.refresh"), if disabled {"disabled"} else {""}, icon("refresh")).unwrap();
+        t(app,"local_patches.title"), button("local-patches-open", "", t(app,"local_patches.open"), "folder_open", "quiet icon-only", disabled), t(app,"local_patches.refresh"), t(app,"local_patches.refresh"), if disabled {"disabled"} else {""}, icon("refresh")).unwrap();
     let report = app.local_patches.reports.get(&game.id);
     let folder = report
         .map(|report| report.folder.clone())

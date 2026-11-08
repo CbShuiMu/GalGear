@@ -98,11 +98,25 @@ pub async fn clear_data_source(
     .await
     .map_err(|_| Message::new("error.operation"))?
 }
+/// 保存全局默认来源，或指定入口的手动偏好；旧调用省略 context 时仍更新全局默认。
 #[tauri::command]
-pub fn set_data_source(source: String, state: State<'_, AppState>) -> Result<Settings, Message> {
-    data_sources::validate_source(&source)?;
+pub fn set_data_source(
+    source: String,
+    context: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Settings, Message> {
+    if context.as_deref() != Some("patches") || source != "all" {
+        data_sources::validate_source(&source)?;
+    }
     preferences::update(&state, |settings| {
-        settings.metadata_provider = source;
+        if let Some(context) = context {
+            if !matches!(context.as_str(), "metadata" | "tags" | "cover" | "patches") {
+                return Err(Message::new("error.operation"));
+            }
+            settings.source_preferences.insert(context, source);
+        } else {
+            settings.metadata_provider = source;
+        }
         Ok(())
     })
 }

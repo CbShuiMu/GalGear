@@ -1,6 +1,9 @@
 //! Complete save snapshots, verified contents, retention, and reversible restoration.
 mod migration;
-pub use migration::{game_data, migrate};
+mod storage;
+pub use migration::{copy_history, game_data, migrate};
+use storage::directory;
+pub use storage::{register_game, registered_games};
 
 use crate::{config::display_path, runtime::Status};
 use galgear_i18n::Message;
@@ -58,6 +61,10 @@ struct Journal {
 }
 fn journal_path(data: &Path, game: &str) -> Result<PathBuf, Message> {
     Ok(directory(data, game)?.join("restore-journal.json"))
+}
+/// 当前游戏是否有尚未完成的恢复事务。
+pub fn recovery_pending(data: &Path, game: &str) -> Result<bool, Message> {
+    Ok(journal_path(data, game)?.exists())
 }
 fn write_journal(path: &Path, journal: &Journal) -> Result<(), Message> {
     let parent = path
@@ -173,10 +180,6 @@ fn safe_id(id: &str) -> Result<(), Message> {
     } else {
         Err(error("Invalid snapshot identity"))
     }
-}
-fn directory(data: &Path, game: &str) -> Result<PathBuf, Message> {
-    safe_id(game)?;
-    Ok(data.join(game))
 }
 fn relative(path: &str) -> Result<PathBuf, Message> {
     let path = PathBuf::from(path);
@@ -479,7 +482,7 @@ fn create_compared(
     check: impl Fn() -> Status,
     automatic: bool,
 ) -> Result<BackupResult, Message> {
-    let (game_id, title) = game;
+    let (game_id, _title) = game;
     let status = check();
     require_stopped(status)?;
     let entries = inventory(roots)?;
@@ -526,11 +529,7 @@ fn create_compared(
         .checked_add(1)
         .ok_or_else(|| error("Backup sequence exhausted"))?;
     write_sequence(&parent, sequence)?;
-    let id = format!(
-        "{:020}-{:x}",
-        timestamp.as_nanos(),
-        Sha256::digest(temporary.path().to_string_lossy().as_bytes())
-    );
+    let id = storage::snapshot_id(&parent, created)?;
     for file in &entries {
         let relative = relative(&file.path)?;
         let target = temporary.path().join(file.root.to_string()).join(&relative);
@@ -545,8 +544,8 @@ fn create_compared(
         return Err(error("Save changed while copying"));
     }
     let snapshot = Snapshot {
+        name: id.clone(),
         id,
-        name: format!("{title}_{created}_{sequence}"),
         sequence,
         game_id: game_id.into(),
         created,
@@ -579,7 +578,10 @@ pub fn matching_current(
     if entries.is_empty() {
         return Ok(None);
     }
-    Ok(matching_entries(data, history, roots.len(), &entries, Some(roots)).map(|snapshot| snapshot.id.clone()))
+    Ok(
+        matching_entries(data, history, roots.len(), &entries, Some(roots))
+            .map(|snapshot| snapshot.id.clone()),
+    )
 }
 
 fn matching_entries<'a>(
@@ -735,16 +737,8 @@ pub(crate) fn import_verified(
         .max(previous.iter().map(|item| item.sequence).max().unwrap_or(0))
         .checked_add(1)
         .ok_or_else(|| error("Backup sequence exhausted"))?;
-    if parent.join(&snapshot.id).exists() {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(error)?;
-        snapshot.id = format!(
-            "{:020}-{:x}",
-            timestamp.as_nanos(),
-            Sha256::digest(staged.path().to_string_lossy().as_bytes())
-        );
-    }
+    snapshot.id = storage::snapshot_id(&parent, snapshot.created)?;
+    snapshot.name.clone_from(&snapshot.id);
     game.clone_into(&mut snapshot.game_id);
     snapshot.locked = false;
     // Imported root labels retain the root count, never another PC's absolute paths.
@@ -1196,7 +1190,11 @@ mod tests {
         })
         .unwrap();
         assert_eq!(second.sequence, 2);
-        assert_eq!(second.name, format!("游戏_{}_2", second.created));
+        assert_eq!(
+            second.name,
+            storage::timestamp_name(second.created).unwrap()
+        );
+        assert_eq!(second.name.len(), 16);
     }
     #[test]
     fn legacy_history_migrates_without_renaming_storage_or_resetting_the_counter() {

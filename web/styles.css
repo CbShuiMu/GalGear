@@ -95,3 +95,9 @@
 .toast.save-ai-toast{position:fixed;top:auto;left:auto;right:24px;bottom:24px;transform:none;z-index:71}.app-shell:has(.download-notice) .toast.save-ai-toast{bottom:210px}
 
 .update-overlay{z-index:200}.update-dialog{max-width:520px}.update-dialog p{line-height:1.8;margin-bottom:18px}.toast.save-ai-toast{z-index:210}
+
+.dialog-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:10px;padding:0 24px 24px;flex-shrink:0}
+.editor-dialog .editor-body>.detail-actions:last-child{justify-content:flex-end;margin-bottom:0}
+.editor-dialog .editor-body>.button:last-child{display:flex;margin-left:auto;margin-right:0}
+
+.confirmation>.detail-actions{justify-content:flex-end}

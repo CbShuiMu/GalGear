@@ -2,7 +2,7 @@
 use crate::{patch_commands::patch_data, state, state::AppState, state::find_game};
 use galgear_core::{
     patches::{self, folders},
-    runtime, saves, snapshots,
+    saves, snapshots,
 };
 use galgear_i18n::Message;
 use std::path::Path;
@@ -34,15 +34,16 @@ pub async fn apply_game_patch(
         return Err(Message::new("error.game_folder"));
     }
     let data = patch_data(&state);
+    let observer = state.tools.observer();
     let edit = state::snapshot(&state)?.game_edits.get(&id).cloned();
     tauri::async_runtime::spawn_blocking(move || {
-        snapshots::require_stopped(runtime::detect(game.executable.as_deref()))?;
+        snapshots::require_stopped(observer.detect(game.executable.as_deref()))?;
         let folder = Path::new(&game.folder);
         let report = saves::discover(&game, edit.as_ref());
         let confirmed: Vec<_> = report.locations.iter().filter(|location| location.exists && location.confidence == "confirmed").collect();
         let save_path = if confirmed.len() == 1 { Some(Path::new(&confirmed[0].path)) } else { None };
         let plan = folders::preview_to(folder, &name, id, save_path)?;
-        snapshots::require_stopped(runtime::detect(game.executable.as_deref()))?;
+        snapshots::require_stopped(observer.detect(game.executable.as_deref()))?;
         patches::install(plan, &data)?;
         folders::list(folder)
     })

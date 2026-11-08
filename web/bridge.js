@@ -252,8 +252,9 @@ function renderFrame(html) {
     const setupScroll = setupTable ? { top: setupTable.scrollTop, left: setupTable.scrollLeft } : null;
     const treeScroll = document.getElementById('collection-tree')?.scrollTop || 0;
     const treeLeft = document.getElementById('collection-tree')?.scrollLeft || 0;
+    const hadTagInput = !!document.getElementById("detail-tag-input");
     const closingTagRemoval = !!document.querySelector('.tag-remove-dialog') && !html.includes('tag-remove-dialog');
-    const hasEditor = html.includes('class="editor-overlay"');
+    const hasEditor = /class="editor-overlay(?: |")/.test(html);
     if (hasEditor && !previousEditor) editorReturnFocus = active ? {id:active.id,action:active.dataset.action,value:active.dataset.value} : null;
     const editorScroll = document.querySelector('.editor-body')?.scrollTop || 0;
     const hasLibraryDialog = html.includes('class="library-overlay"');
@@ -342,6 +343,9 @@ function renderFrame(html) {
     });
     const editorBody = document.querySelector('.editor-body');
     if (editorBody) editorBody.scrollTop = editorScroll;
+    const tagInput = document.getElementById("detail-tag-input");
+    if (tagInput && !hadTagInput) { tagInput.focus({preventScroll:true}); tagInput.select(); }
+    if (!tagInput && hadTagInput) document.querySelector('[data-action="detail-tag-add"]')?.focus({preventScroll:true});
     if (hasEditor && !previousEditor) document.querySelector('.editor-body input,.editor-body textarea,.editor-dialog button')?.focus({preventScroll:true});
     else if (!hasEditor && previousEditor && editorReturnFocus) {
       let target = document.getElementById(editorReturnFocus.id) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===editorReturnFocus.action && node.dataset.value===editorReturnFocus.value);
@@ -422,6 +426,9 @@ window.GalGearBridge = {
     const date = new Date(seconds * 1000);
     if (!Number.isFinite(date.getTime())) return '';
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  },
+  local_today() {
+    return this.local_date(Date.now() / 1000);
   },
   schedule_toast_expiry(token, milliseconds) {
     clearTimeout(toastTimer);
@@ -562,6 +569,7 @@ document.addEventListener('focusout', event => {
   if (menu && !menu.contains(event.relatedTarget)) setAddMenuExpanded(menu, false);
 });
 document.addEventListener('input', event => {
+  if (event.target.id === 'detail-tag-input') event.target.closest('.tag-input-wrap').dataset.value = event.target.value;
   if (wasmReady && !event.isComposing && event.target.dataset.input) ui.input_changed(event.target.dataset.input, event.target.value);
 });
 document.addEventListener('compositionend', event => {
@@ -575,6 +583,12 @@ document.addEventListener('click', event => {
   if (event.target.closest('[data-action="shortcut-reset"]')) document.getElementById('shortcut-capture')?.focus({preventScroll:true});
 });
 document.addEventListener('keydown', event => {
+  if (event.target.id === 'detail-tag-input' && !event.isComposing && event.keyCode !== 229 && ['Enter', 'Escape'].includes(event.key)) {
+    event.preventDefault();
+    ui.dispatch(event.key === 'Enter' ? 'detail-tag-save' : 'detail-tag-cancel', '');
+    return;
+  }
+
   const recorder = document.querySelector('.shortcut-dialog');
   if (wasmReady && recorder) {
     if (event.key === 'Escape' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
@@ -630,7 +644,7 @@ document.addEventListener('keydown', event => {
   const choice = event.target.closest('.choice-popup,.choice-trigger');
   if (choice && ui.choice_key(choice.dataset.choiceAnchor || choice.id, event.key)) { event.preventDefault(); return; }
   if (event.key === 'Escape') {
-    const action = document.querySelector('.tag-remove-dialog') ? 'detail-tag-remove-cancel' : document.querySelector('.snapshot-delete-dialog') ? 'cancel-action' : document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.archive-dialog') ? 'close-archive' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
+    const action = document.querySelector('.update-dialog') ? 'update-cancel' : document.querySelector('.tag-remove-dialog') ? 'detail-tag-remove-cancel' : document.querySelector('.snapshot-delete-dialog') ? 'cancel-action' : document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.archive-dialog') ? 'close-archive' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
     if (action === 'close-detail') closeDetail();
     else ui.dispatch(action, '');
     event.preventDefault();
@@ -880,6 +894,7 @@ try {
   await init(); wasmReady = true;
   window.GalGearDiagnostics?.ready();
   if (window.__TAURI__?.event) {
+    await window.__TAURI__.event.listen('library-devices-changed', () => ui.library_devices_changed());
     await window.__TAURI__.event.listen('scan-progress', event => ui.scan_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('game-enriched', event => ui.game_enriched(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('cover-enhanced', async event => {

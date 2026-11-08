@@ -12,6 +12,7 @@ pub(crate) struct AppState {
     pub(crate) catalog: Mutex<ScanResult>,
     pub(crate) playtime: Mutex<playtime::Records>,
     pub(crate) scan: library::ScanState,
+    pub(crate) aliases: crate::metadata::AliasState,
     pub(crate) source_oauth: crate::data_sources::OAuthState,
     pub(crate) account: accounts::AccountState,
     pub(crate) downloads: downloads::DownloadState,
@@ -41,16 +42,12 @@ impl AppState {
             if !cached.games.iter().any(|g|g.id==game.id) { cached.games.push(game.clone()); }
             play_records.entry(game.id.clone()).or_insert_with(||playtime::Record::from_game(game));
         }
-        let forgotten = catalog::purge_missing(&mut settings, &mut cached);
+        catalog::refresh_availability(&settings, &mut cached);
         let pending_changed = galgear_core::game_setup::mark_new(&mut settings, &cached.games, &Default::default());
         cached.games.retain(|game| !catalog::is_excluded(game, &settings));
-        if !forgotten.is_empty() || pending_changed {
+        if pending_changed {
             store.save(&settings)?;
             catalog::save(&store.path.with_file_name("catalog.json"), &cached)?;
-        }
-        if !forgotten.is_empty() {
-            play_records.retain(|id, _| !forgotten.contains(id));
-            playtime::save(&store.path.with_file_name("playtime.json"), &play_records)?;
         }
         let mut summary_disabled = false;
         for (id, edit) in &mut settings.game_edits {
@@ -64,6 +61,7 @@ impl AppState {
                 .or_else(|| cached.games.iter().find(|game| &game.id == id))
                 .or_else(|| settings.excluded_entries.get(id));
             if let Some(game) = game
+                && std::path::Path::new(&game.folder).is_dir()
                 && !PathBuf::from(&game.folder)
                     .join(galgear_core::ai_summary::FOLDER)
                     .is_dir()
@@ -103,6 +101,7 @@ impl AppState {
             catalog: Mutex::new(cached),
             playtime: Mutex::new(play_records),
             scan: library::ScanState::default(),
+            aliases: Default::default(),
             account,
             source_oauth: Default::default(),
             downloads: downloads::DownloadState::default(),
@@ -115,23 +114,6 @@ impl AppState {
             updates: crate::updater::Updates::default(),
         })
     }
-}
-
-pub(crate) fn purge_missing(state: &AppState) -> Result<(), Message> {
-    let mut settings = state.settings.lock().map_err(|_| Message::new("error.config_state"))?;
-    let mut records = state.playtime.lock().map_err(|_| Message::new("error.catalog_state"))?;
-    let mut list = state.catalog.lock().map_err(|_| Message::new("error.catalog_state"))?;
-    let mut next = settings.clone();
-    let mut next_list = list.clone();
-    let forgotten = catalog::purge_missing(&mut next, &mut next_list);
-    if forgotten.is_empty() { return Ok(()); }
-    state.store.save(&next)?;
-    *settings = next;
-    *list = next_list;
-    state.scan.forget(&forgotten);
-    records.retain(|id, _| !forgotten.contains(id));
-    playtime::save(&state.store.path.with_file_name("playtime.json"), &records)?;
-    catalog::save(&state.store.path.with_file_name("catalog.json"), &list)
 }
 
 pub(crate) fn snapshot(state: &AppState) -> Result<Settings, Message> {
@@ -164,6 +146,7 @@ pub(crate) fn persist_game(state: &AppState, mut game: Game) -> Result<Game, Mes
         .lock()
         .map_err(|_| Message::new("error.catalog_state"))?;
     if let Some(entry) = list.games.iter_mut().find(|g| g.id == game.id) {
+        game.aliases.clone_from(&entry.aliases);
         game.playtime_seconds = entry.playtime_seconds;
         game.last_played = entry.last_played;
         *entry = game.clone();
@@ -211,35 +194,29 @@ mod tests {
     }
 
     #[test]
-    fn deleted_visible_and_hidden_directories_are_forgotten_on_cleanup_and_restart() {
-        for on_startup in [false, true] {
-            let directory = tempfile::tempdir().unwrap();
-            let data = directory.path().join("config");
-            let visible = summary_game(directory.path(), "visible");
-            let hidden = summary_game(directory.path(), "hidden");
-            let mut settings = Settings::default();
-            settings.game_edits.entry(visible.id.clone()).or_default().setup_confirmed = true;
-            settings.game_edits.entry(hidden.id.clone()).or_default().setup_confirmed = true;
-            settings.excluded_games.push(hidden.id.clone());
-            settings.excluded_entries.insert(hidden.id.clone(), hidden.clone());
-            ConfigStore::new(data.join("settings.json")).save(&settings).unwrap();
-            catalog::save(&data.join("catalog.json"), &ScanResult { games: vec![visible.clone()], ..Default::default() }).unwrap();
-            let records = [visible.id.clone(), hidden.id.clone()].into_iter()
-                .map(|id| (id, galgear_core::playtime::Record { playtime_seconds: 60, last_played: Some(1) })).collect();
-            galgear_core::playtime::save(&data.join("playtime.json"), &records).unwrap();
-            let running = (!on_startup).then(|| AppState::load(data.clone()).unwrap());
-            fs::remove_dir_all(&visible.folder).unwrap();
-            fs::remove_dir_all(&hidden.folder).unwrap();
-            let state = running.unwrap_or_else(|| AppState::load(data.clone()).unwrap());
-            super::purge_missing(&state).unwrap();
-            assert!(state.catalog.lock().unwrap().games.is_empty());
-            assert!(state.settings.lock().unwrap().excluded_games.is_empty());
-            assert!(state.settings.lock().unwrap().excluded_entries.is_empty());
-            assert!(state.settings.lock().unwrap().game_edits.is_empty());
-            assert!(state.playtime.lock().unwrap().is_empty());
-            let restarted = AppState::load(data).unwrap();
-            assert!(restarted.catalog.lock().unwrap().games.is_empty());
-            assert!(restarted.settings.lock().unwrap().excluded_entries.is_empty());
+    fn offline_visible_and_hidden_directories_keep_records_across_restart() {
+        let directory = tempfile::tempdir().unwrap();
+        let data = directory.path().join("config");
+        let visible = summary_game(directory.path(), "visible");
+        let hidden = summary_game(directory.path(), "hidden");
+        let mut settings = Settings::default();
+        for game in [&visible, &hidden] { settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true; }
+        settings.excluded_games.push(hidden.id.clone());
+        settings.excluded_entries.insert(hidden.id.clone(), hidden.clone());
+        ConfigStore::new(data.join("settings.json")).save(&settings).unwrap();
+        catalog::save(&data.join("catalog.json"), &ScanResult { games: vec![visible.clone()], ..Default::default() }).unwrap();
+        let records = [visible.id.clone(), hidden.id.clone()].into_iter()
+            .map(|id| (id, galgear_core::playtime::Record { playtime_seconds: 60, last_played: Some(1) })).collect();
+        galgear_core::playtime::save(&data.join("playtime.json"), &records).unwrap();
+        fs::remove_dir_all(&visible.folder).unwrap();
+        fs::remove_dir_all(&hidden.folder).unwrap();
+        for _ in 0..2 {
+            let state = AppState::load(data.clone()).unwrap();
+            assert_eq!(state.catalog.lock().unwrap().games[0].id, visible.id);
+            assert!(!state.catalog.lock().unwrap().games[0].available);
+            assert_eq!(state.settings.lock().unwrap().excluded_entries.len(), 1);
+            assert_eq!(state.settings.lock().unwrap().game_edits.len(), 2);
+            assert_eq!(state.playtime.lock().unwrap()[&visible.id].playtime_seconds, 60);
         }
     }
 

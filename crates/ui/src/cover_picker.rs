@@ -59,7 +59,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "cover-picker" => {
             app.detail.editor = Some(detail::Editor::Cover);
             app.cover_picker = State {
-                source: crate::models::default_source(),
+                source: preferences::preferred_source(app, "cover").into(),
                 query: app
                     .detail
                     .selected
@@ -72,6 +72,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             load(app);
         }
         "cover-provider" if preferences::source_available(app, value) => {
+            preferences::remember_source(app, "cover", value);
             if app.cover_picker.source != value {
                 app.cover_picker.source = value.into();
                 search(app);
@@ -238,7 +239,10 @@ mod tests {
         assert_eq!(payload["query"], "Another title");
         assert_eq!(payload["source"], "nextmoe");
         dispatch(&mut app, "cover-provider", "bangumi");
-        let switched = crate::bridge::take_requests();
+        let switched: Vec<_> = crate::bridge::take_requests()
+            .into_iter()
+            .filter(|request| request.1 == "source_covers")
+            .collect();
         let payload: serde_json::Value = serde_json::from_str(&switched[0].2).unwrap();
         assert_eq!(payload["query"], "Another title");
         assert_eq!(payload["source"], "bangumi");

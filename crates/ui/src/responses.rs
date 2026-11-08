@@ -53,6 +53,9 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         }
         if matches!(kind, Pending::Scan | Pending::BackgroundScan) {
             app.library.scanning = false;
+            if std::mem::take(&mut app.library.rescan_pending) {
+                issue(&mut app, Pending::BackgroundScan, "scan_library", json!({}));
+            }
         }
         if let Pending::Ai(request) = &kind {
             ai::resolve(&mut app, request, id, success, payload);
@@ -364,12 +367,14 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         {
                             issue(&mut app, Pending::GameIcons, "load_game_icons", json!({}));
                         }
-                        let count = app.catalog.games.len();
-                        show_toast(
-                            &mut app,
-                            Message::new("notice.scan_complete").arg("count", count),
-                            false,
-                        );
+                        if matches!(kind, Pending::Scan) {
+                            let count = app.catalog.games.len();
+                            show_toast(
+                                &mut app,
+                                Message::new("notice.scan_complete").arg("count", count),
+                                false,
+                            );
+                        }
                         if !app.requests.values().any(|p| matches!(p, Pending::Enrich)) {
                             issue(&mut app, Pending::Enrich, "enrich_library", json!({}));
                         }
@@ -486,6 +491,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             detail_form::cancel(&mut app);
                         }
                         if matches!(kind, Pending::Edit) {
+                            app.detail.tag_draft = None;
                             app.detail.editor = None;
                         }
                         issue(&mut app, Pending::Preferences, "get_preferences", json!({}));

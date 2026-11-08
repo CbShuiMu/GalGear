@@ -171,6 +171,8 @@ fn visit(
             "{:x}",
             Sha256::digest(display_path(&identity).to_lowercase().as_bytes())
         );
+        // 手动导入、重新定位后的条目沿用已有身份，热插拔扫描不会制造副本。
+        let id = cache.get(&display_path(dir).to_lowercase()).map(|game| game.id.clone()).unwrap_or(id);
         let title = clean_title(&file_name(folder));
         let mut stamp = Sha256::new();
         let override_path = settings.cover_overrides.get(&id).map(PathBuf::from);
@@ -236,6 +238,7 @@ fn visit(
                 last_played: None,
                 cg_unlock_status: "unsupported".into(),
                 auto_unlock: Default::default(),
+                aliases: Vec::new(),
                 tags: Vec::new(),
                 available: true,
                 metadata: None,

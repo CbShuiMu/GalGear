@@ -49,6 +49,8 @@ pub struct Settings {
     pub language: Language,
     pub game_edits: BTreeMap<String, GameEdit>,
     pub excluded_games: Vec<String>,
+    /// 永久移除后仅保留扫描排除路径，显式重新导入时清除。
+    pub excluded_paths: Vec<String>,
     pub excluded_entries: BTreeMap<String, Game>,
     pub collections: Vec<collections::Collection>,
     pub next_collection_id: u64,
@@ -72,8 +74,10 @@ pub struct Settings {
     pub dialog_directories: BTreeMap<String, String>,
     pub cover_scale: u32,
     pub font_size: u32,
-    /// Legacy shared directory, retained only to migrate existing snapshots.
+    /// 全局存档备份目录，空值使用应用数据目录下的 save-backups。
     pub backup_folder: String,
+    /// 变更备份目录后继续迁移旧根目录，包括暂时离线的位置。
+    pub backup_legacy_folders: Vec<String>,
     pub backup_retention: usize,
     pub cloud: cloud::CloudSettings,
     pub locale_emulator: String,
@@ -85,6 +89,8 @@ pub struct Settings {
     pub show_patches: bool,
     pub show_collections: bool,
     pub metadata_provider: String,
+    /// 各入口手动选择的数据源；没有覆盖的入口跟随默认数据源。
+    pub source_preferences: BTreeMap<String, String>,
     pub ai_models: BTreeMap<String, String>,
     pub ai_provider: String,
 }
@@ -101,6 +107,7 @@ impl Default for Settings {
             language: Language::default(),
             game_edits: BTreeMap::new(),
             excluded_games: Vec::new(),
+            excluded_paths: Vec::new(),
             excluded_entries: BTreeMap::new(),
             collections: Vec::new(),
             next_collection_id: 0,
@@ -121,6 +128,7 @@ impl Default for Settings {
             cover_scale: 100,
             font_size: 16,
             backup_folder: String::new(),
+            backup_legacy_folders: Vec::new(),
             backup_retention: 10,
             cloud: cloud::CloudSettings::default(),
             locale_emulator: String::new(),
@@ -132,6 +140,7 @@ impl Default for Settings {
             show_patches: true,
             show_collections: true,
             metadata_provider: "nextmoe".into(),
+            source_preferences: BTreeMap::new(),
             ai_models: BTreeMap::new(),
             ai_provider: "deepseek".into(),
         }
@@ -217,6 +226,9 @@ pub enum PlayStatus {
 pub struct Game {
     pub id: String,
     pub title: String,
+    /// 来自 NextMoe 的多语言名称与别名；旧缓存默认为空。
+    #[serde(default)]
+    pub aliases: Vec<String>,
     pub folder: String,
     pub library: String,
     pub executable: Option<String>,

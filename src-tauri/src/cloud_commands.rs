@@ -7,7 +7,7 @@ use galgear_core::{
     Game,
     cloud::{CloudClient, CloudSettings, CloudSnapshot, validate_password},
     credentials::{self, FanCredentials},
-    runtime, snapshots,
+    snapshots,
 };
 use galgear_i18n::Message;
 use serde::Serialize;
@@ -161,6 +161,7 @@ pub(crate) async fn cloud_upload(
     let settings = snapshot(&state)?;
     let password = password_for(&state, &settings.cloud, String::new())?;
     let config_path = state.store.path.clone();
+    let observer = state.tools.observer();
     // This also rejects unconfirmed, overlapping or unsafe save directories.
     let roots = save_commands::confirmed_roots(&state, &game, &settings)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -170,7 +171,7 @@ pub(crate) async fn cloud_upload(
             &data,
             &id,
             &roots,
-            runtime::detect(game.executable.as_deref()),
+            observer.detect(game.executable.as_deref()),
         )?;
         let backup = snapshots::create_named_checked(
             &data,
@@ -178,7 +179,7 @@ pub(crate) async fn cloud_upload(
             &roots,
             "",
             settings.backup_retention,
-            || runtime::detect(game.executable.as_deref()),
+            || observer.detect(game.executable.as_deref()),
         )?;
         let key = cloud_key(&game);
         // Do not turn a committed upload into an apparent failure if a follow-up

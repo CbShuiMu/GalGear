@@ -22,6 +22,20 @@ pub mod moyu;
 mod nextmoe;
 pub mod oauth;
 
+/// 查询明确匹配的 NextMoe 游戏别名。已有 NextMoe 关联优先使用其 ID；
+/// 无关联时仅接受唯一且名称相同的结果，避免误关联续作。未匹配返回空列表。
+pub fn game_aliases(
+    query: &str,
+    associated_url: Option<&str>,
+    credentials: &Credentials,
+) -> Result<Vec<String>, Message> {
+    let id = associated_url
+        .and_then(|url| source_for_url(url).ok())
+        .filter(|(source, _)| *source == "nextmoe")
+        .map(|(_, id)| id);
+    nextmoe::aliases(&providers::client()?, query, id.as_deref(), credentials)
+}
+
 pub const SOURCES: [&str; 5] = ["2dfan", "vndb", "bangumi", "ymgal", "nextmoe"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

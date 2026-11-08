@@ -407,7 +407,8 @@ pub fn choice_key(field: &str, key: &str) -> bool {
 pub fn input_changed(field: &str, value: &str) {
     APP.with(|state| {
         let mut app = state.borrow_mut();
-        if ai::input(&mut app, field, value)
+        if crate::detail_tags::input(&mut app, field, value)
+            || ai::input(&mut app, field, value)
             || cloud::input(&mut app, field, value)
             || cover_picker::input(&mut app, field, value)
             || game_setup::input(&mut app, field, value)
@@ -561,6 +562,23 @@ pub fn fan_status_updated(payload: &str) {
 }
 
 #[wasm_bindgen]
+pub fn library_devices_changed() {
+    APP.with(|state| {
+        let mut app = state.borrow_mut();
+        if app.library.scanning {
+            app.library.rescan_pending = true;
+        } else {
+            crate::requests::issue(
+                &mut app,
+                crate::requests::Pending::BackgroundScan,
+                "scan_library",
+                serde_json::json!({}),
+            );
+        }
+    });
+}
+
+#[wasm_bindgen]
 pub fn scan_progress(payload: &str) {
     APP.with(|state| {
         let mut app = state.borrow_mut();
@@ -601,6 +619,11 @@ pub fn game_enriched(payload: &str) {
                 }
             }
             if let Some(id) = data["id"].as_str() {
+                if let Ok(aliases) = serde_json::from_value::<Vec<String>>(data["aliases"].clone())
+                    && let Some(game) = app.catalog.games.iter_mut().find(|game| game.id == id)
+                {
+                    game.aliases = aliases;
+                }
                 if let Ok(candidates) =
                     serde_json::from_value::<Vec<Resource>>(data["candidates"].clone())
                 {

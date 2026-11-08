@@ -88,14 +88,6 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                 .unwrap();
             }
             html.push_str("</div>");
-            html.push_str(&button(
-                "picker-games-save",
-                "",
-                t(app, "common.add"),
-                "plus",
-                "primary",
-                app.busy() || app.library.picker_games.is_empty(),
-            ));
         }
         Dialog::DeleteFolders { ids } => {
             write!(html, "<p>{}</p>", t(app, "folders.batch_delete_help")).unwrap();
@@ -109,14 +101,6 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                 .unwrap();
             }
             html.push_str("</ul>");
-            html.push_str(&button(
-                "folders-delete-confirm",
-                "",
-                t(app, "common.confirm"),
-                "trash",
-                "primary danger",
-                app.busy(),
-            ));
         }
         Dialog::Tags { selected, status } => {
             write!(html, r#"<fieldset class="tag-status-filter"><legend>{}</legend><div>"#, t(app, "tags.game_status")).unwrap();
@@ -195,14 +179,6 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                 app.busy(),
             );
             html.push_str("</div>");
-            html.push_str(&button(
-                "folder-save",
-                "",
-                t(app, "common.save"),
-                "check",
-                "primary",
-                app.busy(),
-            ));
         }
         Dialog::Picker { ids } => {
             let _ = write!(
@@ -255,14 +231,6 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                 }
             }
             html.push_str("</ul>");
-            html.push_str(&button(
-                "folder-delete-confirm",
-                "",
-                t(app, "common.confirm"),
-                "close",
-                "primary danger",
-                app.busy(),
-            ));
         }
         Dialog::Exclude { ids } => {
             let _ = write!(
@@ -274,14 +242,6 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                     &[("count", &ids.len().to_string())]
                 )
             );
-            html.push_str(&button(
-                "batch-exclude-confirm",
-                "",
-                t(app, "common.confirm"),
-                "close",
-                "primary danger",
-                app.busy(),
-            ));
         }
         Dialog::Warnings => {
             html.push_str("<ul>");
@@ -345,17 +305,47 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
         }
     }
     html.push_str("</div>");
-    if matches!(dialog, Dialog::Tags { .. }) {
-        html.push_str("<footer class=\"library-dialog-footer\">");
+    let commit = match dialog {
+        Dialog::AddGames => Some((
+            "picker-games-save",
+            "common.add",
+            app.busy() || app.library.picker_games.is_empty(),
+        )),
+        Dialog::DeleteFolders { .. } => {
+            Some(("folders-delete-confirm", "common.confirm", app.busy()))
+        }
+        Dialog::Edit { .. } => Some(("folder-save", "common.save", app.busy())),
+        Dialog::Delete { .. } => Some(("folder-delete-confirm", "common.confirm", app.busy())),
+        Dialog::Exclude { .. } => Some(("batch-exclude-confirm", "context.delete", app.busy())),
+        Dialog::Tags { .. } => Some(("tag-filter-apply", "common.confirm", false)),
+        _ => None,
+    };
+    html.push_str("<footer class=\"library-dialog-footer dialog-actions\">");
+    html.push_str(&button(
+        "library-close",
+        "",
+        t(
+            app,
+            if commit.is_some() {
+                "common.cancel"
+            } else {
+                "common.close"
+            },
+        ),
+        "close",
+        "quiet",
+        false,
+    ));
+    if let Some((action, label, disabled)) = commit {
         html.push_str(&button(
-            "tag-filter-apply",
+            action,
             "",
-            t(app, "common.confirm"),
+            t(app, label),
             "check",
             "primary",
-            false,
+            disabled,
         ));
-        html.push_str("</footer>");
     }
+    html.push_str("</footer>");
     html.push_str("</section></div>");
 }

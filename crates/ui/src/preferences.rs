@@ -8,8 +8,27 @@ use galgear_i18n::Language;
 use serde::Deserialize;
 use std::fmt::Write;
 
+pub(crate) fn preferred_source<'a>(app: &'a App, context: &str) -> &'a str {
+    let source = app
+        .settings
+        .source_preferences
+        .get(context)
+        .map(String::as_str)
+        .unwrap_or(&app.settings.metadata_provider);
+    available_source(app, source)
+}
+
+pub(crate) fn remember_source(app: &mut App, context: &str, source: &str) {
+    crate::requests::issue(
+        app,
+        crate::requests::Pending::Preferences,
+        "set_data_source",
+        serde_json::json!({"source":source,"context":context}),
+    );
+}
+
 pub(crate) const SOURCES: [(&str, &str); 5] = [
-    ("nextmoe", "未萌NextMoe"),
+    ("nextmoe", "鲲Gal"),
     ("vndb", "VNDB"),
     ("bangumi", "Bangumi"),
     ("ymgal", "月幕 Galgame"),
@@ -185,9 +204,8 @@ pub(crate) fn source_picker(
 fn account(html: &mut String, app: &App) {
     write!(
         html,
-        "<section class=\"settings-card\"><h2>{}</h2><p class=\"field-help\">{}</p>",
-        t(app, "sources.default"),
-        t(app, "sources.default_help")
+        "<section class=\"settings-card\"><h2>{}</h2>",
+        t(app, "sources.default")
     )
     .unwrap();
     options_start(html, "source-default", t(app, "sources.default"));
@@ -202,7 +220,7 @@ fn account(html: &mut String, app: &App) {
         );
     }
     html.push_str("</div></section>");
-    source_card(html, app, "nextmoe", "未萌NextMoe");
+    source_card(html, app, "nextmoe", "鲲Gal");
     fan_account_card(html, app);
     for (source, name) in SOURCES.into_iter().filter(|(source, _)| !matches!(*source, "nextmoe" | "2dfan")) {
         source_card(html, app, source, name);
@@ -580,6 +598,17 @@ fn system(html: &mut String, app: &App) {
     html.push_str("</section>");
 }
 fn paths(html: &mut String, app: &App) {
+    let backup_folder = if app.settings.backup_folder.is_empty() {
+        app.config_path
+            .rsplit_once(['/', '\\'])
+            .map(|(parent, _)| format!("{parent}/save-backups"))
+            .unwrap_or_else(|| "save-backups".into())
+    } else {
+        app.settings.backup_folder.clone()
+    };
+    write!(html, r#"<section class="settings-card"><div class="panel-heading"><h2>{}</h2><div class="settings-card-actions">{}{}</div></div><p class="directory-value">{}</p><p>{}</p></section>"#,
+        t(app,"backup.folder"),button("open-backups","",t(app,"download.open_folder"),"folder_open","quiet",app.busy()),button("backup-folder","",t(app,"download.change_folder"),"edit","quiet",app.busy()),esc(&backup_folder),t(app,"backup.folder_help")).unwrap();
+
     write!(html,r#"<section class="settings-card"><div class="panel-heading"><h2>{}</h2><div class="settings-card-actions">{}{}</div></div><p class="directory-value">{}</p></section><section class="settings-card"><div class="panel-heading"><h2>{}</h2>{}</div><div class="edit-grid">"#,t(app,"download.folder"),button("open-downloads","",t(app,"download.open_folder"),"folder_open","quiet",app.busy()),button("download-folder","",t(app,"download.change_folder"),"edit","quiet",app.busy()),esc(&downloads::folder(&app.config_path, &app.settings)),t(app,"tools.title"),button("configure-tools","",t(app,"common.save"),"save","primary",app.busy())).unwrap();
     for (key, label, fallback) in [
         (

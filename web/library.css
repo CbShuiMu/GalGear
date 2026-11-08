@@ -129,3 +129,11 @@
 @media(max-width:760px) { .setup-help { flex-wrap:wrap; } .setup-actions { margin-left:auto; } }
 
 .library-settings-actions{display:flex;gap:10px;flex-wrap:wrap}.import-dialog{width:min(760px,100%)}.import-sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}.import-sources .button{width:100%}.import-sources small{display:block;margin-top:7px;color:var(--muted);font-size:.8em;line-height:1.6;overflow-wrap:anywhere}.import-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 16px;padding:12px 0;border-top:1px solid var(--line)}.import-row strong,.import-row small{grid-column:1;overflow-wrap:anywhere}.import-row small{color:var(--muted)}.import-row>span{grid-column:2;grid-row:1/3;align-self:center;max-width:220px;font-size:.85em;overflow-wrap:anywhere}.import-ready{color:var(--pink-dark)}.import-dialog .library-dialog-footer{gap:10px}.import-summary{font-weight:600}@media(max-width:700px){.import-sources{grid-template-columns:1fr}.import-row{grid-template-columns:1fr}.import-row>span{grid-column:1;grid-row:auto;max-width:none}}
+
+.game-finished-badge{position:absolute;top:10px;right:10px;z-index:2;color:#e7b52e;pointer-events:none;filter:drop-shadow(0 1px 2px #0008)}
+.game-finished-badge .icon{width:20px;height:20px;fill:currentColor;stroke:none}
+.game-card:is(:hover,:focus-within) .game-finished-badge{visibility:hidden}
+
+/* 路径状态始终显示，独立于悬停操作区域。 */
+.game-card .poster > .path-warning,.home-game .poster > .path-warning{position:absolute;top:10px;right:10px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:transparent;color:#d93040}.game-card .poster > .path-warning .icon,.home-game .poster > .path-warning .icon{width:24px;height:24px}
+.game-card .poster:has(>.path-warning)>:is(.game-finished-badge,.selection-check){right:46px}

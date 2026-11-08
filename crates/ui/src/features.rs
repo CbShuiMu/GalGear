@@ -70,13 +70,24 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     }
     if crate::tool_preferences::dispatch(app, action, value) { return true; }
     match action {
+        "backup-folder" => issue(app, Pending::Preferences, "choose_backup_folder", json!({})),
+        "open-backups" => issue(app, Pending::Open, "open_backup_folder", json!({})),
         "ai-find-save" => {
             if !save_busy(app) && app.catalog.games.iter().any(|game| game.id == value) {
                 show_toast(app, Message::new("save.ai_searching"), false);
                 issue(app, Pending::FindSave(value.into()), "find_save_with_ai", json!({"id":value}));
             }
         }
-        "game-settings" => app.detail.editor = Some(detail::Editor::Tools),
+        "game-settings" => {
+            if app.detail.selected.as_ref().is_some_and(|id| {
+                app.catalog
+                    .games
+                    .iter()
+                    .any(|game| &game.id == id && game.available)
+            }) {
+                app.detail.editor = Some(detail::Editor::Tools);
+            }
+        }
         "toggle-locale" => {
             if let Some(id) = app.detail.selected.clone() {
                 let locale = app
@@ -111,6 +122,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "metadata-provider" if preferences::source_available(app, value) =>
         {
             app.detail.metadata_source = value.into();
+            let context = if matches!(app.detail.editor, Some(detail::Editor::TagSource)) {
+                "tags"
+            } else {
+                "metadata"
+            };
+            preferences::remember_source(app, context, value);
             if let Some(id) = &app.detail.selected {
                 app.detail.candidates.remove(id);
             }
@@ -315,7 +332,15 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             } else {
                 detail::Editor::Association
             });
-            app.detail.metadata_source = crate::models::default_source();
+            app.detail.metadata_source = preferences::preferred_source(
+                app,
+                if action == "tags-association" {
+                    "tags"
+                } else {
+                    "metadata"
+                },
+            )
+            .into();
             if let Some(game) = app
                 .detail
                 .selected
@@ -566,7 +591,7 @@ pub(crate) fn confirmation(html: &mut String, app: &App) {
         } else {
             t(app, "backup.delete_confirm").into()
         };
-        write!(html,r#"<section class="confirmation" role="alert"><p>{}</p><div class="detail-actions">{}{}</div></section>"#,esc(&message),button("confirm-action","",t(app,"common.confirm"),"check","primary",app.busy()),button("cancel-action","",t(app,"common.cancel"),"close","quiet",false)).unwrap();
+        write!(html,r#"<section class="confirmation" role="alert"><p>{}</p><div class="detail-actions">{}{}</div></section>"#,esc(&message),button("cancel-action","",t(app,"common.cancel"),"close","quiet",false),button("confirm-action","",t(app,"common.confirm"),"check","primary",app.busy())).unwrap();
     }
 }
 
@@ -727,7 +752,7 @@ pub(crate) fn history(html: &mut String, app: &App, game: &Game) {
         }
         write!(
             html,
-            "</ul>{}</section>",
+            "</ul><div class=\"dialog-actions\">{}</div></section>",
             button(
                 "restore-saves",
                 "",
@@ -814,7 +839,7 @@ mod tests {
     }
 
     #[test]
-    fn metadata_and_tag_editors_default_to_nextmoe_even_with_other_sources_configured() {
+    fn metadata_and_tag_editors_follow_default_and_keep_manual_overrides() {
         let mut app = App::default();
         app.settings.metadata_provider = "2dfan".into();
         app.data_sources = serde_json::from_value(json!([
@@ -824,12 +849,22 @@ mod tests {
         .unwrap();
         for action in ["metadata-association", "tags-association"] {
             dispatch(&mut app, action, "");
-            assert_eq!(app.detail.metadata_source, "nextmoe");
+            assert_eq!(app.detail.metadata_source, "2dfan");
             dispatch(&mut app, "metadata-provider", "vndb");
             assert_eq!(app.detail.metadata_source, "vndb");
+            // A successful backend save persists the override independently for each entry point.
+            app.settings.source_preferences.insert(
+                if action == "tags-association" {
+                    "tags"
+                } else {
+                    "metadata"
+                }
+                .into(),
+                "vndb".into(),
+            );
             dispatch(&mut app, "editor-close", "");
             dispatch(&mut app, action, "");
-            assert_eq!(app.detail.metadata_source, "nextmoe");
+            assert_eq!(app.detail.metadata_source, "vndb");
         }
         assert_eq!(app.patches.patch_source, "nextmoe");
         assert_eq!(

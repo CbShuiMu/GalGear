@@ -12,6 +12,9 @@ extern "C" {
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen(js_namespace = GalGearBridge)]
     pub(crate) fn local_date_time(seconds: f64) -> String;
+    #[cfg(target_arch = "wasm32")]
+    #[wasm_bindgen(js_namespace = GalGearBridge)]
+    pub(crate) fn local_today() -> String;
     #[cfg(not(test))]
     #[wasm_bindgen(js_namespace = GalGearBridge)]
     pub(crate) fn render(html: &str);

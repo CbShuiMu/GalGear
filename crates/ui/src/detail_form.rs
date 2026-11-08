@@ -13,6 +13,9 @@ pub(crate) fn begin(app: &mut App) {
     else {
         return;
     };
+    if !game.available && matches!(app.detail.editor, Some(crate::detail::Editor::Tools)) {
+        return;
+    }
     let edit = app
         .settings
         .game_edits
@@ -41,6 +44,7 @@ pub(crate) fn begin(app: &mut App) {
             features::meta_value(metadata, field).into(),
         );
     }
+    app.detail.tag_draft = None;
     app.detail.editing = true;
     app.detail.editing_configuration =
         matches!(app.detail.editor, Some(crate::detail::Editor::Tools));

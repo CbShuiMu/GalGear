@@ -42,7 +42,7 @@ pub use events::{
     backup_completed, choice_key, dispatch, download_progress, enrichment_progress,
     expire_download_notice, expire_toast, fan_status_updated, game_context, game_enriched,
     input_changed, library_drag_ids, library_drop, library_marquee, playtime_updated,
-    runtime_updated, magpie_hotkey_updated, scan_progress, start, tool_failed,
+    runtime_updated, magpie_hotkey_updated, library_devices_changed, scan_progress, start, tool_failed,
 };
 pub use responses::resolve;
 pub use screenshots::{screenshot_completed, screenshot_updated};

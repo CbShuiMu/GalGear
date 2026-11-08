@@ -6,6 +6,22 @@ use galgear_core::{Game, catalog, providers};
 use galgear_i18n::Message;
 use tauri::{Emitter, State};
 
+#[derive(Default)]
+pub(crate) struct AliasState {
+    // 同一运行期间每款游戏只查询一次；重启后失败或未匹配项可以再次查询。
+    attempted: std::sync::Mutex<std::collections::BTreeSet<String>>,
+}
+
+impl AliasState {
+    fn claim(&self, id: &str) -> Result<bool, Message> {
+        Ok(self
+            .attempted
+            .lock()
+            .map_err(|_| Message::new("error.catalog_state"))?
+            .insert(id.into()))
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn search_metadata(
     query: String,
@@ -112,6 +128,10 @@ pub(crate) async fn enrich_library(
         .map_err(|_| Message::new("error.catalog_state"))?
         .games
         .clone();
+    if let Err(error) = enrich_aliases(&state, &app, &games).await {
+        log::warn!("alias_enrichment_failed: {error:?}");
+        let _ = app.emit("game-enriched", serde_json::json!({"warning":error}));
+    }
     let settings = snapshot(&state)?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -180,6 +200,65 @@ pub(crate) async fn enrich_library(
                 }
             }
             continue;
+        }
+    }
+    Ok(())
+}
+
+/// 仅补全缺失别名，网络等待不持有配置或目录锁；合并时重新读取目录，避免覆盖用户编辑。
+async fn enrich_aliases(
+    state: &AppState,
+    app: &tauri::AppHandle,
+    games: &[Game],
+) -> Result<(), Message> {
+    if !games.iter().any(|game| game.aliases.is_empty()) {
+        return Ok(());
+    }
+    let credentials = data_sources::credentials_for(state, "nextmoe").await?;
+    for game in games.iter().filter(|game| game.aliases.is_empty()) {
+        if !state.aliases.claim(&game.id)? {
+            continue;
+        }
+        let query = game.title.clone();
+        let url = game.metadata.as_ref().map(|meta| meta.url.clone());
+        let credentials = credentials.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            galgear_core::data_sources::game_aliases(&query, url.as_deref(), &credentials)
+        })
+        .await
+        .map_err(|error| Message::detail("error.network", error))?;
+        match result {
+            Ok(aliases) if !aliases.is_empty() => {
+                let mut list = state
+                    .catalog
+                    .lock()
+                    .map_err(|_| Message::new("error.catalog_state"))?;
+                let mut next = list.clone();
+                let Some(current) = next.games.iter_mut().find(|current| current.id == game.id)
+                else {
+                    continue;
+                };
+                if !current.aliases.is_empty() {
+                    continue;
+                }
+                current.aliases = aliases;
+                let aliases = current.aliases.clone();
+                catalog::save(&state.store.path.with_file_name("catalog.json"), &next)?;
+                *list = next;
+                drop(list);
+                let _ = app.emit(
+                    "game-enriched",
+                    serde_json::json!({"id":game.id,"aliases":aliases}),
+                );
+            }
+            Ok(_) => {}
+            Err(error) => {
+                log::warn!("alias_lookup_failed: {error:?}");
+                let _ = app.emit(
+                    "game-enriched",
+                    serde_json::json!({"id":game.id,"warning":error}),
+                );
+            }
         }
     }
     Ok(())

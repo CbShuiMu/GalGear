@@ -105,7 +105,10 @@ pub(crate) fn save_preferences(
     sort_descending: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
-    if !matches!(sort_by.as_str(), "title" | "recent" | "release") {
+    if !matches!(
+        sort_by.as_str(),
+        "title" | "recent" | "release" | "last_played"
+    ) {
         return Err(Message::new("error.sort"));
     }
     let mut settings = state

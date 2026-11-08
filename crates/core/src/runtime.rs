@@ -2,6 +2,36 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+#[cfg(windows)]
+mod monitor;
+#[cfg(windows)]
+mod processes;
+#[cfg(windows)]
+pub use monitor::Monitor;
+
+/// 非 Windows 平台无法确认游戏进程，保持未知状态。
+#[cfg(not(windows))]
+#[derive(Default)]
+pub struct Monitor;
+#[cfg(not(windows))]
+impl Monitor {
+    /// Windows 启动跟踪在其他平台不可用。
+    pub fn launched(&self, _executable: &Path, _child: &std::process::Child) -> Result<(), String> {
+        Err("Windows process inspection required".into())
+    }
+    /// 返回未知状态。
+    pub fn detect(&self, executable: Option<&str>) -> Status {
+        detect(executable)
+    }
+    /// 返回所有游戏的未知状态。
+    pub fn detect_many(
+        &self,
+        games: &[(String, Option<String>)],
+    ) -> std::collections::BTreeMap<String, Status> {
+        detect_many(games)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
@@ -55,74 +85,17 @@ fn matches_executable(image: &Path, executable: &Path) -> bool {
 
 #[cfg(windows)]
 fn processes(names: &std::collections::BTreeSet<String>) -> Result<ProcessSnapshot, String> {
-    use windows_sys::Win32::{
-        Foundation::*,
-        System::{Diagnostics::ToolHelp::*, Threading::*},
-    };
-    struct Handle(HANDLE);
-    impl Drop for Handle {
-        fn drop(&mut self) {
-            unsafe {
-                CloseHandle(self.0);
-            }
-        }
-    }
+    let snapshot = processes::Snapshot::matching_names(names)?;
     let mut found = Vec::new();
     let mut uncertain = std::collections::BTreeSet::new();
-    // Toolhelp calls are synchronous; every process handle has an RAII owner.
-    unsafe {
-        let raw = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if raw == INVALID_HANDLE_VALUE {
-            return Err(std::io::Error::last_os_error().to_string());
-        }
-        let handle = Handle(raw);
-        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
-        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        if Process32FirstW(handle.0, &mut entry) == 0 {
-            return Err(std::io::Error::last_os_error().to_string());
-        }
-        loop {
-            let length = entry
-                .szExeFile
-                .iter()
-                .position(|c| *c == 0)
-                .unwrap_or(entry.szExeFile.len());
-            let filename = String::from_utf16_lossy(&entry.szExeFile[..length]);
-            if let Some(name) = executable_stem(Path::new(&filename))
-                && names.contains(&name)
-            {
-                let process =
-                    OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, entry.th32ProcessID);
-                if process.is_null() {
-                    if GetLastError() != ERROR_INVALID_PARAMETER {
-                        uncertain.insert(name);
-                    }
-                } else {
-                    let process = Handle(process);
-                    let mut buffer = vec![0_u16; 32768];
-                    let mut length = buffer.len() as u32;
-                    if QueryFullProcessImageNameW(process.0, 0, buffer.as_mut_ptr(), &mut length)
-                        == 0
-                    {
-                        uncertain.insert(name);
-                    } else {
-                        let path = std::path::PathBuf::from(String::from_utf16_lossy(
-                            &buffer[..length as usize],
-                        ));
-                        match std::fs::canonicalize(path) {
-                            Ok(path) => found.push((entry.th32ProcessID, path)),
-                            Err(_) => {
-                                uncertain.insert(name);
-                            }
-                        }
-                    }
-                }
-            }
-            if Process32NextW(handle.0, &mut entry) == 0 {
-                if GetLastError() != ERROR_NO_MORE_FILES {
-                    return Err(std::io::Error::last_os_error().to_string());
-                }
-                break;
+    for (pid, process) in snapshot.processes {
+        if let Some(name) = executable_stem(Path::new(&process.name))
+            && names.contains(&name)
+        {
+            if let Some(path) = process.image {
+                found.push((pid, path));
+            } else {
+                uncertain.insert(name);
             }
         }
     }

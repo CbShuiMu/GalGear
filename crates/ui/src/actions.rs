@@ -144,6 +144,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.library.batch = false;
             app.library.dialog = None;
             app.choices.open = None;
+            app.detail.tag_draft = None;
             app.detail.selected = Some(value.into());
             app.form.retain(|key, _| {
                 !key.starts_with("draft-")
@@ -213,6 +214,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             );
         }
         "close-detail" => {
+            app.detail.tag_draft = None;
             detail_form::cancel(app);
             app.detail.selected = None;
             app.detail.editor = None;
@@ -348,7 +350,14 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             let (sort_by, descending) = if action == "sort-direction" {
                 (app.settings.sort_by.as_str(), !descending)
             } else {
-                (value, descending)
+                (
+                    value,
+                    if value == "last_played" {
+                        true
+                    } else {
+                        descending
+                    },
+                )
             };
             let payload = json!({"cardSize":size,"sortBy":sort_by,"sortDescending":descending});
             app.choices.open = None;

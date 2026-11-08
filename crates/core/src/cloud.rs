@@ -287,6 +287,11 @@ impl CloudClient {
         let archive_size = archive.as_file().metadata().map_err(local_error)?.len();
         let archive_hash = hash_reader(archive.as_file_mut())?;
         let mut remote_snapshot = snapshot.clone();
+        // 本地时间名称可能跨设备重复，远端身份包含完整快照内容以避免冲突。
+        remote_snapshot.id = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(snapshot).map_err(local_error)?)
+        );
         // Absolute paths are private and can never be restore destinations on another PC.
         remote_snapshot.roots = (0..snapshot.roots.len())
             .map(|index| format!("Save {}", index + 1))
@@ -303,7 +308,7 @@ impl CloudClient {
             return Err(Message::new("cloud.too_large"));
         }
         self.ensure_collections(Some(cloud_key))?;
-        let archive_url = self.item(cloud_key, &snapshot.id, "zip")?;
+        let archive_url = self.item(cloud_key, &manifest.snapshot.id, "zip")?;
         check_response(send(
             self.request(Method::PUT, archive_url.clone())
                 .header(IF_NONE_MATCH, "*")
@@ -312,17 +317,20 @@ impl CloudClient {
                 .body(Body::new(archive.reopen().map_err(local_error)?)),
         )?)?;
         let publish = send(
-            self.request(Method::PUT, self.item(cloud_key, &snapshot.id, "json")?)
-                .header(IF_NONE_MATCH, "*")
-                .header(CONTENT_TYPE, "application/json; charset=utf-8")
-                .body(metadata),
+            self.request(
+                Method::PUT,
+                self.item(cloud_key, &manifest.snapshot.id, "json")?,
+            )
+            .header(IF_NONE_MATCH, "*")
+            .header(CONTENT_TYPE, "application/json; charset=utf-8")
+            .body(metadata),
         )
         .and_then(check_response);
         if let Err(error) = publish {
             let _ = send(self.request(Method::DELETE, archive_url));
             return Err(error);
         }
-        Ok(CloudSnapshot::from(snapshot))
+        Ok(CloudSnapshot::from(&manifest.snapshot))
     }
 
     fn manifest(&self, key: &str, id: &str) -> Result<RemoteManifest, Message> {
@@ -1128,10 +1136,10 @@ mod tests {
         let (data, saves, mut snapshot) = local_snapshot(temp.path());
         // Local Windows manifests contain backslashes even for nested save files.
         snapshot.files[0].path = "sub\\slot.sav".into();
-        client.upload(&data, &snapshot, KEY).unwrap();
+        let uploaded = client.upload(&data, &snapshot, KEY).unwrap();
         assert_eq!(client.list(KEY).unwrap().len(), 1);
         fs::write(saves.join("sub/slot.sav"), b"current save").unwrap();
-        let imported = client.download(&data, "game", KEY, &snapshot.id).unwrap();
+        let imported = client.download(&data, "game", KEY, &uploaded.id).unwrap();
         assert_ne!(
             imported.id, snapshot.id,
             "same remote snapshot must not replace local history"
@@ -1209,12 +1217,32 @@ mod tests {
     }
 
     #[test]
+    fn same_local_timestamp_on_two_devices_keeps_both_cloud_backups() {
+        let remote = MockDav::new();
+        let client = remote.client();
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let (first_data, _, first_snapshot) = local_snapshot(first.path());
+        let (second_data, _, mut second_snapshot) = local_snapshot(second.path());
+        if second_snapshot.id != first_snapshot.id {
+            let source =
+                snapshots::content_directory(&second_data, "game", &second_snapshot.id).unwrap();
+            fs::rename(&source, source.with_file_name(&first_snapshot.id)).unwrap();
+            second_snapshot.id.clone_from(&first_snapshot.id);
+        }
+        let first_uploaded = client.upload(&first_data, &first_snapshot, KEY).unwrap();
+        let second_uploaded = client.upload(&second_data, &second_snapshot, KEY).unwrap();
+        assert_ne!(first_uploaded.id, second_uploaded.id);
+        assert_eq!(client.list(KEY).unwrap().len(), 2);
+    }
+
+    #[test]
     fn corrupted_download_cannot_publish_history_or_change_saves() {
         let remote = MockDav::new();
         let temp = tempfile::tempdir().unwrap();
         let (data, saves, snapshot) = local_snapshot(temp.path());
         let client = remote.client();
-        client.upload(&data, &snapshot, KEY).unwrap();
+        let uploaded = client.upload(&data, &snapshot, KEY).unwrap();
         remote
             .state
             .lock()
@@ -1226,7 +1254,7 @@ mod tests {
             .1[0] ^= 0xff;
         assert_eq!(
             client
-                .download(&data, "game", KEY, &snapshot.id)
+                .download(&data, "game", KEY, &uploaded.id)
                 .unwrap_err()
                 .key,
             "cloud.invalid_backup"

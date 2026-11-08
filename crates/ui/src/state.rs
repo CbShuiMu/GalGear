@@ -136,7 +136,19 @@ pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: 
         settings.magpie.clone_from(&app.settings.magpie);
         settings.magpie_hotkey.clone_from(&app.settings.magpie_hotkey);
     }
+    app.patches.patch_source = match settings
+        .source_preferences
+        .get("patches")
+        .unwrap_or(&settings.metadata_provider)
+        .as_str()
+    {
+        "2dfan" => "2DFan",
+        "nextmoe" => "nextmoe",
+        _ => "all",
+    }
+    .into();
     app.settings = settings;
+    game_setup::sync_default_source(app);
     if (app.page == "patches" && !app.settings.show_patches)
         || (app.page == "collections" && !app.settings.show_collections)
     {

@@ -18,6 +18,7 @@ pub(crate) struct State {
 struct Draft {
     id: String,
     source: String,
+    source_manual: bool,
     query: String,
     executable: String,
     confirmed: bool,
@@ -80,6 +81,16 @@ pub(crate) fn refreshed(app: &mut App) {
     app.setup.deferred.clear();
 }
 
+/// 尚未手动选择的配置行跟随默认来源，已有资料关联和手动选择保持不变。
+pub(crate) fn sync_default_source(app: &mut App) {
+    let source = preferences::preferred_source(app, "metadata").to_owned();
+    for row in &mut app.setup.rows {
+        if !row.source_manual && !row.locked() && row.url.is_empty() {
+            change_source(row, &source);
+        }
+    }
+}
+
 pub(crate) fn sync(app: &mut App) {
     app.setup
         .rows
@@ -106,7 +117,7 @@ pub(crate) fn sync(app: &mut App) {
                 .filter(|source| !source.is_empty())
                 .unwrap_or_else(|| {
                     if url.is_empty() {
-                        crate::models::default_source()
+                        preferences::preferred_source(app, "metadata").into()
                     } else {
                         preferences::source_for_url(&url).0.into()
                     }
@@ -116,6 +127,12 @@ pub(crate) fn sync(app: &mut App) {
             let source = available;
             Draft {
                 id: game.id.clone(),
+                source_manual: !url.is_empty()
+                    || app
+                        .settings
+                        .game_edits
+                        .get(&game.id)
+                        .is_some_and(|edit| !edit.metadata_provider.is_empty()),
                 source,
                 query: game.title.clone(),
                 executable: game.executable.clone().unwrap_or_default(),
@@ -237,7 +254,10 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     }
     if action == "setup-batch-source" {
         if !app.setup.busy() && preferences::source_available(app, value) {
-            for row in &mut app.setup.rows { change_source(row, value); }
+            for row in &mut app.setup.rows {
+                row.source_manual = true;
+                change_source(row, value);
+            }
         }
         return true;
     }
@@ -251,7 +271,10 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     };
     if row.locked() { return true; }
     match action {
-        "setup-source" => change_source(row, selected),
+        "setup-source" => {
+            row.source_manual = true;
+            change_source(row, selected);
+        }
         "setup-search" if !row.source.is_empty() && !row.query.trim().is_empty() => {
             row.search_request = Some(app.requests.next_id());
             row.candidates.clear();
@@ -556,6 +579,18 @@ pub(crate) fn render(html: &mut String, app: &App) {
 mod tests {
     use super::*;
     use crate::models::GameEdit;
+
+    #[test]
+    fn default_source_changes_only_untouched_setup_rows() {
+        let mut app = app();
+        app.settings.metadata_provider = "bangumi".into();
+        sync_default_source(&mut app);
+        assert_eq!(app.setup.rows[0].source, "bangumi");
+        dispatch(&mut app, "setup-source", r#"["new","vndb"]"#);
+        app.settings.metadata_provider = "2dfan".into();
+        sync_default_source(&mut app);
+        assert_eq!(app.setup.rows[0].source, "vndb");
+    }
 
     #[test]
     fn batch_source_uses_only_verified_sources_and_discards_late_search() {

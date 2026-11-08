@@ -106,7 +106,9 @@ pub(crate) fn matching<'a>(
                     settings.collections.iter().any(|folder| folder.games.contains(&g.id)) == favorite
                 })
                 && (g.title.to_lowercase().contains(&query)
-                    || g.tags.iter().any(|tag| tag.to_lowercase().contains(&query)))
+                    || g.aliases
+                        .iter()
+                        .any(|alias| alias.to_lowercase().contains(&query)))
                 && state.tag_filter.iter().all(|tag| {
                     g.tags
                         .iter()
@@ -114,7 +116,24 @@ pub(crate) fn matching<'a>(
                 })
         })
         .collect();
-    if settings.sort_by == "release" {
+    sort_games(&mut games, settings);
+    games
+}
+
+pub(crate) fn sort_games(games: &mut [&Game], settings: &Settings) {
+    if settings.sort_by == "last_played" {
+        let descending = settings.sort_descending();
+        games.sort_by(|a, b| match (a.last_played, b.last_played) {
+            (Some(a_date), Some(b_date)) => {
+                let order = a_date.cmp(&b_date);
+                (if descending { order.reverse() } else { order })
+                    .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+            }
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+        });
+    } else if settings.sort_by == "release" {
         let descending = settings.sort_descending();
         games.sort_by_cached_key(|game| {
             let release = settings.game_edits.get(&game.id)
@@ -129,10 +148,10 @@ pub(crate) fn matching<'a>(
     } else {
         games.sort_by_cached_key(|g| g.title.to_lowercase());
     }
-    if settings.sort_by != "release" && settings.sort_descending() {
+    if !matches!(settings.sort_by.as_str(), "release" | "last_played") && settings.sort_descending()
+    {
         games.reverse();
     }
-    games
 }
 
 pub(crate) fn folder_path(collections: &[Collection], id: &str) -> String {
@@ -205,6 +224,77 @@ mod tests {
     use super::*;
     use crate::state::App;
     use serde_json::json;
+
+    #[test]
+    fn text_search_matches_names_and_aliases_while_tag_filters_remain_independent() {
+        let mut app = App::default();
+        app.catalog.games = serde_json::from_value(json!([
+            {"id":"1","title":"Stella of The End","folder":"X:/1","engine":"unknown","modified":0,"aliases":["星之终途"],"tags":["剧情","ADV"]},
+            {"id":"2","title":"Other Game","folder":"X:/2","engine":"unknown","modified":0,"tags":["星之终途"]},
+            {"id":"3","title":"剧情物语","folder":"X:/3","engine":"unknown","modified":0,"tags":["其他"]}
+        ])).unwrap();
+        for game in &app.catalog.games {
+            app.settings
+                .game_edits
+                .entry(game.id.clone())
+                .or_default()
+                .setup_confirmed = true;
+        }
+        for (query, expected) in [
+            ("STELLA", vec!["1"]),
+            ("星之", vec!["1"]),
+            ("剧情", vec!["3"]),
+            ("ADV", vec![]),
+        ] {
+            app.library.search = query.into();
+            let ids: Vec<_> = matching(&app.catalog, &app.settings, &app.library, "games")
+                .iter()
+                .map(|game| game.id.as_str())
+                .collect();
+            assert_eq!(ids, expected, "query: {query}");
+        }
+        app.library.search.clear();
+        app.library.tag_filter = vec!["ADV".into()];
+        let games = matching(&app.catalog, &app.settings, &app.library, "games");
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].id, "1");
+        app.library.search = "剧情".into();
+        assert!(matching(&app.catalog, &app.settings, &app.library, "games").is_empty());
+    }
+
+    #[test]
+    fn search_finds_aliases_and_recent_sort_keeps_unplayed_last() {
+        let mut app = App::default();
+        app.catalog.games = serde_json::from_value(json!([
+            {"id":"1","title":"Stella of The End","folder":"X:/1","engine":"unknown","modified":0,"aliases":["星之终途"],"last_played":100},
+            {"id":"2","title":"Alpha","folder":"X:/2","engine":"unknown","modified":0},
+            {"id":"3","title":"Zulu","folder":"X:/3","engine":"unknown","modified":0,"last_played":200}
+        ])).unwrap();
+        for game in &app.catalog.games {
+            app.settings
+                .game_edits
+                .entry(game.id.clone())
+                .or_default()
+                .setup_confirmed = true;
+        }
+        app.library.search = "星之终途".into();
+        assert_eq!(
+            matching(&app.catalog, &app.settings, &app.library, "games")[0].id,
+            "1"
+        );
+        app.library.search.clear();
+        app.settings.sort_by = "last_played".into();
+        for (descending, expected) in [(true, vec!["3", "1", "2"]), (false, vec!["1", "3", "2"])] {
+            app.settings.sort_descending = Some(descending);
+            assert_eq!(
+                matching(&app.catalog, &app.settings, &app.library, "games")
+                    .iter()
+                    .map(|game| game.id.as_str())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
 
     #[test]
     fn child_collections_prevent_empty_state_and_second_level_cannot_create_children() {

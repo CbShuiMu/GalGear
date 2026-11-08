@@ -141,6 +141,7 @@ pub(crate) fn run() {
             )?;
             start_fan_status_scheduler(app.handle().clone());
             tools::scheduler(app.handle().clone());
+            crate::library_devices::start(app.handle().clone());
             crate::cover_art::scheduler(app.handle().clone());
             let quit = tauri::menu::MenuItem::with_id(
                 app,
@@ -235,6 +236,8 @@ pub(crate) fn run() {
             library::scan_library,
             library::cancel_scan,
             save_commands::detect_saves,
+            save_commands::choose_backup_folder,
+            save_commands::open_backup_folder,
             save_commands::choose_save_folder,
             save_commands::find_save_with_ai,
             save_commands::open_save_folder,

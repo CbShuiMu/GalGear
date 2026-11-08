@@ -31,6 +31,7 @@ pub fn manual_game(path: &Path, title: String) -> Result<Game, Message> {
         last_played: None,
         cg_unlock_status: "unsupported".into(),
         auto_unlock: Default::default(),
+        aliases: Vec::new(),
         tags: Vec::new(),
         available: path.is_file(),
         metadata: None,
@@ -88,11 +89,17 @@ pub fn apply_edits(game: &mut Game, settings: &Settings) {
 
 pub fn is_excluded(game: &Game, settings: &Settings) -> bool {
     settings.excluded_games.contains(&game.id)
+        || settings
+            .excluded_paths
+            .iter()
+            .any(|path| path.eq_ignore_ascii_case(&game.folder))
         || settings.excluded_entries.values().any(|excluded| {
             settings.excluded_games.contains(&excluded.id)
                 && (excluded.folder.eq_ignore_ascii_case(&game.folder)
                     || excluded.executable.as_ref().is_some_and(|path| {
-                        game.executable.as_ref().is_some_and(|other| path.eq_ignore_ascii_case(other))
+                        game.executable
+                            .as_ref()
+                            .is_some_and(|other| path.eq_ignore_ascii_case(other))
                     }))
         })
 }
@@ -108,6 +115,9 @@ pub fn add_library_folder(settings: &mut Settings, path: String) {
         return;
     }
     let root = path.to_lowercase();
+    settings
+        .excluded_paths
+        .retain(|excluded| !Path::new(&excluded.to_lowercase()).starts_with(Path::new(&root)));
     let restored: std::collections::BTreeSet<_> = settings
         .excluded_entries
         .values()
@@ -126,32 +136,37 @@ pub fn add_library_folder(settings: &mut Settings, path: String) {
     settings.library_folders.push(path);
 }
 
-/// Existing games stay excluded during ordinary scans; restoring them or
-/// re-adding their removed library makes them eligible again. Missing games are
-/// forgotten so that a later scan can discover them with a fresh setup record.
-/// Only application records are changed; game files and backups are untouched.
-pub fn remove_entry(settings: &mut Settings, list: &mut ScanResult, id: &str) -> Result<(), Message> {
-    let mut game = list.games.iter().find(|game| game.id == id).cloned()
+/// 永久清除应用条目，并记录最小扫描排除信息；游戏文件和备份独立保留。
+pub fn remove_entry(
+    settings: &mut Settings,
+    list: &mut ScanResult,
+    id: &str,
+) -> Result<(), Message> {
+    let game = list
+        .games
+        .iter()
+        .chain(settings.excluded_entries.values())
+        .find(|game| game.id == id)
         .ok_or_else(|| Message::new("error.game_missing"))?;
-    apply_edits(&mut game, settings);
-    let present = match fs::metadata(&game.folder) {
-        Ok(metadata) => metadata.is_dir(),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
-        Err(error) => return Err(Message::detail("error.operation", error)),
-    };
-    if present {
-        let edit = settings.game_edits.entry(id.into()).or_default();
-        edit.setup_confirmed = true;
-        edit.setup_pending = false;
-        settings.excluded_entries.insert(id.into(), game);
-        if !settings.excluded_games.iter().any(|excluded| excluded == id) {
-            settings.excluded_games.push(id.into());
-        }
-    } else {
-        forget_entry(settings, id);
+    let folder = game.folder.clone();
+    forget_entry(settings, id);
+    if !settings
+        .excluded_paths
+        .iter()
+        .any(|path| path.eq_ignore_ascii_case(&folder))
+    {
+        settings.excluded_paths.push(folder);
     }
     list.games.retain(|game| game.id != id);
     Ok(())
+}
+
+/// 显式重新导入允许重新发现该位置，旧条目资料不会恢复。
+pub fn allow_import(settings: &mut Settings, game: &Game) {
+    settings.excluded_games.retain(|id| id != &game.id);
+    settings
+        .excluded_paths
+        .retain(|path| !path.eq_ignore_ascii_case(&game.folder));
 }
 
 /// Forget application records without touching game files or save backups.
@@ -164,7 +179,9 @@ pub fn forget_entry(settings: &mut Settings, id: &str) {
     settings.cover_overrides.remove(id);
     settings.metadata_checks.remove(id);
     settings.metadata_attempt_versions.remove(id);
-    settings.dialog_directories.retain(|key, _| !key.ends_with(&format!(":{id}")));
+    settings
+        .dialog_directories
+        .retain(|key, _| !key.ends_with(&format!(":{id}")));
     for folder in &mut settings.collections {
         folder.games.remove(id);
     }
@@ -177,19 +194,14 @@ pub fn directory_missing(game: &Game) -> bool {
     }
 }
 
-/// Only a confirmed missing directory removes a record; access errors do not.
-pub fn purge_missing(settings: &mut Settings, list: &mut ScanResult) -> std::collections::BTreeSet<String> {
-    let missing: std::collections::BTreeSet<_> = list.games.iter()
-        .chain(settings.manual_games.iter())
-        .chain(settings.excluded_entries.values())
-        .filter(|game| directory_missing(game))
-        .map(|game| game.id.clone()).collect();
-    for id in &missing { forget_entry(settings, id); }
-    list.games.retain(|game| !missing.contains(&game.id));
-    missing
+/// 重新检查路径可用性，离线目录仍保留全部游戏资料。
+pub fn refresh_availability(settings: &Settings, list: &mut ScanResult) {
+    for game in &mut list.games {
+        apply_edits(game, settings);
+    }
 }
 
-/// Merge scanned candidates and retained records after missing directories are purged.
+/// Merge scanned candidates with retained records, including unavailable games.
 pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> ScanResult {
     for game in old
         .games
@@ -222,6 +234,7 @@ pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> Sc
     }
     for game in &mut fresh.games {
         if let Some(cached) = old.games.iter().find(|cached| cached.id == game.id) {
+            game.aliases.clone_from(&cached.aliases);
             game.playtime_seconds = cached.playtime_seconds;
             game.last_played = cached.last_played;
         }
@@ -295,8 +308,20 @@ mod tests {
             ..Default::default()
         };
         let mut list = crate::scanner::scan(&settings);
-        let id = list.games.iter().find(|game| game.library == root).unwrap().id.clone();
-        let other_id = list.games.iter().find(|game| game.id != id).unwrap().id.clone();
+        let id = list
+            .games
+            .iter()
+            .find(|game| game.library == root)
+            .unwrap()
+            .id
+            .clone();
+        let other_id = list
+            .games
+            .iter()
+            .find(|game| game.id != id)
+            .unwrap()
+            .id
+            .clone();
         let game = list.games.iter_mut().find(|game| game.id == id).unwrap();
         game.playtime_seconds = 3600;
         let edit = settings.game_edits.entry(id.clone()).or_default();
@@ -308,24 +333,35 @@ mod tests {
         });
         remove_entry(&mut settings, &mut list, &id).unwrap();
         remove_entry(&mut settings, &mut list, &other_id).unwrap();
-        let mut expected_edit = settings.game_edits[&id].clone();
-        expected_edit.setup_confirmed = false;
-        expected_edit.setup_pending = true;
-
         // Restart with the persisted exclusions, then remove and re-add the root.
-        let mut settings: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
-        assert!(merge(crate::scanner::scan(&settings), &list, &settings).games.is_empty());
+        let mut settings: Settings =
+            serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        assert!(
+            merge(crate::scanner::scan(&settings), &list, &settings)
+                .games
+                .is_empty()
+        );
         settings.library_folders.retain(|path| path != &root);
         add_library_folder(&mut settings, root);
-        let mut settings: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        let mut settings: Settings =
+            serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
         let fresh = crate::scanner::scan(&settings);
         crate::game_setup::mark_new(&mut settings, &fresh.games, &Default::default());
         let restored = merge(fresh, &list, &settings);
 
-        assert_eq!(restored.games.iter().map(|game| &game.id).collect::<Vec<_>>(), vec![&id]);
-        assert_eq!(settings.game_edits[&id], expected_edit);
-        assert_eq!(settings.excluded_games, vec![other_id]);
-        assert_eq!(settings.excluded_entries[&id].playtime_seconds, 3600);
+        assert_eq!(
+            restored
+                .games
+                .iter()
+                .map(|game| &game.id)
+                .collect::<Vec<_>>(),
+            vec![&id]
+        );
+        assert!(settings.game_edits[&id].setup_pending);
+        assert!(settings.game_edits[&id].arguments.is_empty());
+        assert!(settings.excluded_entries.is_empty());
+        assert!(!restored.games.iter().any(|game| game.id == other_id));
+        assert_eq!(restored.games[0].playtime_seconds, 0);
     }
 
     #[test]
@@ -340,7 +376,10 @@ mod tests {
             ..Default::default()
         };
         let id = game.id.clone();
-        let mut list = ScanResult { games: vec![game], ..Default::default() };
+        let mut list = ScanResult {
+            games: vec![game],
+            ..Default::default()
+        };
         remove_entry(&mut settings, &mut list, &id).unwrap();
         let previous = settings.clone();
 
@@ -350,69 +389,77 @@ mod tests {
     }
 
     #[test]
-    fn hidden_game_is_forgotten_when_its_directory_disappears_and_is_new_if_recreated() {
+    fn permanent_removal_keeps_files_and_requires_explicit_import() {
         let temp = tempfile::tempdir().unwrap();
         let folder = temp.path().join("Game");
         fs::create_dir(&folder).unwrap();
         fs::write(folder.join("game.exe"), b"game").unwrap();
-        fs::write(folder.join("data.xp3"), b"data").unwrap();
-        let mut settings = Settings { library_folders: vec![display_path(temp.path())], ..Default::default() };
+        fs::write(folder.join("data.xp3"), b"assets").unwrap();
+        let mut settings = Settings {
+            library_folders: vec![display_path(temp.path())],
+            ..Default::default()
+        };
         let mut list = crate::scanner::scan(&settings);
-        let id = list.games[0].id.clone();
-        settings.game_edits.entry(id.clone()).or_default().setup_confirmed = true;
-        remove_entry(&mut settings, &mut list, &id).unwrap();
-        assert!(purge_missing(&mut settings, &mut list).is_empty());
-        assert!(settings.game_edits[&id].setup_confirmed);
-        assert!(merge(crate::scanner::scan(&settings), &list, &settings).games.is_empty());
-        fs::remove_dir_all(&folder).unwrap();
-        assert!(purge_missing(&mut settings, &mut list).contains(&id));
-        assert!(settings.excluded_games.is_empty());
+        let game = list.games[0].clone();
+        settings
+            .game_edits
+            .entry(game.id.clone())
+            .or_default()
+            .setup_confirmed = true;
+        remove_entry(&mut settings, &mut list, &game.id).unwrap();
+        assert!(settings.game_edits.is_empty());
         assert!(settings.excluded_entries.is_empty());
-        assert!(!settings.game_edits.contains_key(&id));
-        let mut settings: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
-        fs::create_dir(&folder).unwrap();
-        fs::write(folder.join("game.exe"), b"game").unwrap();
-        fs::write(folder.join("data.xp3"), b"data").unwrap();
+        assert!(folder.join("game.exe").is_file());
+        assert!(
+            merge(crate::scanner::scan(&settings), &list, &settings)
+                .games
+                .is_empty()
+        );
+        allow_import(&mut settings, &game);
         let fresh = crate::scanner::scan(&settings);
-        crate::game_setup::mark_new(&mut settings, &fresh.games, &Default::default());
-        assert!(settings.game_edits[&id].setup_pending);
-        assert!(!settings.game_edits[&id].setup_confirmed);
+        assert!(crate::game_setup::mark_new(
+            &mut settings,
+            &fresh.games,
+            &Default::default()
+        ));
+        assert!(settings.game_edits[&game.id].setup_pending);
     }
 
     #[test]
-    fn scan_cleanup_forgets_visible_manual_and_collection_records() {
+    fn offline_scan_preserves_manual_records_and_returns_without_duplicates() {
         let temp = tempfile::tempdir().unwrap();
         let folder = temp.path().join("Game");
         fs::create_dir(&folder).unwrap();
         fs::write(folder.join("game.exe"), b"game").unwrap();
         let game = manual_game(&folder.join("game.exe"), "Game".into()).unwrap();
         let id = game.id.clone();
-        let mut settings = Settings { manual_games: vec![game.clone()], ..Default::default() };
-        settings.game_edits.entry(id.clone()).or_default().setup_confirmed = true;
+        let mut settings = Settings {
+            manual_games: vec![game.clone()],
+            ..Default::default()
+        };
+        settings
+            .game_edits
+            .entry(id.clone())
+            .or_default()
+            .setup_confirmed = true;
         settings.cover_overrides.insert(id.clone(), "cover".into());
         crate::collections::edit(&mut settings, "create", "", "Favorites", None).unwrap();
         settings.collections[0].games.insert(id.clone());
-        let mut list = ScanResult { games: vec![game], ..Default::default() };
-        fs::remove_dir_all(&folder).unwrap();
-        assert!(purge_missing(&mut settings, &mut list).contains(&id));
-        assert!(list.games.is_empty());
-        assert!(settings.manual_games.is_empty());
-        assert!(settings.game_edits.is_empty());
-        assert!(settings.cover_overrides.is_empty());
-        assert!(settings.collections[0].games.is_empty());
-        assert!(merge(ScanResult::default(), &list, &settings).games.is_empty());
-    }
-
-    #[test]
-    fn missing_executable_does_not_forget_an_existing_game_directory() {
-        let temp = tempfile::tempdir().unwrap();
-        let game = manual_game(&temp.path().join("removed.exe"), "Game".into()).unwrap();
-        let id = game.id.clone();
-        let mut settings = Settings::default();
-        let mut list = ScanResult { games: vec![game], ..Default::default() };
-        assert!(purge_missing(&mut settings, &mut list).is_empty());
-        remove_entry(&mut settings, &mut list, &id).unwrap();
-        assert!(settings.excluded_entries.contains_key(&id));
+        let mut list = ScanResult {
+            games: vec![game],
+            ..Default::default()
+        };
+        let detached = temp.path().join("detached");
+        fs::rename(&folder, &detached).unwrap();
+        refresh_availability(&settings, &mut list);
+        assert!(!list.games[0].available);
+        assert!(settings.game_edits[&id].setup_confirmed);
+        assert!(settings.collections[0].games.contains(&id));
+        fs::rename(&detached, &folder).unwrap();
+        let reloaded = merge(ScanResult::default(), &list, &settings);
+        assert_eq!(reloaded.games.len(), 1);
+        assert_eq!(reloaded.games[0].id, id);
+        assert!(reloaded.games[0].available);
     }
 
     #[test]
@@ -422,17 +469,29 @@ mod tests {
         fs::create_dir(&folder).unwrap();
         fs::write(folder.join("game.exe"), b"game").unwrap();
         fs::write(folder.join("data.xp3"), b"assets").unwrap();
-        let mut settings = Settings { library_folders: vec![display_path(temp.path())], ..Default::default() };
+        let mut settings = Settings {
+            library_folders: vec![display_path(temp.path())],
+            ..Default::default()
+        };
         let mut list = crate::scanner::scan(&settings);
         let id = list.games[0].id.clone();
         list.games[0].available = false; // Disk presence, not a stale UI flag, decides removal.
-        settings.game_edits.entry(id.clone()).or_default().setup_confirmed = true;
+        settings
+            .game_edits
+            .entry(id.clone())
+            .or_default()
+            .setup_confirmed = true;
         remove_entry(&mut settings, &mut list, &id).unwrap();
         assert!(folder.join("game.exe").is_file());
-        assert!(settings.excluded_games.contains(&id));
-        let mut reloaded: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+        assert!(settings.excluded_paths.contains(&display_path(&folder)));
+        let mut reloaded: Settings =
+            serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
         let fresh = crate::scanner::scan(&reloaded);
-        assert!(!crate::game_setup::mark_new(&mut reloaded, &fresh.games, &Default::default()));
+        assert!(!crate::game_setup::mark_new(
+            &mut reloaded,
+            &fresh.games,
+            &Default::default()
+        ));
         assert!(merge(fresh, &list, &reloaded).games.is_empty());
         let manual_alias = manual_game(&folder.join("game.exe"), "Alias".into()).unwrap();
         assert!(is_excluded(&manual_alias, &reloaded));
@@ -446,14 +505,25 @@ mod tests {
         fs::create_dir_all(&folder).unwrap();
         fs::write(folder.join("game.exe"), b"game").unwrap();
         fs::write(folder.join("data.xp3"), b"assets").unwrap();
-        let mut settings = Settings { library_folders: vec![display_path(&root)], ..Default::default() };
+        let mut settings = Settings {
+            library_folders: vec![display_path(&root)],
+            ..Default::default()
+        };
         let mut list = crate::scanner::scan(&settings);
         let game = list.games[0].clone();
-        settings.game_edits.entry(game.id.clone()).or_default().setup_confirmed = true;
+        settings
+            .game_edits
+            .entry(game.id.clone())
+            .or_default()
+            .setup_confirmed = true;
         settings.manual_games.push(game.clone());
-        settings.cover_overrides.insert(game.id.clone(), "old-cover".into());
+        settings
+            .cover_overrides
+            .insert(game.id.clone(), "old-cover".into());
         settings.metadata_checks.insert(game.id.clone(), 1);
-        settings.metadata_attempt_versions.insert(game.id.clone(), 1);
+        settings
+            .metadata_attempt_versions
+            .insert(game.id.clone(), 1);
         crate::collections::edit(&mut settings, "create", "", "Favorites", None).unwrap();
         settings.collections[0].games.insert(game.id.clone());
         let moved = temp.path().join("Moved");
@@ -469,14 +539,22 @@ mod tests {
         assert!(settings.metadata_attempt_versions.is_empty());
         assert!(settings.collections[0].games.is_empty());
         fs::rename(&moved, &folder).unwrap();
+        allow_import(&mut settings, &game);
         for incremental in [false, true] {
-            let mut reloaded: Settings = serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
+            let mut reloaded: Settings =
+                serde_json::from_slice(&serde_json::to_vec(&settings).unwrap()).unwrap();
             let fresh = if incremental {
                 crate::scanner::scan_incremental(&reloaded, &list, &Default::default(), &mut |_| {})
-            } else { crate::scanner::scan(&reloaded) };
+            } else {
+                crate::scanner::scan(&reloaded)
+            };
             assert_eq!(fresh.games.len(), 1);
             assert_eq!(fresh.games[0].id, game.id);
-            assert!(crate::game_setup::mark_new(&mut reloaded, &fresh.games, &Default::default()));
+            assert!(crate::game_setup::mark_new(
+                &mut reloaded,
+                &fresh.games,
+                &Default::default()
+            ));
             let restored = merge(fresh, &list, &reloaded);
             assert_eq!(restored.games.len(), 1);
             assert!(restored.games[0].metadata.is_none());
@@ -495,6 +573,7 @@ mod tests {
             games: vec![game.clone()],
             ..Default::default()
         };
+        game.aliases = vec!["星之终途".into()];
         game.playtime_seconds = 4500;
         game.last_played = Some(1730000000);
         let old = ScanResult {
@@ -502,6 +581,7 @@ mod tests {
             ..Default::default()
         };
         let merged = merge(fresh, &old, &settings);
+        assert_eq!(merged.games[0].aliases, game.aliases);
         assert_eq!(
             crate::playtime::Record::from_game(&merged.games[0]),
             crate::playtime::Record::from_game(&game)
