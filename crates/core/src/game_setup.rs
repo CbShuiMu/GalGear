@@ -3,6 +3,50 @@ use crate::{Game, GameEdit, Settings, config::display_path, data_sources, provid
 use galgear_i18n::Message;
 use std::{collections::BTreeSet, path::Path};
 
+/// 列出游戏目录直属的普通 EXE 文件，不跟随链接或 Windows 重解析点。
+pub fn executables(folder: &Path) -> Result<Vec<std::path::PathBuf>, Message> {
+    let root =
+        std::fs::canonicalize(folder).map_err(|error| Message::detail("error.operation", error))?;
+    let mut files = Vec::new();
+    for entry in
+        std::fs::read_dir(&root).map_err(|error| Message::detail("error.operation", error))?
+    {
+        let entry = entry.map_err(|error| Message::detail("error.operation", error))?;
+        let metadata = entry
+            .metadata()
+            .map_err(|error| Message::detail("error.operation", error))?;
+        if !metadata.is_file()
+            || entry
+                .file_type()
+                .map_err(|error| Message::detail("error.operation", error))?
+                .is_symlink()
+        {
+            continue;
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            if metadata.file_attributes() & 0x400 != 0 {
+                continue;
+            }
+        }
+        if entry
+            .path()
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("exe"))
+        {
+            files.push(entry.path());
+        }
+    }
+    files.sort_by_cached_key(|path| {
+        path.file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_lowercase()
+    });
+    Ok(files)
+}
+
 pub fn mark_new(settings: &mut Settings, games: &[Game], _known: &BTreeSet<String>) -> bool {
     let mut changed = false;
     for game in games {
@@ -33,6 +77,9 @@ pub fn validate(source: &str, url: &str, executable: &str, confirmed: bool) -> R
     if url.trim().is_empty() || data_sources::source_for_url(url)?.0 != source {
         return Err(Message::new("setup.entry_required"));
     }
+    if executable.trim().is_empty() {
+        return Ok(());
+    }
     let path = Path::new(executable.trim());
     if !path.is_file()
         || !path
@@ -56,11 +103,16 @@ pub fn prepare(
         play_status: game.play_status,
         ..Default::default()
     });
-    let executable = display_path(Path::new(executable.trim()));
-    if game.executable.as_deref() != Some(&executable) {
-        edit.working_directory = Path::new(&executable).parent().map(display_path);
+    if executable.trim().is_empty() {
+        edit.launcher_pending = edit.executable.is_none();
+    } else {
+        let executable = display_path(Path::new(executable.trim()));
+        if game.executable.as_deref() != Some(&executable) {
+            edit.working_directory = Path::new(&executable).parent().map(display_path);
+        }
+        edit.executable = Some(executable);
+        edit.launcher_pending = false;
     }
-    edit.executable = Some(executable);
     edit.metadata_provider = source.into();
     edit.setup_pending = false;
     edit.setup_confirmed = true;
@@ -72,6 +124,38 @@ pub fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn setup_without_launcher_defers_only_new_configuration() {
+        let dir = tempfile::tempdir().unwrap();
+        let game =
+            crate::catalog::manual_game(&dir.path().join("guess.exe"), "Game".into()).unwrap();
+        let metadata = providers::Metadata {
+            url: "https://vndb.org/v1".into(),
+            ..Default::default()
+        };
+        let edit = prepare(&game, None, "vndb", "", metadata.clone()).unwrap();
+        assert!(edit.setup_confirmed && edit.launcher_pending);
+        assert!(edit.executable.is_none());
+        let previous = GameEdit {
+            executable: Some("chosen.exe".into()),
+            ..Default::default()
+        };
+        let edit = prepare(&game, Some(&previous), "vndb", "", metadata).unwrap();
+        assert!(!edit.launcher_pending);
+        assert_eq!(edit.executable.as_deref(), Some("chosen.exe"));
+    }
+
+    #[test]
+    fn executable_candidates_exclude_directories_and_non_executables() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("translation.EXE"), b"fixture").unwrap();
+        std::fs::write(dir.path().join("readme.txt"), b"fixture").unwrap();
+        std::fs::create_dir(dir.path().join("folder.exe")).unwrap();
+        let candidates = executables(dir.path()).unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].file_name().unwrap(), "translation.EXE");
+        assert!(executables(&dir.path().join("missing")).is_err());
+    }
     #[test]
     fn setup_validates_the_entry_and_real_executable_before_changing_edits() {
         let dir = tempfile::tempdir().unwrap();

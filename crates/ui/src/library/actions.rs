@@ -1,7 +1,7 @@
 //! Library actions.
 use crate::{
-    bridge::reset_scroll, features, library::Dialog, library::clear_selection, library::matching,
-    requests::Pending, requests::issue, state::App,
+    bridge::reset_scroll, features, library::Dialog, library::clear_selection,
+    library::filter_tags, library::matching, requests::Pending, requests::issue, state::App,
 };
 use serde_json::json;
 
@@ -37,6 +37,13 @@ fn open_edit(app: &mut App, id: Option<String>, parent: Option<String>) {
 }
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
+    if action == "library-reorder" {
+        if app.settings.sort_by == "custom" && !app.busy()
+            && let Ok(payload) = serde_json::from_str::<serde_json::Value>(value) {
+            issue(app, Pending::Preferences, "reorder_games", payload);
+        }
+        return true;
+    }
     match action {
         "tag-clear" => {
             app.library.clear_filters();
@@ -55,9 +62,8 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 .catalog
                 .games
                 .iter()
-                .flat_map(|game| &game.tags)
-                .find(|tag| galgear_tags::key(tag) == galgear_tags::key(value))
-                .cloned();
+                .flat_map(filter_tags)
+                .find(|tag| galgear_tags::key(tag) == galgear_tags::key(value));
             if let (Some(Dialog::Tags { selected, .. }), Some(tag)) = (&mut app.library.dialog, tag) {
                 if !selected
                     .iter()

@@ -11,7 +11,7 @@ pub(crate) use state::State;
 pub(crate) use state::StatusFilter;
 pub(crate) use view::page;
 
-use crate::{models::Catalog, models::Game, models::Settings};
+use crate::{features::meta_value, models::Catalog, models::Game, models::Settings};
 use galgear_i18n::Message;
 use serde::Deserialize;
 use std::collections::BTreeSet;
@@ -81,6 +81,22 @@ fn release_date_key(value: &str) -> Option<i32> {
     time::Date::from_calendar_date(year, month, day).ok().map(time::Date::to_julian_day)
 }
 
+// 资料来源与本地标签可独立更换，筛选须包含当前可点击的制作资料，但不回写本地标签。
+fn filter_tags(game: &Game) -> impl Iterator<Item = String> + '_ {
+    let credits = game.metadata.iter().flat_map(|meta| {
+        galgear_tags::CREDIT_FIELDS.iter().flat_map(move |field| {
+            galgear_tags::credit_names(
+                meta_value(meta, field),
+                meta.links
+                    .iter()
+                    .filter(|link| link.field == *field)
+                    .map(|link| link.name.as_str()),
+            )
+        })
+    });
+    game.tags.iter().cloned().chain(credits)
+}
+
 pub(crate) fn matching<'a>(
     catalog: &'a Catalog,
     settings: &Settings,
@@ -91,6 +107,11 @@ pub(crate) fn matching<'a>(
         return Vec::new();
     }
     let query = state.search.to_lowercase();
+    let selected_tags: BTreeSet<_> = state
+        .tag_filter
+        .iter()
+        .map(|tag| galgear_tags::key(tag))
+        .collect();
     let folder = state
         .collection
         .as_ref()
@@ -109,11 +130,12 @@ pub(crate) fn matching<'a>(
                     || g.aliases
                         .iter()
                         .any(|alias| alias.to_lowercase().contains(&query)))
-                && state.tag_filter.iter().all(|tag| {
-                    g.tags
-                        .iter()
-                        .any(|name| galgear_tags::key(name) == galgear_tags::key(tag))
-                })
+                && (selected_tags.is_empty()
+                    || selected_tags.is_subset(
+                        &filter_tags(g)
+                            .map(|name| galgear_tags::key(&name))
+                            .collect(),
+                    ))
         })
         .collect();
     sort_games(&mut games, settings);
@@ -121,6 +143,11 @@ pub(crate) fn matching<'a>(
 }
 
 pub(crate) fn sort_games(games: &mut [&Game], settings: &Settings) {
+    if settings.sort_by == "custom" {
+        let positions: std::collections::BTreeMap<_, _> = settings.custom_order.iter().enumerate().map(|(index, id)| (id.as_str(), index)).collect();
+        games.sort_by_cached_key(|game| (positions.get(game.id.as_str()).copied().unwrap_or(usize::MAX), game.title.to_lowercase(), game.id.clone()));
+        return;
+    }
     if settings.sort_by == "last_played" {
         let descending = settings.sort_descending();
         games.sort_by(|a, b| match (a.last_played, b.last_played) {
@@ -465,6 +492,122 @@ mod tests {
             matching(&app.catalog, &app.settings, &app.library, &app.page)[0].id,
             "0"
         );
+    }
+
+    #[test]
+    fn detail_credits_match_current_metadata_when_local_tags_differ() {
+        let mut app = App::default();
+        app.catalog.games = vec![game(0), game(1)];
+        app.catalog.games[0].metadata = Some(
+            serde_json::from_value(json!({
+                "brand": "前翼、枕",
+                "writers": "Alice Smith、Circle/A",
+                "links": [{"field": "writers", "name": "Circle/A", "url": "https://example.com"}]
+            }))
+            .unwrap(),
+        );
+        app.catalog.games[1].metadata = Some(
+            serde_json::from_value(json!({
+                "brand": "枕社"
+            }))
+            .unwrap(),
+        );
+        for game in &app.catalog.games {
+            let edit = app.settings.game_edits.entry(game.id.clone()).or_default();
+            edit.setup_confirmed = true;
+            edit.source_tags = Some(game.tags.clone());
+        }
+        let mut html = String::new();
+        crate::detail::render(&mut html, &app, &app.catalog.games[0]);
+        for name in ["前翼", "枕", "Alice Smith", "Circle/A"] {
+            assert!(html.contains(&format!("data-action=\"detail-tag\" data-value=\"{name}\"")));
+            dispatch(&mut app, "detail-tag", name);
+            let ids: Vec<_> = matching(&app.catalog, &app.settings, &app.library, &app.page)
+                .iter()
+                .map(|game| game.id.as_str())
+                .collect();
+            assert_eq!(ids, ["0"], "credit: {name}");
+        }
+        for name in ["前", "Circle", "A", "Alice"] {
+            dispatch(&mut app, "detail-tag", name);
+            assert!(matching(&app.catalog, &app.settings, &app.library, &app.page).is_empty());
+        }
+        assert_eq!(app.catalog.games[0].tags, ["ADV"]);
+    }
+
+    #[test]
+    fn tag_search_offers_current_credits_and_applies_combined_filters() {
+        let mut app = App::default();
+        app.catalog.games = vec![game(0), game(1)];
+        app.catalog.games[0].metadata = Some(
+            serde_json::from_value(json!({
+                "brand": "前翼、枕", "writers": "Alice Smith"
+            }))
+            .unwrap(),
+        );
+        app.catalog.games[1].tags = vec!["前翼".into()];
+        for game in &app.catalog.games {
+            app.settings
+                .game_edits
+                .entry(game.id.clone())
+                .or_default()
+                .setup_confirmed = true;
+        }
+        dispatch(&mut app, "tag-filter-open", "");
+        for (query, name) in [("前翼", "前翼"), ("枕", "枕"), ("alice", "Alice Smith")] {
+            app.form.insert("tag-query".into(), query.into());
+            let mut html = String::new();
+            dialog(&mut html, &app);
+            assert_eq!(html.matches(&format!("data-value=\"{name}\"")).count(), 1);
+            dispatch(&mut app, "tag-filter", &name.to_ascii_lowercase());
+        }
+        dispatch(&mut app, "tag-filter", "ADV");
+        dispatch(&mut app, "tag-filter-apply", "");
+        assert_eq!(app.library.tag_filter, ["前翼", "枕", "Alice Smith", "ADV"]);
+        let ids: Vec<_> = matching(&app.catalog, &app.settings, &app.library, &app.page)
+            .iter()
+            .map(|game| game.id.as_str())
+            .collect();
+        assert_eq!(ids, ["0"]);
+    }
+
+    #[test]
+    fn credit_filters_follow_metadata_changes_without_restoring_removed_categories() {
+        let mut app = App::default();
+        app.catalog.games = vec![game(0)];
+        app.settings
+            .game_edits
+            .entry("0".into())
+            .or_default()
+            .setup_confirmed = true;
+        app.catalog.games[0].metadata = Some(
+            serde_json::from_value(json!({
+                "brand": "Old Brand"
+            }))
+            .unwrap(),
+        );
+        dispatch(&mut app, "detail-tag", "old brand");
+        assert_eq!(
+            matching(&app.catalog, &app.settings, &app.library, &app.page).len(),
+            1
+        );
+        app.catalog.games[0].metadata = Some(
+            serde_json::from_value(json!({
+                "brand": "New Brand", "tags": ["Removed"], "description": "Story",
+                "links": [{"field": "brand", "name": "Old Brand", "url": "https://example.com"}]
+            }))
+            .unwrap(),
+        );
+        for name in ["Old Brand", "Removed", "Story"] {
+            dispatch(&mut app, "detail-tag", name);
+            assert!(matching(&app.catalog, &app.settings, &app.library, &app.page).is_empty());
+        }
+        dispatch(&mut app, "detail-tag", " new brand ");
+        assert_eq!(
+            matching(&app.catalog, &app.settings, &app.library, &app.page).len(),
+            1
+        );
+        assert_eq!(app.catalog.games[0].tags, ["ADV"]);
     }
 
     #[test]

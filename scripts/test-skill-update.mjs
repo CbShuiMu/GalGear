@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {test} from 'node:test';
 
-test('startup checks versions quietly, counts components, and installs only after a click', async () => {
+test('startup prompts for GalGear updates, counts components, and installs only after a click', async () => {
   const requests=[]; let html='';
   globalThis.GalGearBridge={request(id,command,payload){requests.push({id,command,payload:JSON.parse(payload)});},render(value){html=value;},reset_scroll(){},schedule_toast_expiry(){},schedule_download_notice_expiry(){},local_date(){return '';},local_date_time(){return '';}};
   const ui=await import('../dist/pkg/galgear_ui.js');
@@ -23,6 +23,10 @@ test('startup checks versions quietly, counts components, and installs only afte
   ui.dispatch('dismiss-toast',''); // Clear the earlier scan-completed notification.
   reply('check_update',{version:'v9.0.0',available:true,asset:{name:'GalGear.exe'}});
   reply('check_skill_version','b'.repeat(40));
+  assert.match(html,/update-overlay/);
+  assert.match(html,/稍后处理[\s\S]*立即更新/);
+  assert(!requests.some(r=>r.command==='install_update'));
+  ui.dispatch('update-cancel','');
   assert.doesNotMatch(html,/update-overlay/);
   assert.doesNotMatch(html,/class="toast/);
   assert.equal((html.match(/class="version-pill update-pending"/g)||[]).length,2);

@@ -40,3 +40,39 @@ test('long labels, font changes and narrow windows recompute intrinsic bounds', 
   assert.equal(menu.width(), 144);
   assert.equal(menu.style.left, '8px');
 });
+
+test('background paints retain wheel scroll while opening and keyboard navigation reveal the active option', () => {
+  const start = bridge.indexOf("    const choice = document.querySelector('.choice-popup');");
+  const end = bridge.indexOf('    previousChoice = choiceId;', start) + '    previousChoice = choiceId;'.length;
+  const restore = bridge.slice(start, end);
+  let reveals = 0, focused = 0;
+  const list = {scrollTop: 264, focus() { focused++; }};
+  const active = {dataset: {value: 'first'}, scrollIntoView() { reveals++; list.scrollTop = 0; }};
+  const menu = {dataset: {choiceAnchor: 'setup-candidate:fixture'}};
+  const context = vm.createContext({
+    previousChoice: menu.dataset.choiceAnchor, previousChoiceValue: 'first', choiceScroll: 264,
+    revealChoiceOnPaint: false, focusInChoice: true, choiceReturnFocus: null, focusId: 'choice-list', placeChoice() {},
+    document: {
+      querySelector: selector => selector === '.choice-popup' ? menu : active,
+      getElementById: id => id === 'choice-list' ? list : null,
+    },
+  });
+  for (let index = 0; index < 10; index++) vm.runInContext(`{ ${restore} }`, context);
+  assert.equal(list.scrollTop, 264);
+  assert.equal(reveals, 0);
+  assert.equal(focused, 0);
+  context.revealChoiceOnPaint = true;
+  vm.runInContext(`{ ${restore} }`, context);
+  assert.equal(reveals, 1);
+  assert.equal(list.scrollTop, 0);
+  context.revealChoiceOnPaint = false;
+  reveals = 0;
+  active.dataset.value = 'second';
+  vm.runInContext(`{ ${restore} }`, context);
+  assert.equal(reveals, 1);
+  context.previousChoice = null;
+  context.previousChoiceValue = 'second';
+  vm.runInContext(`{ ${restore} }`, context);
+  assert.equal(reveals, 2);
+  assert.equal(focused, 1);
+});

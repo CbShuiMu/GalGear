@@ -22,3 +22,5 @@ AI provider logos added on 2026-10-19 from the MIT-licensed Lobe Icons library:
 
 Provider names and logos belong to their respective owners.
 
+- `erogamescape.png`：批評空間官方 favicon（原地址 `https://erogamescape.org/favicon.ico`）。2026-11-10 官网连接超时时，通过 Google favicon 缓存 `https://www.google.com/s2/favicons?domain=erogamescape.org&sz=64` 获取；仅用于标识数据源，图形权利归原平台。
+

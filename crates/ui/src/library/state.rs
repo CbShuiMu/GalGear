@@ -64,6 +64,8 @@ pub(crate) struct State {
     pub(crate) scanning: bool,
     pub(crate) rescan_pending: bool,
     pub(crate) scan_folders: usize,
+    pub(crate) scan_completed: usize,
+    pub(crate) scan_total: usize,
     pub(crate) visible_count: usize,
     pub(crate) dialog: Option<Dialog>,
 }
@@ -88,6 +90,8 @@ impl Default for State {
             scanning: false,
             rescan_pending: false,
             scan_folders: 0,
+            scan_completed: 0,
+            scan_total: 0,
             visible_count: 120,
             dialog: None,
         }

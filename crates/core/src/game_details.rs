@@ -103,6 +103,7 @@ pub fn prepare(
     tags::remember(&game.tags, &names, &mut edit.tag_rules);
     edit.tags = names;
     edit.executable = Some(draft.executable.trim().into());
+    edit.launcher_pending = false;
     edit.arguments = draft.arguments;
     edit.working_directory = draft.working_directory;
     edit.launcher = draft.launcher;

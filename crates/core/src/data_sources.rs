@@ -19,6 +19,7 @@ use std::{
 };
 
 pub mod moyu;
+mod erogamescape;
 mod nextmoe;
 pub mod oauth;
 
@@ -36,7 +37,7 @@ pub fn game_aliases(
     nextmoe::aliases(&providers::client()?, query, id.as_deref(), credentials)
 }
 
-pub const SOURCES: [&str; 5] = ["2dfan", "vndb", "bangumi", "ymgal", "nextmoe"];
+pub const SOURCES: [&str; 6] = ["2dfan", "vndb", "erogamescape", "bangumi", "ymgal", "nextmoe"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Cover {
@@ -204,10 +205,10 @@ pub fn save(config: &Path, source: &str, value: &Credentials) -> Result<(), Mess
     credentials::save(&credential_target(config, source)?, &saved)
 }
 pub fn statuses(config: &Path) -> Result<Vec<SourceStatus>, Message> {
-    ["vndb", "bangumi", "ymgal", "nextmoe"]
+    ["vndb", "erogamescape", "bangumi", "ymgal", "nextmoe"]
         .into_iter()
         .map(|source| {
-            let value = load(config, source)?;
+            let value = if source == "erogamescape" { Credentials::default() } else { load(config, source)? };
             Ok(SourceStatus {
                 source: source.into(),
                 configured: !value.token.is_empty()
@@ -396,9 +397,15 @@ pub fn source_for_url(url: &str) -> Result<(&'static str, String), Message> {
         || !url.username().is_empty()
         || url.password().is_some()
         || url.port().is_some()
-        || (url.query().is_some()
-            && !(url.host_str() == Some("developer.nextmoe.dev") && url.query() == Some("nsfw=1")))
         || url.fragment().is_some()
+    {
+        return Err(Message::new("error.site_url"));
+    }
+    if matches!(url.host_str(), Some("erogamescape.dyndns.org" | "erogamescape.org")) {
+        return erogamescape::url_id(&url).map(|id| ("erogamescape", id));
+    }
+    if url.query().is_some()
+        && !(url.host_str() == Some("developer.nextmoe.dev") && url.query() == Some("nsfw=1"))
     {
         return Err(Message::new("error.site_url"));
     }
@@ -447,6 +454,9 @@ pub fn search(
     if source == "nextmoe" {
         return nextmoe::search(&client, query, credentials);
     }
+    if source == "erogamescape" {
+        return erogamescape::search(&client, query);
+    }
     let value = match source {
         "vndb" => request_json(
             auth(
@@ -454,7 +464,7 @@ pub fn search(
                 source,
                 credentials,
             )
-            .json(&json!({"filters":["search","=",query],"fields":"title,alttitle","results":20})),
+            .json(&json!({"filters":["search","=",query],"fields":"title,alttitle,image.url,released,developers.name","results":20})),
         )?,
         "bangumi" => request_json(
             auth(
@@ -521,6 +531,9 @@ pub fn search(
                 ),
             };
             Ok(Resource {
+                cover_url: entry["image"]["url"].as_str().or_else(|| entry["images"]["common"].as_str()).map(str::to_owned),
+                brand: join_names(&entry["developers"]),
+                release_date: entry["released"].as_str().or_else(|| entry["date"].as_str()).unwrap_or_default().into(),
                 title,
                 url,
                 source: source.into(),
@@ -711,6 +724,7 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
     }
     let client = providers::client()?;
     match source {
+        "erogamescape" => erogamescape::metadata(&client, &id),
         "vndb" => {
             let value = request_json(auth(client.post("https://api.vndb.org/kana/vn"),source,credentials).json(&json!({"filters":["id","=",format!("v{id}")],"fields":"title,alttitle,description,released,image.url,developers.name,tags.name,tags.spoiler,staff.name,staff.role","results":1})))?;
             parse_vndb(&value, url)

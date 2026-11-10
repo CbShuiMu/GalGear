@@ -85,6 +85,7 @@ impl AppState {
                 record.apply(game);
             }
         }
+        library::repair_scan_duplicates(&store.path, &settings, &mut cached)?;
         cached.warnings.extend(save_commands::migrate_known_backups(
             &store.path,
             &settings,

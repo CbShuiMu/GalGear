@@ -35,18 +35,18 @@
 .bar-search{display:flex;align-items:center;gap:6px;flex:1 0 160px;min-width:160px;border:1px solid var(--palette-ecd6e4);background:var(--palette-fffafc);border-radius:999px;padding:6px 8px;min-height:34px}
 .bar-search>.icon{width:16px;height:16px;color:var(--muted)}.bar-search input{padding:0;border:0;outline:none;background:none;width:100%;min-width:0;color:var(--palette-493c4c);font-size:calc(var(--ui-font)*.78)}.bar-search:focus-within{outline:2px solid var(--pink);outline-offset:2px}
 .library-bar .action-menu>summary{display:flex;list-style:none}.library-bar .action-menu>div{right:0;left:auto;min-width:190px;z-index:25}.library-bar .warning-button{color:var(--palette-b84479)}.bar-spacer{flex:1}.selection-total{display:flex;align-items:center;gap:8px;flex-shrink:0;font-size:calc(var(--ui-font)*.9);color:var(--pink-dark);padding:0 8px}.selection-total>.icon{width:19px}
-/* The width participates in flex layout; the surface grows below the shelf. */
-.library-bar .add-menu{--add-duration:320ms;--add-ease:cubic-bezier(.22,1,.36,1);--add-width:max(144px,calc(var(--ui-font)*8.4));position:relative;flex:0 0 auto;width:34px;height:34px;z-index:26;transition:width var(--add-duration) var(--add-ease)}
+/* Both the slot and surface expand leftward so adjacent controls make room. */
+.library-bar .add-menu{--add-duration:320ms;--add-ease:cubic-bezier(.22,1,.36,1);--add-width:112px;position:relative;flex:0 0 auto;width:34px;height:34px;z-index:26;transition:width var(--add-duration) var(--add-ease)}
 .library-bar .add-menu[data-expanded=true]{width:var(--add-width)}
-.library-bar .add-surface{position:absolute;top:0;right:0;width:100%;height:34px;overflow:hidden;border:1px solid var(--surface-line,var(--line));border-radius:17px;background:var(--surface-raised,var(--palette-fff));box-shadow:0 2px 5px var(--palette-592d4510);transition:height var(--add-duration) var(--add-ease),border-radius var(--add-duration) var(--add-ease),box-shadow var(--add-duration) var(--add-ease)}
-.library-bar .add-menu[data-expanded=true] .add-surface{height:132px;border-radius:16px;box-shadow:0 8px 24px var(--palette-592d4510)}
+.library-bar .add-surface{position:absolute;top:0;right:0;width:34px;height:34px;overflow:hidden;border:1px solid var(--surface-line,var(--line));border-radius:17px;background:var(--surface-raised,var(--palette-fff));box-shadow:0 2px 5px var(--palette-592d4510);transition:width var(--add-duration) var(--add-ease),border-radius var(--add-duration) var(--add-ease),box-shadow var(--add-duration) var(--add-ease)}
+.library-bar .add-menu[data-expanded=true] .add-surface{width:var(--add-width);height:34px;border-radius:17px;box-shadow:0 8px 24px var(--palette-592d4510)}
 .library-bar .add-menu>.add-trigger{position:absolute;right:0;top:0;z-index:1;border-radius:50%}
 .library-bar .add-trigger>.icon{transform:rotate(0);transition:transform var(--add-duration) var(--add-ease)}
 .library-bar .add-menu[data-expanded=true] .add-trigger>.icon{transform:rotate(-45deg)}
-.library-bar .add-options{position:absolute;top:42px;left:8px;right:8px;display:flex;flex-direction:column;gap:6px;visibility:hidden;transition:visibility 0s var(--add-duration)}
-:root .app-shell[data-theme] .library-bar .add-options>.button{width:100%;min-height:36px;justify-content:flex-start;border-radius:10px;opacity:0;transform:translateY(-8px);transition:opacity 180ms ease,transform var(--add-duration) var(--add-ease),background-color .16s,color .16s,border-color .16s}
+.library-bar .add-options{position:absolute;top:0;left:0;right:38px;display:flex;flex-direction:row;gap:4px;visibility:hidden;transition:visibility 0s var(--add-duration)}
+:root .app-shell[data-theme] .library-bar .add-options>.button{width:34px;min-width:34px;height:32px;min-height:32px;justify-content:center;border-radius:50%;opacity:0;transform:translateX(12px);transition:opacity 180ms ease,transform var(--add-duration) var(--add-ease),background-color .16s,color .16s,border-color .16s}
 .library-bar .add-menu[data-expanded=true] .add-options{visibility:visible;transition-delay:0s}
-:root .app-shell[data-theme] .library-bar .add-menu[data-expanded=true] .add-options>.button{opacity:1;transform:translateY(0);transition-delay:60ms}
+:root .app-shell[data-theme] .library-bar .add-menu[data-expanded=true] .add-options>.button{opacity:1;transform:translateX(0);transition-delay:60ms}
 :root .app-shell[data-theme] .library-bar .add-menu[data-expanded=true] .add-options>.button+.button{transition-delay:100ms}
 @media(prefers-reduced-motion:reduce){.library-bar .add-menu,.library-bar .add-surface,.library-bar .add-trigger>.icon,.library-bar .add-options,.library-bar .add-options>.button{transition:none!important}}
 .danger{color:#BA4256}.button.primary.danger{background:#BA4256;border-color:#BA4256;color:white}
@@ -122,7 +122,7 @@
 
 .setup-help{display:flex;align-items:center;justify-content:space-between;gap:16px}.setup-help>span{min-width:0}.setup-help>.button{flex-shrink:0}
 
-.setup-actions { display:flex; gap:10px; align-items:center; flex-shrink:0; }
+.setup-actions { margin-left:auto; display:flex; gap:10px; align-items:center; flex-shrink:0; }
 .setup-actions .choice-trigger { width:auto; border-radius:999px; white-space:nowrap; }
 .setup-dialog { min-width:0; max-width:calc(100vw - 48px); }
 .setup-table-scroll { min-width:0; max-width:100%; }
@@ -136,4 +136,41 @@
 
 /* 路径状态始终显示，独立于悬停操作区域。 */
 .game-card .poster > .path-warning,.home-game .poster > .path-warning{position:absolute;top:10px;right:10px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:transparent;color:#d93040}.game-card .poster > .path-warning .icon,.home-game .poster > .path-warning .icon{width:24px;height:24px}
-.game-card .poster:has(>.path-warning)>:is(.game-finished-badge,.selection-check){right:46px}
+.game-card .poster:has(>.path-warning)>.game-finished-badge{right:46px}
+.game-card .poster:has(>.selection-check)>.path-warning{right:46px}
+
+.sort-direction{display:inline-flex;max-width:34px;opacity:1;transform:translateX(0);transition:max-width .28s ease,opacity .22s ease,transform .28s ease;overflow:hidden}
+.sort-direction.is-hidden{max-width:0;opacity:0;transform:translateX(24px);pointer-events:none}
+.setup-table tbody tr[data-setup-game]>td{height:114px;vertical-align:middle}
+.setup-entry-field{display:flex;align-items:center;gap:8px;min-height:86px}
+.setup-entry-field .choice-control{flex:1;min-width:0}
+.setup-entry-field .choice-trigger{height:86px}
+.setup-entry-field>.icon-button{flex-shrink:0}
+.setup-entry-field .choice-game-icon,.setup-candidate-menu .choice-game-icon{width:50px;height:68px;flex-shrink:0}
+.setup-entry-field .choice-game-icon img,.setup-candidate-menu .choice-game-icon img{width:100%;height:100%;object-fit:cover;border-radius:5px}
+.setup-candidate-menu .choice-list{max-height:176px;overflow-y:auto;padding:0}
+.setup-candidate-menu .choice-option{height:88px;min-height:88px;box-sizing:border-box;gap:10px}
+.setup-candidate-menu .choice-copy{min-width:0;flex:1}
+.setup-entry-field .choice-copy,.setup-candidate-menu .choice-copy{display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden}
+.setup-entry-field .choice-copy>span,.setup-entry-field .choice-copy>small,.setup-candidate-menu .choice-copy>span,.setup-candidate-menu .choice-copy>small{display:block;min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset}
+.launcher-dialog{width:min(640px,calc(100vw - 48px))}
+.launcher-dialog .library-dialog-footer{gap:12px}
+.launcher-list{padding:20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-height:60vh;overflow:auto}
+.launcher-option{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--button-bg);color:inherit;text-align:left;min-width:0}
+:root .app-shell[data-theme] .launcher-option[aria-pressed=true],:root .app-shell[data-theme] .launcher-option[aria-pressed=true]:hover:not(:disabled){border-color:var(--pink);background:var(--pink-soft)}
+.launcher-option img,.launcher-option>.icon{width:40px;height:40px;flex-shrink:0}
+.launcher-option span{overflow-wrap:anywhere}
+.launcher-list>p{grid-column:1/-1}
+.reorder-stack{position:fixed;left:0;top:0;z-index:140;pointer-events:none;aspect-ratio:360/518}
+.reorder-stack>.game-card{position:absolute;inset:0;transform:translateX(calc(var(--stack-index)*12px));box-shadow:0 8px 24px #0003}
+.reorder-stack .card-overlay,.reorder-flight .card-overlay{display:none}
+.game-grid>.reorder-landing{visibility:hidden}
+.reorder-flight{position:fixed;z-index:140;pointer-events:none;transform-origin:top left;margin:0}
+.game-grid>.game-card[hidden]{display:none}
+.reorder-gap{border:2px dashed var(--pink);border-radius:14px;background:var(--pink-soft)}
+@media(prefers-reduced-motion:reduce){.sort-direction{transition:none}}
+
+.setup-pagination{display:flex;justify-content:center;align-items:center;gap:16px;padding:6px}
+
+.setup-entry-field .setup-launcher-check{border:1px solid var(--button-line);border-radius:50%}
+.setup-entry-field .setup-launcher-check[aria-pressed=true]{color:var(--pink-dark);background:var(--pink-soft);border-color:var(--pink)}

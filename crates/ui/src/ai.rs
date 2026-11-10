@@ -341,6 +341,7 @@ pub(crate) fn choice_options(app: &App, field: &str) -> Vec<choices::OptionItem>
         } else {
             String::new()
         },
+        detail: String::new(),
         image: None,
     }));
     options

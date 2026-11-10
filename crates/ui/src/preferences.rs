@@ -27,9 +27,10 @@ pub(crate) fn remember_source(app: &mut App, context: &str, source: &str) {
     );
 }
 
-pub(crate) const SOURCES: [(&str, &str); 5] = [
+pub(crate) const SOURCES: [(&str, &str); 6] = [
     ("nextmoe", "鲲Gal"),
     ("vndb", "VNDB"),
+    ("erogamescape", "ErogameScape"),
     ("bangumi", "Bangumi"),
     ("ymgal", "月幕 Galgame"),
     ("2dfan", "2DFan"),
@@ -38,6 +39,7 @@ pub(crate) const SOURCES: [(&str, &str); 5] = [
 pub(crate) fn source_icon(source: &str) -> &'static str {
     match source {
         "vndb" => "assets/vndb.ico",
+        "erogamescape" => "assets/erogamescape.png",
         "bangumi" => "assets/bangumi.ico",
         "ymgal" => "assets/ymgal.ico",
         "nextmoe" => "assets/nextmoe.webp",
@@ -68,8 +70,8 @@ pub(crate) fn oauth_busy(app: &App) -> bool {
 }
 
 pub(crate) fn source_available(app: &App, source: &str) -> bool {
-    // NextMoe catalog 与 2DFan 默认公开可用；其余沿用已验证凭据的显示策略。
-    matches!(source, "2dfan" | "nextmoe")
+    // 公开查询无需凭据，首次语言选择的默认源也必须直接可用。
+    matches!(source, "2dfan" | "nextmoe" | "vndb" | "erogamescape")
         || (SOURCES.iter().any(|(id, _)| *id == source)
             && app.data_sources.iter().any(|status| status.source == source && status.configured))
 }
@@ -84,6 +86,9 @@ pub(crate) fn available_source<'a>(app: &'a App, preferred: &'a str) -> &'a str 
 pub(crate) fn source_for_url(url: &str) -> (&'static str, &'static str) {
     let source = if url.starts_with("https://vndb.org/") {
         "vndb"
+    } else if url.starts_with("https://erogamescape.dyndns.org/~ap2/ero/toukei_kaiseki/game.php?game=")
+        || url.starts_with("https://erogamescape.org/~ap2/ero/toukei_kaiseki/game.php?game=") {
+        "erogamescape"
     } else if url.starts_with("https://bgm.tv/") || url.starts_with("https://bangumi.tv/") {
         "bangumi"
     } else if url.starts_with("https://www.ymgal.games/") {
@@ -259,6 +264,7 @@ fn fan_account_card(html: &mut String, app: &App) {
 }
 
 fn source_card(html: &mut String, app: &App, source: &str, name: &str) {
+    let name = if source == "erogamescape" { t(app, "sources.erogamescape") } else { name };
     let configured = app
         .data_sources
         .iter()
@@ -269,6 +275,10 @@ fn source_card(html: &mut String, app: &App, source: &str, name: &str) {
         _ => "sources.public",
     };
     write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source_icon(source),name,if configured{"connected"}else{""},t(app,status)).unwrap();
+    if source == "erogamescape" {
+        write!(html, r#"<p class="field-help">{}</p><div class="account-actions">{}</div></section>"#, t(app, "sources.erogamescape_help"), button("open-resource", "https://erogamescape.dyndns.org/~ap2/ero/toukei_kaiseki/", "ErogameScape", "link", "quiet", app.busy())).unwrap();
+        return;
+    }
     if source == "ymgal" {
         write!(
             html,
@@ -670,6 +680,16 @@ fn about(html: &mut String, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_run_sources_are_usable_without_credentials() {
+        let app = App::default();
+        for source in ["nextmoe", "vndb", "erogamescape"] {
+            assert!(source_available(&app, source));
+            assert_eq!(available_source(&app, source), source);
+        }
+        assert_eq!(source_for_url("https://erogamescape.org/~ap2/ero/toukei_kaiseki/game.php?game=123").0, "erogamescape");
+    }
 
     #[test]
     fn source_pickers_only_offer_verified_credentials_and_public_sources() {

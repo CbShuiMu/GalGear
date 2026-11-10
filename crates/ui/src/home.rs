@@ -82,7 +82,6 @@ pub(crate) fn render(html: &mut String, app: &App) {
             "primary game-launch-button",
             app.busy()
                 || !game.available
-                || game.executable.is_none()
                 || app
                     .runtime
                     .get(&game.id)
@@ -98,15 +97,16 @@ pub(crate) fn render(html: &mut String, app: &App) {
         ));
         html.push_str(r#"<div class="home-game-status">"#);
         game_actions::render(html, app, game);
+        let last_played = game
+            .last_played
+            .map(|seconds| playtime::recent_date(app.settings.language, seconds))
+            .filter(|date| !date.is_empty());
         let _ = write!(
             html,
             r#"<span class="home-playtime">{}</span></div>"#,
-            game.last_played
-                .map(|date| crate::view::f(
-                    app,
-                    "home.last_played",
-                    &[("date", &playtime::date(date))]
-                ))
+            last_played
+                .as_deref()
+                .map(|date| crate::view::f(app, "home.last_played", &[("date", date)]))
                 .unwrap_or_else(|| t(app, "home.never_played").into())
         );
         html.push_str("</div></div></div>");

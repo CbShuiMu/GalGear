@@ -142,9 +142,26 @@ pub(crate) fn paint(app: &App) {
     context_menu::render(&mut html, app);
     choices::popup(&mut html, app);
     game_setup::render(&mut html, app);
+    crate::launcher_picker::render(&mut html, app);
     crate::updates::render(&mut html, app);
     crate::shortcut_picker::render(&mut html, app);
+    crate::startup::render(&mut html, app);
     html.push_str("</main>");
+    if app.library.scanning {
+        // 扫描提示随任务结束移除，不使用普通消息的定时消失机制。
+        let _ = write!(
+            html,
+            r#"<div id="library-import-toast" class="toast save-ai-toast" role="status" aria-atomic="true"><span>{}</span></div>"#,
+            f(
+                app,
+                "library.import_progress",
+                &[
+                    ("done", &app.library.scan_completed.to_string()),
+                    ("total", &app.library.scan_total.to_string()),
+                ]
+            )
+        );
+    }
     if let Some((message, error)) = &app.toast {
         write!(html, r#"<div class="toast {} {}" role="{}">{}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
             if *error { "error" } else { "" }, if message.key.starts_with("save.ai_") || message.key.starts_with("local_patches.") || message.key.starts_with("update.") || matches!(message.key.as_str(), "patches.nextmoe_download_key" | "patches.nextmoe_file_missing") { "save-ai-toast" } else { "" }, if *error { "alert" } else { "status" },

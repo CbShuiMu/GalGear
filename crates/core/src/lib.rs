@@ -17,6 +17,7 @@ pub mod game_details;
 pub mod game_setup;
 pub mod launcher_icons;
 pub mod library_import;
+pub mod library_order;
 pub mod patches;
 pub mod playtime;
 pub mod potatovn;
@@ -45,8 +46,11 @@ pub struct Settings {
     pub cover_overrides: BTreeMap<String, String>,
     pub card_size: u32,
     pub sort_by: String,
+    pub custom_order: Vec<String>,
     pub sort_descending: Option<bool>,
     pub language: Language,
+    /// 仅首次创建配置时为 true；旧配置缺失该字段时不触发首次语言选择。
+    pub initial_setup_pending: bool,
     pub game_edits: BTreeMap<String, GameEdit>,
     pub excluded_games: Vec<String>,
     /// 永久移除后仅保留扫描排除路径，显式重新导入时清除。
@@ -103,8 +107,10 @@ impl Default for Settings {
             cover_overrides: BTreeMap::new(),
             card_size: 200,
             sort_by: "title".into(),
+            custom_order: Vec::new(),
             sort_descending: None,
             language: Language::default(),
+            initial_setup_pending: false,
             game_edits: BTreeMap::new(),
             excluded_games: Vec::new(),
             excluded_paths: Vec::new(),
@@ -153,6 +159,7 @@ pub struct GameEdit {
     pub metadata_provider: String,
     pub setup_pending: bool,
     pub setup_confirmed: bool,
+    pub launcher_pending: bool,
     pub title: Option<String>,
     pub tags: Vec<String>,
     pub source_tags: Option<Vec<String>>,
@@ -184,6 +191,7 @@ impl Default for GameEdit {
             metadata_provider: String::new(),
             setup_pending: false,
             setup_confirmed: false,
+            launcher_pending: false,
             title: None,
             tags: Vec::new(),
             source_tags: None,
@@ -263,6 +271,10 @@ fn available_default() -> bool {
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ScanResult {
+    #[serde(default)]
+    pub units_completed: usize,
+    #[serde(default)]
+    pub units_total: usize,
     pub games: Vec<Game>,
     pub warnings: Vec<Message>,
     pub folders_scanned: usize,

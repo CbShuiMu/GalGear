@@ -59,12 +59,109 @@ function game(id = 'new') {
   return {id, title: id, folder: `F:/Fixture/${id}`, executable: `F:/Fixture/${id}/game.exe`, engine: 'unknown', modified: 0};
 }
 
+test('candidate dropdown renders separate escaped title, brand and release rows', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.dispatch('setup-search', 'new');
+  app.reply('search_metadata', [{title: 'Game <Title>', brand: 'Brand & Studio', release_date: '2003-02-28', url: 'https://vndb.org/v1'}]);
+  app.ui.dispatch('choice-toggle', 'setup-candidate:new');
+  assert.match(app.html, /<span class="choice-copy"><span>Game &lt;Title&gt;<\/span><small>Brand &amp; Studio<\/small><small>2003-02-28<\/small><\/span>/);
+});
+
+test('custom order is the last sort option', async () => {
+  const app = await emptyHome();
+  app.ui.dispatch('page', 'games');
+  app.ui.dispatch('choice-toggle', 'sort');
+  const options = [...app.html.matchAll(/class="choice-option[^>]*data-value="([^\"]+)"/g)].map(match => match[1]);
+  assert.equal(options.length, 5);
+  assert.equal(options.at(-1), '[&quot;sort&quot;,&quot;custom&quot;]');
+});
+
+test('first launch saves the sole executable without a picker and uses its fresh runtime status', async () => {
+  const app = await emptyHome();
+  const executable = 'F:/Fixture/new/only.exe';
+  app.settings.game_edits.new = {setup_confirmed: true, launcher_pending: true};
+  app.ui.library_devices_changed();
+  app.finishScan([{...game(), executable: null}]);
+  app.ui.runtime_updated(JSON.stringify({new: 'unknown'}));
+
+  app.ui.dispatch('launch', 'new');
+  assert.doesNotMatch(app.html, /id="launcher-title"/);
+  app.reply('list_game_executables', [{path: executable, name: 'only.exe', icon: null}]);
+  assert.doesNotMatch(app.html, /id="launcher-title"/);
+  assert.equal(app.requests.some(request => request.command === 'launch_game'), false);
+
+  app.settings.game_edits.new.launcher_pending = false;
+  assert.deepEqual(app.reply('confirm_game_executable', {
+    game: {...game(), executable}, settings: app.settings, runtime: 'stopped',
+  }), {id: 'new', executable});
+  assert.doesNotMatch(app.html, /launcher-title/);
+  assert.deepEqual(app.reply('launch_game', null), {id: 'new', mode: 'normal', confirmedUnknown: false});
+
+  app.ui.dispatch('launch', 'new');
+  assert.equal(app.requests.some(request => request.command === 'list_game_executables'), false);
+  assert.equal(app.reply('launch_game', null).id, 'new');
+});
+
+test('first launch waits for executable confirmation and failed saves remain retryable', async () => {
+  const app = await emptyHome();
+  app.settings.game_edits.new = {setup_confirmed: true, launcher_pending: true};
+  app.ui.library_devices_changed();
+  app.finishScan([{...game(), executable: null}]);
+  assert.doesNotMatch(app.html, /class="[^\"]*game-launch-button[^\"]*"[^>]*disabled/);
+  app.ui.runtime_updated(JSON.stringify({new: 'stopped'}));
+  app.ui.dispatch('launch-normal', 'new');
+  app.reply('list_game_executables', [
+    {path: 'F:/Fixture/new/game.exe', name: 'game.exe', icon: null},
+    {path: 'F:/Fixture/new/patch.exe', name: '汉化启动器.exe', icon: null},
+  ]);
+  assert.match(app.html, /class="launcher-list"/);
+  assert.match(app.html, /汉化启动器.exe/);
+  app.ui.dispatch('launcher-select', 'F:/Fixture/new/patch.exe');
+  app.ui.dispatch('launcher-save', '');
+  const index = app.requests.findIndex(request => request.command === 'confirm_game_executable');
+  assert.notEqual(index, -1);
+  const [failed] = app.requests.splice(index, 1);
+  app.ui.resolve(failed.id, false, JSON.stringify({key: 'error.operation', args: {}}));
+  assert.match(app.html, /class="launcher-list"/);
+  assert.equal(app.requests.some(request => request.command === 'launch_game'), false);
+  app.ui.dispatch('launcher-save', '');
+  app.settings.game_edits.new.launcher_pending = false;
+  app.reply('confirm_game_executable', {game: {...game(), executable: 'F:/Fixture/new/patch.exe'}, settings: app.settings});
+  assert.doesNotMatch(app.html, /class="launcher-list"/);
+  assert.equal(app.requests.some(request => request.command === 'launch_game'), true);
+});
+
+test('large setup renders a bounded page and scan progress accepts counters without game payloads', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.ui.scan_progress(JSON.stringify({folders_scanned: 13, completed: 12, total: 600}));
+  assert.match(app.html, /12\/600/);
+  assert.match(app.html, /id="library-import-toast" class="toast save-ai-toast"/);
+  assert.doesNotMatch(app.html, /<progress|class="import-progress"/);
+  app.ui.scan_progress(JSON.stringify({folders_scanned: 14, completed: 13, total: 600}));
+  assert.match(app.html, /13\/600/);
+  assert.doesNotMatch(app.html, /12\/600/);
+  const games = Array.from({length: 600}, (_, index) => game(`bulk-${index}`));
+  games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
+  app.finishScan(games);
+  assert.doesNotMatch(app.html, /id="library-import-toast"/);
+  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 40);
+  assert.match(app.html, /data-setup-game="bulk-0"/);
+  app.ui.dispatch('setup-page', '14');
+  assert.match(app.html, /data-setup-game="bulk-599"/);
+  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 40);
+  assert.doesNotMatch(app.html, /data-action="setup-browse"/);
+});
+
 test('first library added from empty home opens setup even without progress events', async () => {
   const app = await emptyHome();
   app.addFolder();
   app.settings.game_edits.new = {setup_pending: true};
   app.finishScan([game()]);
-  assert.match(app.html, /id="setup-title">确认游戏资料与启动器/);
+  assert.match(app.html, /id="setup-title">确认游戏资料/);
   assert.match(app.html, /data-setup-game="new"/);
   assert.doesNotMatch(app.html, /id="home-game-new"/);
 });
@@ -77,7 +174,7 @@ test('readded library displays every restored game awaiting confirmation', async
   app.ui.scan_progress(JSON.stringify({games, folders_scanned: 10}));
   app.finishScan(games);
   assert.equal((app.html.match(/data-setup-game=/g) || []).length, 10);
-  assert.match(app.html, /id="setup-title">确认游戏资料与启动器/);
+  assert.match(app.html, /id="setup-title">确认游戏资料/);
 });
 
 test('adding a folder again reopens games deferred on the empty home', async () => {

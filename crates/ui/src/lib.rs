@@ -17,6 +17,7 @@ mod downloads;
 mod events;
 mod features;
 mod game_setup;
+mod launcher_picker;
 mod icons;
 mod home;
 mod game_actions;
@@ -36,6 +37,7 @@ mod state;
 mod view;
 mod widgets;
 mod updates;
+mod startup;
 mod skill_update;
 
 pub use events::{

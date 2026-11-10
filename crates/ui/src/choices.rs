@@ -15,6 +15,7 @@ pub struct OptionItem {
     pub value: String,
     pub label: String,
     pub subtitle: String,
+    pub detail: String,
     pub image: Option<String>,
 }
 pub(crate) fn item(value: &str, label: &str) -> OptionItem {
@@ -22,6 +23,7 @@ pub(crate) fn item(value: &str, label: &str) -> OptionItem {
         value: value.into(),
         label: label.into(),
         subtitle: String::new(),
+        detail: String::new(),
         image: None,
     }
 }
@@ -51,6 +53,7 @@ pub fn options(app: &App, field: &str) -> Vec<OptionItem> {
             item("recent", t(app, "games.sort_recent")),
             item("last_played", t(app, "games.sort_last_played")),
             item("release", t(app, "games.sort_release")),
+            item("custom", t(app, "games.sort_custom")),
         ],
         "fan-mode" => vec![
             item("csrf", "authenticity_token / CSRF"),
@@ -82,6 +85,7 @@ pub fn options(app: &App, field: &str) -> Vec<OptionItem> {
                     value: g.id.clone(),
                     label: g.title.clone(),
                     subtitle: engine(app, g).into(),
+                    detail: String::new(),
                     image: app
                         .game_icons
                         .get(&g.id)
@@ -158,6 +162,9 @@ fn visual(html: &mut String, item: &OptionItem, game: bool) {
     if !item.subtitle.is_empty() {
         write!(html, "<small>{}</small>", esc(&item.subtitle)).unwrap();
     }
+    if !item.detail.is_empty() {
+        write!(html, "<small>{}</small>", esc(&item.detail)).unwrap();
+    }
     html.push_str("</span>");
 }
 
@@ -177,7 +184,7 @@ pub fn control(html: &mut String, app: &App, field: &str, label: &str, disabled:
     visual(
         html,
         selected,
-        matches!(field, "patch-game" | "patch-search-game" | "cloud-game"),
+        matches!(field, "patch-game" | "patch-search-game" | "cloud-game") || field.starts_with("setup-candidate:"),
     );
     html.push_str(&icon("chevron"));
     html.push_str("</button></div>");
@@ -212,6 +219,8 @@ pub fn popup(html: &mut String, app: &App) {
             "game-menu"
         } else if field == "magpie-mode" {
             "magpie-menu"
+        } else if field.starts_with("setup-candidate:") {
+            "setup-menu setup-candidate-menu"
         } else if field.starts_with("setup-") {
             "setup-menu"
         } else {
@@ -232,7 +241,7 @@ pub fn popup(html: &mut String, app: &App) {
         visual(
             html,
             option,
-            matches!(field, "patch-game" | "patch-search-game" | "cloud-game"),
+            matches!(field, "patch-game" | "patch-search-game" | "cloud-game") || field.starts_with("setup-candidate:"),
         );
         if selected {
             html.push_str(&icon("check"));

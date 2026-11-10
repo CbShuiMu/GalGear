@@ -451,6 +451,7 @@ pub(crate) fn choice_options(app: &App) -> Vec<choices::OptionItem> {
             value: game.id.clone(),
             label: game.title.clone(),
             subtitle: game.folder.clone(),
+            detail: String::new(),
             image: app
                 .game_icons
                 .get(&game.id)

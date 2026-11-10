@@ -107,16 +107,29 @@ pub(crate) fn save_preferences(
 ) -> Result<Settings, Message> {
     if !matches!(
         sort_by.as_str(),
-        "title" | "recent" | "release" | "last_played"
+        "title" | "recent" | "release" | "last_played" | "custom"
     ) {
         return Err(Message::new("error.sort"));
     }
+    let games = if sort_by == "custom" {
+        state
+            .catalog
+            .lock()
+            .map_err(|_| Message::new("error.catalog_state"))?
+            .games
+            .clone()
+    } else {
+        Vec::new()
+    };
     let mut settings = state
         .settings
         .lock()
         .map_err(|_| Message::new("error.config_state"))?;
     let mut next = settings.clone();
     next.card_size = card_size.clamp(160, 280);
+    if sort_by == "custom" {
+        galgear_core::library_order::reconcile(&mut next, &games);
+    }
     next.sort_by = sort_by;
     if let Some(descending) = sort_descending {
         next.sort_descending = Some(descending);
@@ -137,7 +150,7 @@ pub(crate) fn set_language(
         .lock()
         .map_err(|_| Message::new("error.config_state"))?;
     let mut next = settings.clone();
-    next.language = language;
+    galgear_core::config::select_language(&mut next, language);
     state.store.save(&next)?;
     *settings = next.clone();
     Ok(next)

@@ -125,6 +125,25 @@ pub fn registered_games(data: &Path) -> Result<BTreeMap<String, String>, Message
     index(data)
 }
 
+/// 只读检查该身份是否留有备份数据，包括旧 ID 目录及未完成的写入。
+/// 不解析或修复历史；无法读取时返回错误，供条目清理保守保留身份。
+pub fn has_game_data(data: &Path, game: &str) -> Result<bool, Message> {
+    for path in [directory(data, game)?, data.join(game)] {
+        super::migration::reject_links(&path)?;
+        match fs::read_dir(path) {
+            Ok(mut entries) => {
+                if let Some(entry) = entries.next() {
+                    entry.map_err(error)?;
+                    return Ok(true);
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => return Err(error(err)),
+        }
+    }
+    Ok(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{directory, register_game};

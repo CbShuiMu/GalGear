@@ -1,7 +1,8 @@
+import { installLibraryReorder } from "./library-reorder.js";
 // Only the DOM / WebAssembly / Tauri transport bridge lives in JavaScript.
 // Rendering, app state, event decisions and all application logic live in Rust.
 import init, * as ui from './pkg/galgear_ui.js';
-import {syncModalBoundary, topLayer, focusable} from './navigation.js';
+import {syncModalBoundary, syncUpdateDialogFocus, topLayer, focusable} from './navigation.js';
 import {startGamepad} from './gamepad.js';
 import {installCoverResolutions, syncCoverResolutions} from './cover-picker.js';
 import {installHomeNavigation, syncHomePresentation, captureHomeDetailCover, syncHomeDetailTransition, returnHomeDetail, cancelHomeDetailTransition} from './home.js';
@@ -17,6 +18,7 @@ let downloadNoticeTimer = null;
 let moreObserver = null;
 let previousChoice = null;
 let choiceScroll = 0;
+let revealChoiceOnPaint = false;
 let choiceReturnFocus = null;
 let restoringScroll = false;
 let libraryReturnFocus = null;
@@ -24,10 +26,12 @@ let previousLibraryDialog = false;
 let previousSetup = null;
 let setupReturnFocus = null;
 let previousEditor = false;
+let previousStartup = false;
 let previousContext = false;
 let contextReturnId = null;
 let editorReturnFocus = null;
 let dragPayload = '';
+let pendingReorder = null;
 let deferredDragFrame = null;
 let pointerDrag = null;
 let marqueeDrag = null;
@@ -174,7 +178,7 @@ function placeChoice() {
   const limited = menu.classList.contains('setup-menu') || menu.classList.contains('magpie-menu');
   menu.style.minWidth = `${minimumWidth}px`;
   menu.style.maxWidth = `${limited ? Math.max(minimumWidth, Math.min(560, availableWidth)) : availableWidth}px`;
-  menu.style.width = 'max-content';
+  menu.style.width = menu.classList.contains('setup-candidate-menu') ? `${minimumWidth}px` : 'max-content';
   const width = menu.getBoundingClientRect().width;
   menu.style.maxHeight = `${Math.min(340, innerHeight - 24)}px`;
   const height = menu.getBoundingClientRect().height;
@@ -243,6 +247,7 @@ function renderFrame(html) {
     const selectionDirection = active?.selectionDirection;
     const focusInChoice = !!active?.closest('.choice-popup') || active?.id === previousChoice;
     choiceScroll = document.querySelector('.choice-list')?.scrollTop || 0;
+    const previousChoiceValue = document.querySelector('.choice-option.active')?.dataset.value;
     const currentPage = document.getElementById('page-scroll');
     if (currentPage) pagePositions.set(currentPage.dataset.scrollKey, {
       top: currentPage.scrollTop, left: currentPage.scrollLeft,
@@ -320,9 +325,13 @@ function renderFrame(html) {
     if (choice) {
       placeChoice();
       const list = document.getElementById('choice-list');
-      if (list) list.scrollTop = choiceScroll;
+      if (list) list.scrollTop = choiceId === previousChoice ? choiceScroll : 0;
       if (choiceId !== previousChoice) (document.getElementById('choice-query') || list)?.focus({ preventScroll: true });
-      document.querySelector('.choice-option.active')?.scrollIntoView({ block: 'nearest' });
+      const activeOption = document.querySelector('.choice-option.active');
+      // Background paints preserve wheel scrolling; only navigation reveals the active item.
+      if (revealChoiceOnPaint || choiceId !== previousChoice || activeOption?.dataset.value !== previousChoiceValue) {
+        activeOption?.scrollIntoView({ block: 'nearest' });
+      }
     } else if (previousChoice && focusInChoice) choiceReturnFocus = previousChoice;
     if (!choice && choiceReturnFocus) {
       if (focusId && !['choice-list', 'choice-query', choiceReturnFocus].includes(focusId)) choiceReturnFocus = null;
@@ -395,6 +404,14 @@ function renderFrame(html) {
     if (closingDetail) {
       (document.getElementById(`home-game-${dialogReturnFocus}`) || document.getElementById(`game-${dialogReturnFocus}`))?.focus({ preventScroll: true });
     }
+    syncUpdateDialogFocus(active);
+    const startupDialog = document.querySelector('.startup-dialog');
+    if (startupDialog && !startupDialog.contains(document.activeElement)) {
+      startupDialog.querySelector('button:not(:disabled)')?.focus({preventScroll:true});
+    } else if (!startupDialog && previousStartup) {
+      focusable()[0]?.focus({preventScroll:true});
+    }
+    previousStartup = !!startupDialog;
     syncHomePresentation();
     syncCoverResolutions();
     syncHomeDetailTransition(homeCover);
@@ -499,6 +516,8 @@ window.GalGearBridge = {
     else console.error(message);
   },
   async request(id, command, payload) {
+    const reorder = command === "reorder_games" ? pendingReorder : null;
+    if (reorder) reorder.started = true;
     try {
       if (!window.__TAURI__?.core) throw { key: 'error.desktop', args: {} };
       const result = await (window.GalGearDiagnostics?.invoke || window.__TAURI__.core.invoke)(command, JSON.parse(payload));
@@ -508,6 +527,9 @@ window.GalGearBridge = {
       const payload = error && typeof error === 'object' && 'key' in error
         ? JSON.stringify(error) : String(error);
       queueMicrotask(() => ui.resolve(id, false, payload));
+    } finally {
+      reorder?.resolve();
+      if (reorder && pendingReorder === reorder) pendingReorder = null;
     }
   }
 };
@@ -642,9 +664,15 @@ document.addEventListener('keydown', event => {
     nodes[index]?.focus({preventScroll:true});event.preventDefault();return;
   }
   const choice = event.target.closest('.choice-popup,.choice-trigger');
-  if (choice && ui.choice_key(choice.dataset.choiceAnchor || choice.id, event.key)) { event.preventDefault(); return; }
+  if (choice) {
+    // Home/End must also reveal an unchanged active item after manual scrolling.
+    revealChoiceOnPaint = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'].includes(event.key);
+    const handled = ui.choice_key(choice.dataset.choiceAnchor || choice.id, event.key);
+    revealChoiceOnPaint = false;
+    if (handled) { event.preventDefault(); return; }
+  }
   if (event.key === 'Escape') {
-    const action = document.querySelector('.update-dialog') ? 'update-cancel' : document.querySelector('.tag-remove-dialog') ? 'detail-tag-remove-cancel' : document.querySelector('.snapshot-delete-dialog') ? 'cancel-action' : document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.archive-dialog') ? 'close-archive' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
+    const action = document.querySelector('.update-dialog') ? 'update-cancel' : document.querySelector('.tag-remove-dialog') ? 'detail-tag-remove-cancel' : document.querySelector('.snapshot-delete-dialog') ? 'cancel-action' : document.querySelector('.setup-overlay') ? 'setup-defer-all' : document.querySelector('.ai-summary-dialog') ? 'summary-close' : document.querySelector('.launcher-dialog') ? 'launcher-close' : document.querySelector('.library-overlay') ? 'library-close' : document.querySelector('.restore-dialog') ? 'close-history' : document.querySelector('.archive-dialog') ? 'close-archive' : document.querySelector('.editor-overlay') ? 'editor-close' : document.querySelector('.game-context-menu') ? 'context-close' : document.querySelector('.reference-detail.editing') ? 'detail-cancel' : 'close-detail';
     if (action === 'close-detail') closeDetail();
     else ui.dispatch(action, '');
     event.preventDefault();
@@ -889,6 +917,19 @@ document.addEventListener('dragend', () => {
 document.addEventListener('scroll', event => {
   if (wasmReady && !restoringScroll && event.target.isConnected && document.querySelector('.choice-popup') && event.target.matches?.('.page-scroll,.detail-scroll,.setup-table-scroll')) ui.dispatch('choice-close', '');
 }, true);
+
+installLibraryReorder({
+  idsFor: id => ui.library_drag_ids(id),
+  start: payload => { pointerDrag = null; finishMarquee(false); dragPayload = payload; suppressCardClickUntil = Infinity; document.getSelection()?.removeAllRanges(); },
+  finish: () => { dragPayload = ''; suppressCardClickUntil = performance.now() + 400; if (deferredDragFrame) { const html = deferredDragFrame; deferredDragFrame = null; window.GalGearBridge.render(html); } },
+  // Landing keeps DOM rendering deferred until persistence has either succeeded or failed.
+  commit: (ids, before) => new Promise(resolve => {
+    const completion = { resolve, started: false };
+    pendingReorder = completion;
+    ui.dispatch('library-reorder', JSON.stringify({ ids, before }));
+    if (!completion.started) { pendingReorder = null; resolve(); }
+  })
+});
 
 try {
   await init(); wasmReady = true;

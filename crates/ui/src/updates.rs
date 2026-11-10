@@ -122,10 +122,10 @@ pub(crate) fn resolve(app: &mut App, kind: &Pending, success: bool, payload: &st
             show_toast(app, error, true);
         }
     } else if matches!(kind, Pending::Update | Pending::BackgroundUpdate) {
-        match serde_json::from_str(payload) {
+        match serde_json::from_str::<Release>(payload) {
             Ok(release) => {
+                app.update.dialog_open = !background || release.available;
                 app.update.release = Some(release);
-                app.update.dialog_open = !background;
                 app.update.check_error = None;
             }
             Err(error) => {
@@ -153,19 +153,26 @@ pub(crate) fn render(html: &mut String, app: &App) {
     html.push_str(&button(
         "update-cancel",
         "",
-        t(app, "common.close"),
+        t(
+            app,
+            if release.available {
+                "update.later"
+            } else {
+                "common.close"
+            },
+        ),
         "",
         "quiet",
         app.update.installing,
     ));
-    if release.available && release.asset.is_some() {
+    if release.available {
         html.push_str(&button(
             "update-confirm",
             "",
             t(app, "update.install"),
             "update",
             "primary",
-            app.update.installing,
+            app.update.installing || release.asset.is_none(),
         ));
     }
     html.push_str("</footer></section></div>");
@@ -175,7 +182,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
 mod tests {
     use super::*;
     #[test]
-    fn background_check_is_nonblocking_and_cancel_keeps_the_notice() {
+    fn startup_prompts_for_an_update_and_deferring_keeps_the_notice() {
         let mut app = App::default();
         crate::bridge::take_requests();
         check_on_startup(&mut app);
@@ -192,12 +199,77 @@ mod tests {
         assert_eq!(pending_count(&app), 1);
         let mut html = String::new();
         render(&mut html, &app);
+        assert!(html.contains("update-overlay"));
+        assert!(html.contains("v9.0.0"));
+        let footer = html.split("<footer").nth(1).unwrap();
+        assert!(footer.find("稍后处理").unwrap() < footer.find("立即更新").unwrap());
+        assert!(crate::bridge::take_requests().is_empty());
+        dispatch(&mut app, "update-cancel");
+        html.clear();
+        render(&mut html, &app);
         assert!(html.is_empty());
         dispatch(&mut app, "update-confirm");
         assert!(crate::bridge::take_requests().is_empty());
-        dispatch(&mut app, "update-cancel");
         assert_eq!(pending_count(&app), 1);
         assert!(app.toast.is_none());
+    }
+
+    #[test]
+    fn startup_stays_quiet_when_no_new_version_is_available() {
+        let mut app = App::default();
+        check_on_startup(&mut app);
+        resolve(
+            &mut app,
+            &Pending::BackgroundUpdate,
+            true,
+            r#"{"version":"v0.3.0","available":false,"asset":null}"#,
+        );
+        let mut html = String::new();
+        render(&mut html, &app);
+        assert!(html.is_empty());
+        assert_eq!(pending_count(&app), 0);
+        assert!(app.toast.is_none());
+    }
+
+    #[test]
+    fn startup_confirmation_installs_only_once_after_a_click() {
+        let mut app = App::default();
+        check_on_startup(&mut app);
+        crate::bridge::take_requests();
+        resolve(
+            &mut app,
+            &Pending::BackgroundUpdate,
+            true,
+            r#"{"version":"v9.0.0","available":true,"asset":{}}"#,
+        );
+        assert!(crate::bridge::take_requests().is_empty());
+        dispatch(&mut app, "update-confirm");
+        dispatch(&mut app, "update-confirm");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "install_update");
+        assert_eq!(requests[0].2, json!({"version":"v9.0.0"}).to_string());
+    }
+
+    #[test]
+    fn missing_asset_shows_the_notice_but_disables_installation() {
+        let mut app = App::default();
+        check_on_startup(&mut app);
+        crate::bridge::take_requests();
+        resolve(
+            &mut app,
+            &Pending::BackgroundUpdate,
+            true,
+            r#"{"version":"v9.0.0","available":true,"asset":null}"#,
+        );
+        let mut html = String::new();
+        render(&mut html, &app);
+        assert!(html.contains("update-overlay"));
+        assert!(html.contains(t(&app, "update.unavailable")));
+        let confirm = html.split("data-action=\"update-confirm\"").nth(1).unwrap();
+        assert!(confirm.split('>').next().unwrap().contains("disabled"));
+        dispatch(&mut app, "update-confirm");
+        assert!(crate::bridge::take_requests().is_empty());
     }
 
     #[test]

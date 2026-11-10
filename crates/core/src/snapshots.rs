@@ -3,7 +3,7 @@ mod migration;
 mod storage;
 pub use migration::{copy_history, game_data, migrate};
 use storage::directory;
-pub use storage::{register_game, registered_games};
+pub use storage::{has_game_data, register_game, registered_games};
 
 use crate::{config::display_path, runtime::Status};
 use galgear_i18n::Message;

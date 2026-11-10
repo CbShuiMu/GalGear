@@ -1,3 +1,4 @@
+use crate::catalog::identity::InstalledGames;
 use crate::config::display_path;
 use crate::{Game, ScanResult, Settings};
 use base64::Engine;
@@ -24,27 +25,83 @@ pub fn scan_with(
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(&ScanResult),
 ) -> ScanResult {
-    scan_incremental(settings, &ScanResult::default(), cancel, progress)
+    scan_refresh(settings, &ScanResult::default(), cancel, progress)
 }
+/// 增量扫描复用已有身份和未变化的文件缓存，手动条目也参与身份匹配。
 pub fn scan_incremental(
     settings: &Settings,
     previous: &ScanResult,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(&ScanResult),
 ) -> ScanResult {
-    let cache: BTreeMap<_, _> = previous
-        .games
+    scan_known(settings, previous, cancel, progress, true)
+}
+
+/// 全量重新读取文件与封面，同时沿用已有安装记录的身份及启动项。
+pub fn scan_refresh(
+    settings: &Settings,
+    previous: &ScanResult,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(&ScanResult),
+) -> ScanResult {
+    scan_known(settings, previous, cancel, progress, false)
+}
+
+struct ScanCache<'a> {
+    installed: InstalledGames<'a>,
+    reuse_files: bool,
+}
+
+fn scan_known(
+    settings: &Settings,
+    previous: &ScanResult,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(&ScanResult),
+    reuse_files: bool,
+) -> ScanResult {
+    let cache = ScanCache {
+        installed: InstalledGames::new(&previous.games, settings),
+        reuse_files,
+    };
+    // 以每个库的直属目录作为进度单位，避免资源子目录挤占游戏导入进度。
+    let root_units: Vec<_> = settings
+        .library_folders
         .iter()
-        .map(|g| (g.folder.to_lowercase(), g))
+        .map(|root| {
+            fs::read_dir(root)
+                .map(|entries| {
+                    entries
+                        .filter_map(Result::ok)
+                        .filter(|entry| {
+                            entry
+                                .file_type()
+                                .is_ok_and(|kind| kind.is_dir() && !kind.is_symlink())
+                                && !skip_folder(&entry.file_name().to_string_lossy())
+                        })
+                        .count()
+                        .max(1)
+                })
+                .unwrap_or(1)
+        })
         .collect();
-    let mut result = ScanResult::default();
+    let mut result = ScanResult {
+        units_total: root_units.iter().sum(),
+        ..Default::default()
+    };
+    progress(&result);
     let mut seen = HashSet::new();
-    for root in &settings.library_folders {
+    for (root, units) in settings.library_folders.iter().zip(root_units) {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
         let root = Path::new(root);
+        let completed_before = result.units_completed;
         if !root.is_dir() {
             result
                 .warnings
                 .push(Message::new("warnings.library").arg("path", root.display()));
+            result.units_completed += 1;
+            progress(&result);
             continue;
         }
         visit(
@@ -59,7 +116,15 @@ pub fn scan_incremental(
             progress,
             &cache,
         );
+        if !cancel.load(Ordering::Relaxed) {
+            result.units_completed = completed_before + units;
+            progress(&result);
+        }
     }
+    if !cancel.load(Ordering::Relaxed) {
+        result.units_completed = result.units_total;
+    }
+    progress(&result);
     // Nested executable folders belonging to one game share its identity.
     let mut grouped: BTreeMap<String, Game> = BTreeMap::new();
     for game in result.games.drain(..) {
@@ -88,7 +153,7 @@ fn visit(
     result: &mut ScanResult,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(&ScanResult),
-    cache: &BTreeMap<String, &Game>,
+    cache: &ScanCache<'_>,
 ) {
     if cancel.load(Ordering::Relaxed) {
         return;
@@ -171,8 +236,11 @@ fn visit(
             "{:x}",
             Sha256::digest(display_path(&identity).to_lowercase().as_bytes())
         );
-        // 手动导入、重新定位后的条目沿用已有身份，热插拔扫描不会制造副本。
-        let id = cache.get(&display_path(dir).to_lowercase()).map(|game| game.id.clone()).unwrap_or(id);
+        let detected_executable = executable.as_deref().map(display_path);
+        let existing = cache
+            .installed
+            .find(&display_path(dir), detected_executable.as_deref());
+        let id = existing.map(|game| game.id.clone()).unwrap_or(id);
         let title = clean_title(&file_name(folder));
         let mut stamp = Sha256::new();
         let override_path = settings.cover_overrides.get(&id).map(PathBuf::from);
@@ -198,10 +266,11 @@ fn visit(
             }
         }
         let scan_stamp = format!("{:x}", stamp.finalize());
-        if let Some(game) = cache.get(&display_path(dir).to_lowercase())
+        if let Some(game) = existing
+            && cache.reuse_files
             && game.scan_stamp == scan_stamp
         {
-            result.games.push((*game).clone());
+            result.games.push(game.clone());
             progress(result);
             if executable.is_some() {
                 return;
@@ -224,7 +293,9 @@ fn visit(
                 title,
                 folder: display_path(dir),
                 library: display_path(root),
-                executable: executable.as_ref().map(|p| display_path(p)),
+                executable: existing
+                    .and_then(|game| game.executable.clone())
+                    .or(detected_executable),
                 engine: detect_engine(&files, &children),
                 play_status: Default::default(),
                 cover,
@@ -253,6 +324,9 @@ fn visit(
     }
     let container = is_collection(&file_name(dir)) || looks_like_container(&children);
     for child in children {
+        if cancel.load(Ordering::Relaxed) {
+            break;
+        }
         let child_unit = if depth == 0 || container {
             if is_collection(&file_name(&child)) {
                 None
@@ -274,6 +348,10 @@ fn visit(
             progress,
             cache,
         );
+        if depth == 0 {
+            result.units_completed = (result.units_completed + 1).min(result.units_total);
+            progress(result);
+        }
     }
 }
 
@@ -522,6 +600,37 @@ mod tests {
     fn file(path: &Path) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, []).unwrap();
+    }
+
+    #[test]
+    fn large_library_reports_all_folders_and_supports_cancellation() {
+        let temp = tempfile::tempdir().unwrap();
+        for index in 0..600 {
+            let dir = temp.path().join(format!("Game {index:03}"));
+            fs::create_dir(&dir).unwrap();
+            fs::write(dir.join("game.exe"), b"fixture").unwrap();
+            fs::write(dir.join("data.xp3"), b"fixture").unwrap();
+        }
+        let settings = Settings {
+            library_folders: vec![display_path(temp.path())],
+            ..Default::default()
+        };
+        let cancel = AtomicBool::new(false);
+        let mut last = 0;
+        let result = scan_with(&settings, &cancel, &mut |progress| {
+            assert_eq!(progress.units_total, 600);
+            assert!(progress.units_completed >= last && progress.units_completed <= 600);
+            last = progress.units_completed;
+        });
+        assert_eq!(result.games.len(), 600);
+        assert_eq!(last, 600);
+        let partial = scan_with(&settings, &cancel, &mut |progress| {
+            if progress.units_completed >= 12 {
+                cancel.store(true, Ordering::Relaxed);
+            }
+        });
+        assert_eq!(partial.units_completed, 12);
+        assert_eq!(partial.games.len(), 12);
     }
 
     #[test]

@@ -121,6 +121,9 @@ pub fn set_data_source(
     })
 }
 pub async fn credentials_for(state: &AppState, source: &str) -> Result<Credentials, Message> {
+    if source == "erogamescape" {
+        return Ok(Credentials::default());
+    }
     let path = state.store.path.clone();
     let source = source.to_owned();
     tauri::async_runtime::spawn_blocking(move || {

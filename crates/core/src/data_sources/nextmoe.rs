@@ -75,7 +75,11 @@ fn parse_search(value: &Value) -> Result<Vec<Resource>, Message> {
             if work["object"] != "work" || title.trim().is_empty() {
                 return Err(api_error("Invalid NextMoe work"));
             }
+            let preview = parse_metadata(work, &work_url(id))?;
             Ok(Resource {
+                cover_url: preview.cover_url,
+                brand: preview.brand,
+                release_date: preview.release_date,
                 title,
                 url: work_url(id),
                 source: "nextmoe".into(),
@@ -106,7 +110,7 @@ pub(super) fn search(
         ("q", query),
         ("limit", "20"),
         ("nsfw", "true"),
-        ("include", "titles"),
+        ("include", "titles,companies"),
     ]))?;
     parse_search(&value)
 }
@@ -158,7 +162,7 @@ pub(super) fn aliases(
             ("q", query),
             ("limit", "20"),
             ("nsfw", "true"),
-            ("include", "titles"),
+            ("include", "titles,companies"),
         ]))?;
         let Some(work) = matching_work(&results, query)? else {
             return Ok(Vec::new());

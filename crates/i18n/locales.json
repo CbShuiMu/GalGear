@@ -2784,10 +2784,25 @@
     "ja-JP": "プレイ時間",
     "en-US": "Play time"
   },
-  "detail.playtime_value": {
-    "zh-CN": "{hours} 小时",
-    "ja-JP": "{hours} 時間",
-    "en-US": "{hours} h"
+  "playtime.hours": {
+    "zh-CN": "{value} 小时",
+    "ja-JP": "{value} 時間",
+    "en-US": "{value} h"
+  },
+  "playtime.minutes": {
+    "zh-CN": "{value} 分钟",
+    "ja-JP": "{value} 分",
+    "en-US": "{value} min"
+  },
+  "playtime.compact_hours": {
+    "zh-CN": "{value}h",
+    "ja-JP": "{value}h",
+    "en-US": "{value}h"
+  },
+  "playtime.compact_minutes": {
+    "zh-CN": "{value}分",
+    "ja-JP": "{value}分",
+    "en-US": "{value}m"
   },
   "date.today": {
     "zh-CN": "今天",
@@ -2885,9 +2900,9 @@
     "en-US": "Search and add tags, staff or studios"
   },
   "setup.title": {
-    "zh-CN": "确认游戏资料与启动器",
-    "ja-JP": "ゲーム情報と起動ファイルの確認",
-    "en-US": "Confirm game details and launcher"
+      "zh-CN": "确认游戏资料",
+      "ja-JP": "ゲーム情報を確認",
+      "en-US": "Confirm game information"
   },
   "setup.remaining": {
     "zh-CN": "还有 {count} 款游戏待确认",
@@ -2990,9 +3005,9 @@
     "en-US": "Launcher for {name}"
   },
   "setup.confirm_for": {
-    "zh-CN": "确认{name}的启动器",
-    "ja-JP": "{name}の起動ファイルを確認",
-    "en-US": "Confirm launcher for {name}"
+      "zh-CN": "确认 {name} 的词条",
+      "ja-JP": "{name} の項目を確認",
+      "en-US": "Confirm entry for {name}"
   },
   "tags.clear_filter": {
     "zh-CN": "清除标签筛选",
@@ -3045,9 +3060,9 @@
     "en-US": "Fetching and saving…"
   },
   "setup.confirm_required": {
-    "zh-CN": "请先确认游戏启动器位置。",
-    "ja-JP": "起動ファイルの場所を確認してください。",
-    "en-US": "Confirm the game launcher's location first."
+      "zh-CN": "请先确认对应词条",
+      "ja-JP": "対応する項目を確認してください",
+      "en-US": "Confirm the matching entry first"
   },
   "setup.entry_required": {
     "zh-CN": "请选择当前数据源中的对应词条。",
@@ -3995,9 +4010,14 @@
     "en-US": "Update now? Current tasks will stop, application files will be downloaded and replaced, and GalGear will restart."
   },
   "update.install": {
-    "zh-CN": "确认更新",
-    "ja-JP": "更新する",
-    "en-US": "Confirm update"
+    "zh-CN": "立即更新",
+    "ja-JP": "今すぐ更新",
+    "en-US": "Update now"
+  },
+  "update.later": {
+    "zh-CN": "稍后处理",
+    "ja-JP": "後で",
+    "en-US": "Later"
   },
   "update.complete": {
     "zh-CN": "更新完成",
@@ -4668,5 +4688,63 @@
     "zh-CN": "按游戏名称分类，备份名称使用本地保存时间。同一分钟的多份备份会追加编号。旧历史会校验后迁移。",
     "ja-JP": "ゲーム名ごとに分類し、保存時刻をバックアップ名に使います。同じ分のバックアップには連番を付けます。既存の履歴は検証後に移行します。",
     "en-US": "Grouped by game name and named with local save time. Backups within the same minute receive a suffix. Existing history is verified before migration."
+  },
+  "setup.name": {
+      "zh-CN": "游戏名称",
+      "ja-JP": "ゲーム名",
+      "en-US": "Game name"
+  },
+  "games.sort_custom": {
+      "zh-CN": "自定排序",
+      "ja-JP": "カスタム順",
+      "en-US": "Custom order"
+  },
+  "launcher.title": {
+      "zh-CN": "选择游戏启动程序",
+      "ja-JP": "起動プログラムを選択",
+      "en-US": "Choose a game executable"
+  },
+  "launcher.empty": {
+      "zh-CN": "游戏目录中没有可用的 EXE 文件",
+      "ja-JP": "ゲームフォルダーに EXE ファイルがありません",
+      "en-US": "No EXE files found in the game folder"
+  },
+  "library.import_progress": {
+      "zh-CN": "正在导入 {done}/{total}",
+      "ja-JP": "インポート中 {done}/{total}",
+      "en-US": "Importing {done}/{total}"
+  },
+  "setup.page": {
+      "zh-CN": "第 {page}/{total} 页",
+      "ja-JP": "{page}/{total} ページ",
+      "en-US": "Page {page}/{total}"
+  },
+  "common.unknown": {"zh-CN": "未知", "ja-JP": "不明", "en-US": "Unknown"},
+  "common.previous": {"zh-CN": "上一页", "ja-JP": "前へ", "en-US": "Previous"},
+  "common.next": {"zh-CN": "下一页", "ja-JP": "次へ", "en-US": "Next"},
+  "sources.erogamescape": {
+    "zh-CN": "批评空间",
+    "ja-JP": "批評空間",
+    "en-US": "ErogameScape"
+  },
+  "sources.erogamescape_help": {
+    "zh-CN": "日本 Galgame 资料平台。无需登录即可查询游戏名称、品牌、发售日期及类型。",
+    "ja-JP": "日本のゲーム情報データベースです。ログインせずに作品名・ブランド・発売日・ジャンルを検索できます。",
+    "en-US": "Japanese game database. Search titles, brands, release dates and genres without signing in."
+  },
+  "startup.title": {
+    "zh-CN": "选择语言 / Language / 言語",
+    "ja-JP": "选择语言 / Language / 言語",
+    "en-US": "选择语言 / Language / 言語"
+  },
+  "startup.help": {
+    "zh-CN": "选择界面语言，之后可在设置中修改。",
+    "ja-JP": "表示言語を選択してください。後から設定で変更できます。",
+    "en-US": "Choose your interface language. You can change it later in Settings."
+  },
+  "startup.default_source": {
+    "zh-CN": "默认数据源：鲲Gal（NextMoe）",
+    "ja-JP": "既定のデータソース：批評空間",
+    "en-US": "Default data source: VNDB"
   }
 }

@@ -11,6 +11,7 @@ use std::{collections::BTreeMap, collections::BTreeSet, fmt::Write};
 #[derive(Default)]
 pub(crate) struct State {
     pub open: bool,
+    page: usize,
     rows: Vec<Draft>,
     deferred: BTreeSet<String>,
 }
@@ -42,11 +43,7 @@ impl Draft {
             && !self.source.is_empty()
             && !self.url.is_empty()
             && self.confirmed
-            && self
-                .executable
-                .trim()
-                .to_ascii_lowercase()
-                .ends_with(".exe")
+
     }
 }
 
@@ -92,17 +89,17 @@ pub(crate) fn sync_default_source(app: &mut App) {
 }
 
 pub(crate) fn sync(app: &mut App) {
-    app.setup
-        .rows
-        .retain(|row| app.catalog.games.iter().any(|game| game.id == row.id));
-    if !app.initialized || app.busy() {
+    let game_ids: BTreeSet<_> = app.catalog.games.iter().map(|game| game.id.as_str()).collect();
+    app.setup.rows.retain(|row| game_ids.contains(row.id.as_str()));
+    if !app.initialized || app.busy() || app.library.scanning {
         return;
     }
+    let row_ids: BTreeSet<_> = app.setup.rows.iter().map(|row| row.id.as_str()).collect();
     let additions: Vec<_> = app
         .catalog
         .games
         .iter()
-        .filter(|game| needed(app, game) && !app.setup.rows.iter().any(|row| row.id == game.id))
+        .filter(|game| needed(app, game) && !row_ids.contains(game.id.as_str()))
         .map(|game| {
             let url = game
                 .metadata
@@ -180,6 +177,7 @@ pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
         row.searched = false;
         row.search_request = None;
         row.url.clear();
+        row.confirmed = false;
     } else if !query && row.executable != value {
         row.executable = value.into();
         row.confirmed = false;
@@ -205,7 +203,7 @@ fn pump(app: &mut App) {
         };
         row.queued = false;
         row.saving = true;
-        let payload = json!({"id":row.id,"source":row.source,"url":row.url,"executable":row.executable,"confirmed":row.confirmed});
+        let payload = json!({"id":row.id,"source":row.source,"url":row.url,"executable":"","confirmed":row.confirmed});
         let id = row.id.clone();
         issue(app, Pending::SetupSave(id), "complete_game_setup", payload);
     }
@@ -216,6 +214,10 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         return false;
     }
     if !app.setup.open {
+        return true;
+    }
+    if action == "setup-page" {
+        if let Ok(page) = value.parse::<usize>() { app.setup.page = page.min(app.setup.rows.len().saturating_sub(1) / 40); app.choices.open = None; }
         return true;
     }
     if action == "setup-defer-all" {
@@ -279,6 +281,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             row.search_request = Some(app.requests.next_id());
             row.candidates.clear();
             row.url.clear();
+        row.confirmed = false;
             row.searched = false;
             row.error = None;
             let (id, source, query) = (row.id.clone(), row.source.clone(), row.query.clone());
@@ -296,6 +299,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 .any(|candidate| candidate.url == selected)
             {
                 row.url = selected.into();
+                row.confirmed = false;
                 row.error = None;
             }
         }
@@ -358,7 +362,7 @@ pub(crate) fn resolve(
                     row.searched = true;
                     if automatic && let Some(candidate) = row.candidates.first() {
                         row.url = candidate.url.clone();
-                        row.confirmed = row.executable.trim().to_ascii_lowercase().ends_with(".exe");
+                        row.confirmed = true;
                         if !row.can_save() {
                             row.error = Some(Message::new("setup.executable_required"));
                         }
@@ -418,6 +422,7 @@ fn change_source(row: &mut Draft, source: &str) {
     if row.source == source { return; }
     row.source = source.into();
     row.url.clear();
+    row.confirmed = false;
     row.candidates.clear();
     row.search_request = None;
     row.searched = false;
@@ -488,7 +493,12 @@ pub(crate) fn choice_options(app: &App, field: &str) -> Vec<choices::OptionItem>
     let mut options: Vec<_> = row
         .candidates
         .iter()
-        .map(|candidate| choices::item(&candidate.url, &candidate.title))
+        .map(|candidate| choices::OptionItem {
+            value: candidate.url.clone(), label: candidate.title.clone(),
+            subtitle: if candidate.brand.is_empty() { t(app, "common.unknown") } else { &candidate.brand }.into(),
+            detail: if candidate.release_date.is_empty() { t(app, "common.unknown") } else { &candidate.release_date }.into(),
+            image: candidate.cover_url.clone().filter(|url| url.starts_with("https://") || url.starts_with("http://")),
+        })
         .collect();
     if !row.url.is_empty()
         && !options.iter().any(|option| option.value == row.url)
@@ -505,12 +515,12 @@ pub(crate) fn render(html: &mut String, app: &App) {
     }
     let busy = app.setup.busy();
     let ready = app.setup.rows.iter().filter(|row| row.can_save()).count();
-    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help"><span>{}</span>{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table"><thead><tr>"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),t(app,"setup.batch_help"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button("setup-auto","",t(app,"setup.auto"),"search","quiet",busy))).unwrap();
+    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help">{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table"><thead><tr>"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button("setup-auto","",t(app,"setup.auto"),"search","quiet",busy))).unwrap();
     for key in [
         "setup.game",
         "setup.source",
+        "setup.name",
         "setup.entry",
-        "setup.executable",
     ] {
         write!(html, "<th scope=\"col\">{}</th>", t(app, key)).unwrap();
     }
@@ -521,7 +531,8 @@ pub(crate) fn render(html: &mut String, app: &App) {
         .iter()
         .map(|game| (game.id.as_str(), game))
         .collect();
-    for row in &app.setup.rows {
+    let page = app.setup.page.min(app.setup.rows.len().saturating_sub(1) / 40);
+    for row in app.setup.rows.iter().skip(page * 40).take(40) {
         let Some(game) = games.get(row.id.as_str()) else {
             continue;
         };
@@ -548,6 +559,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
             row.locked(),
         );
         write!(html,r#"</td><td><div class="setup-row-field"><input id="setup-query-{}" data-input="setup-query:{}" value="{}" aria-label="{}" autocomplete="off" {}/><button class="icon-button" data-action="setup-search" data-value="{}" aria-label="{}" title="{}" {}>{}</button></div>"#,esc(&row.id),esc(&row.id),esc(&row.query),f(app,"setup.search_for",&[("name",&game.title)]),disabled,esc(&row.id),t(app,"metadata.search"),t(app,"metadata.search"),if row.locked()||row.source.is_empty()||row.query.trim().is_empty()||row.search_request.is_some(){"disabled"}else{""},icon("search")).unwrap();
+        html.push_str("</td><td><div class=\"setup-entry-field\">");
         choices::control(
             html,
             app,
@@ -567,12 +579,16 @@ pub(crate) fn render(html: &mut String, app: &App) {
             )
             .unwrap();
         }
-        write!(html,r#"</td><td><div class="setup-row-field"><input id="setup-executable-{}" data-input="setup-executable:{}" value="{}" title="{}" aria-label="{}" spellcheck="false" {}/><button class="icon-button" data-action="setup-browse" data-value="{}" title="{}" aria-label="{}" {}>{}</button><button type="button" class="icon-button setup-launcher-check" data-action="setup-confirm-launcher" data-value="{}" aria-pressed="{}" aria-label="{}" title="{}" {}>{}</button></div></td></tr>"#,esc(&row.id),esc(&row.id),esc(&row.executable),esc(&row.executable),f(app,"setup.executable_for",&[("name",&game.title)]),disabled,esc(&row.id),t(app,"setup.browse"),f(app,"setup.executable_for",&[("name",&game.title)]),if row.locked()||app.setup.rows.iter().any(|row| row.picking){"disabled"}else{""},icon("folder"),esc(&row.id),row.confirmed,f(app,"setup.confirm_for",&[("name",&game.title)]),t(app,"setup.confirm_launcher"),disabled,icon("check")).unwrap();
+        write!(html,r#"<button type="button" class="icon-button setup-launcher-check" data-action="setup-confirm-launcher" data-value="{}" aria-pressed="{}" aria-label="{}" title="{}" {}>{}</button></div></td></tr>"#,esc(&row.id),row.confirmed,f(app,"setup.confirm_for",&[("name",&game.title)]),t(app,"common.confirm"),if row.locked() || row.url.is_empty() {"disabled"} else {""},icon("check")).unwrap();
         if let Some(error) = &row.error {
             write!(html,r#"<tr data-render-key="setup-error-{}"><td colspan="4" class="setup-error" role="alert">{}</td></tr>"#,esc(&row.id),esc(&error.render(app.settings.language))).unwrap();
         }
     }
-    write!(html,r#"</tbody></table></div><footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,"setup.later"),"","quiet",busy),button("setup-save","",t(app,if busy{"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
+    html.push_str("</tbody></table></div>");
+    if app.setup.rows.len() > 40 {
+        write!(html, "<div class=\"setup-pagination\">{}<span>{}</span>{}</div>", button("setup-page", &page.saturating_sub(1).to_string(), t(app,"common.previous"), "chevron_left", "quiet icon-only", page == 0), f(app,"setup.page", &[("page", &(page+1).to_string()), ("total", &app.setup.rows.len().div_ceil(40).to_string())]), button("setup-page", &(page+1).to_string(), t(app,"common.next"), "chevron", "quiet icon-only", (page+1)*40 >= app.setup.rows.len())).unwrap();
+    }
+    write!(html,r#"<footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,"setup.later"),"","quiet",busy),button("setup-save","",t(app,if busy{"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
 }
 
 #[cfg(test)]
@@ -600,7 +616,7 @@ mod tests {
                 .iter()
                 .map(|o| o.value.as_str())
                 .collect::<Vec<_>>(),
-            vec!["nextmoe", "vndb", "bangumi", "2dfan"]
+            vec!["nextmoe", "vndb", "erogamescape", "bangumi", "2dfan"]
         );
         let before = app.setup.rows[0].source.clone();
         dispatch(&mut app, "setup-batch-source", "ymgal");
@@ -741,7 +757,7 @@ mod tests {
     }
 
     #[test]
-    fn automatic_scraping_retains_empty_failed_and_missing_launcher_rows_for_retry() {
+    fn automatic_scraping_allows_deferred_launcher_and_retains_empty_failed_rows_for_retry() {
         let mut app = app();
         crate::bridge::take_requests();
         app.setup.rows[0].executable.clear();
@@ -752,7 +768,8 @@ mod tests {
             resolve(&mut app, &kind, *request_id, true, if index == 0 { r#"[{"title":"First","url":"https://vndb.org/v1"}]"# } else { "[]" });
         }
         assert!(crate::bridge::take_requests().is_empty());
-        assert!(app.setup.rows[0].error.is_some());
+        assert!(app.setup.rows[0].error.is_none());
+        assert!(app.setup.rows[0].can_save());
         assert!(app.setup.rows[1].searched && app.setup.rows[1].candidates.is_empty());
         assert!(!app.setup.busy());
         assert!(app.setup.open);
@@ -950,6 +967,7 @@ mod tests {
         assert!(app.setup.open);
         assert!(!app.setup.busy());
         assert!(app.setup.rows[0].error.is_some());
+        assert!(app.setup.rows[0].can_save());
         assert!(app.setup.rows[0].confirmed);
         assert_eq!(app.setup.rows[0].url, "https://vndb.org/v3");
         assert_eq!(app.setup.rows.len(), 1);
@@ -977,6 +995,7 @@ mod tests {
             r#"{"key":"error.network","args":{}}"#,
         );
         assert!(app.setup.rows[0].error.is_some());
+        assert!(app.setup.rows[0].can_save());
         assert_eq!(app.setup.rows[0].url, "https://vndb.org/v3");
         let payload=json!({"game":game("new","https://vndb.org/v3"),"settings":{"library_folders":[],"card_size":200,"sort_by":"title","game_edits":{"new":{"metadata_provider":"vndb","setup_confirmed":true},"imported":{"metadata_provider":"outdated"}}}}).to_string();
         resolve(

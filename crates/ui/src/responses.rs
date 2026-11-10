@@ -71,6 +71,10 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
             paint(&app);
             return;
         }
+        if crate::launcher_picker::resolve(&mut app, &kind, id, success, payload) {
+            paint(&app);
+            return;
+        }
         if game_setup::resolve(&mut app, &kind, id, success, payload) {
             game_setup::sync(&mut app);
             paint(&app);
@@ -122,6 +126,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         } else {
             let handled: Result<(), String> = (|| {
                 match kind {
+                    Pending::LauncherList | Pending::LauncherSave => {},
                     Pending::Screenshot(..) | Pending::ImportPreview | Pending::ImportCommit | Pending::MagpieModes | Pending::ExportPotato | Pending::FindSave(_)
                     | Pending::Background
                     | Pending::Ai(_)
@@ -319,31 +324,11 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             game_setup::refreshed(&mut app);
                         }
                         if matches!(kind, Pending::Bootstrap) {
-                            crate::updates::check_on_startup(&mut app);
-                            crate::skill_update::check_on_startup(&mut app);
                             if data.update_complete { show_toast(&mut app, Message::new("update.complete"), false); }
-                            issue(&mut app, Pending::AiRuntime, "get_ai_runtime", json!({}));
-                            issue(
-                                &mut app,
-                                Pending::DataSources(String::new()),
-                                "get_data_sources",
-                                json!({}),
-                            );
-                            issue(
-                                &mut app,
-                                Pending::FanCache,
-                                "get_fan_status_cache",
-                                json!({}),
-                            );
+                            crate::startup::resume(&mut app);
+                        } else {
+                            crate::startup::refresh_library(&mut app);
                         }
-                        if !app
-                            .requests
-                            .values()
-                            .any(|p| matches!(p, Pending::GameIcons))
-                        {
-                            issue(&mut app, Pending::GameIcons, "load_game_icons", json!({}));
-                        }
-                        issue(&mut app, Pending::BackgroundScan, "scan_library", json!({}));
                         if !matches!(kind, Pending::Bootstrap) {
                             app.library.path_input.clear();
                             show_toast(&mut app, Message::new("notice.library_saved"), false);
@@ -429,6 +414,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             id,
                         );
                         show_toast(&mut app, Message::new("notice.language_saved"), false);
+                        crate::startup::resume(&mut app);
                     }
                     Pending::Cover => {
                         let game: Option<Game> =

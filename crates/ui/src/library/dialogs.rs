@@ -1,7 +1,8 @@
 //! Library dialogs.
 use crate::{
-    choices, features, library::Dialog, library::folder_path, library::ordered, library::subtree,
-    state::App, view::f, view::form_field, view::t, widgets::button, widgets::esc, widgets::icon,
+    choices, features, library::Dialog, library::filter_tags, library::folder_path,
+    library::ordered, library::subtree, state::App, view::f, view::form_field, view::t,
+    widgets::button, widgets::esc, widgets::icon,
 };
 use std::{collections::BTreeSet, fmt::Write};
 
@@ -112,12 +113,8 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
             let query = features::form(app, "tag-query");
             write!(html, r#"<div class="tag-search"><label class="edit-field"><span>{}</span><input id="tag-query" data-input="tag-query" type="search" value="{}" placeholder="{}" autocomplete="off" aria-controls="tag-search-results"/></label>"#, t(app, "common.search"), esc(&query), t(app, "tags.search_placeholder")).unwrap();
             if !query.trim().is_empty() {
-                let mut tags = galgear_tags::normalize(
-                    app.catalog
-                        .games
-                        .iter()
-                        .flat_map(|game| game.tags.iter().cloned()),
-                );
+                let mut tags =
+                    galgear_tags::normalize(app.catalog.games.iter().flat_map(filter_tags));
                 tags.sort_by_cached_key(|tag| tag.to_lowercase());
                 let query = query.trim().to_lowercase();
                 html.push_str("<div id=\"tag-search-results\" class=\"tag-search-results\">");

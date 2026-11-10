@@ -3,6 +3,9 @@ use galgear_i18n::Message;
 use sha2::{Digest, Sha256};
 use std::{fs, io::Write, path::Path};
 
+pub(crate) mod identity;
+pub use identity::empty_scan_duplicates;
+
 pub fn manual_game(path: &Path, title: String) -> Result<Game, Message> {
     let folder = path
         .parent()
@@ -237,6 +240,9 @@ pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> Sc
             game.aliases.clone_from(&cached.aliases);
             game.playtime_seconds = cached.playtime_seconds;
             game.last_played = cached.last_played;
+            if game.metadata.is_none() {
+                game.metadata.clone_from(&cached.metadata);
+            }
         }
         apply_edits(game, settings);
     }

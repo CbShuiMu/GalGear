@@ -13,6 +13,8 @@ pub(crate) enum Pending {
     SetupSearch(String),
     SetupExecutable(String),
     SetupSave(String),
+    LauncherList,
+    LauncherSave,
     Bootstrap,
     AiRuntime,
     SkillUpdate,
@@ -172,6 +174,8 @@ impl RequestQueue {
 pub(crate) fn issue(app: &mut App, kind: Pending, command: &str, payload: serde_json::Value) {
     if matches!(kind, Pending::Scan | Pending::BackgroundScan) {
         app.library.scanning = true;
+        app.library.scan_completed = 0;
+        app.library.scan_total = 0;
     }
     if matches!(kind, Pending::Enrich) {
         app.enrichment_progress = None;

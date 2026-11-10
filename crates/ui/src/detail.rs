@@ -3,7 +3,7 @@ use crate::{
     context_menu, cover_picker, features, local_patches, models::Game, models::GameEdit,
     models::Metadata, models::Resource, models::RestorePreview, models::SaveReport,
     models::SaveSnapshot, models::default_source, playtime, preferences, requests::Pending,
-    state::App, view::f, view::form_field, view::poster, view::t, widgets::button, widgets::esc,
+    state::App, view::form_field, view::poster, view::t, widgets::button, widgets::esc,
     widgets::icon,
 };
 use galgear_i18n::Message;
@@ -292,13 +292,17 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         t(app, "metadata.date"),
         esc(value(app, release_date)),
         t(app, "detail.playtime_label"),
-        f(app, "detail.playtime_value", &[("hours", &playtime::hours(game.playtime_seconds))]),
+        playtime::duration(
+            app.settings.language,
+            game.playtime_seconds,
+            playtime::DurationStyle::Full
+        ),
         t(app, "detail.last_played"),
         last_played.as_deref().unwrap_or(t(app, "detail.never_played"))
     )
     .unwrap();
     html.push_str("</div><div class=\"detail-actions hero-actions\">");
-    if game.executable.is_some() {
+    {
         html.push_str(&button(
             "launch",
             &game.id,
@@ -768,7 +772,7 @@ mod tests {
         render(&mut html, &app, &game);
         assert!(html.contains("<dt>品牌</dt><dd>未设置</dd>"));
         assert!(html.contains("<dt>发售日期</dt><dd>未设置</dd>"));
-        assert!(html.contains(r#"class="game-playtime"><dt>游玩时间</dt><dd>0 小时</dd></div><div class="last-played"><dt>上次游玩</dt><dd>未游玩</dd>"#));
+        assert!(html.contains(r#"class="game-playtime"><dt>游玩时间</dt><dd>0 分钟</dd></div><div class="last-played"><dt>上次游玩</dt><dd>未游玩</dd>"#));
     }
     #[test]
     fn detail_orders_brand_release_playtime_and_last_played() {

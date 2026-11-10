@@ -42,7 +42,10 @@ impl ConfigStore {
                 }
                 Ok(settings)
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Settings::default()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Settings {
+                initial_setup_pending: true,
+                ..Settings::default()
+            }),
             Err(e) => Err(Message::detail("error.config_read", e)),
         }
     }
@@ -71,6 +74,20 @@ impl ConfigStore {
     }
 }
 
+/// 设置界面语言；仅首次选择时同时初始化默认数据源，后续切换保留来源偏好。
+pub fn select_language(settings: &mut Settings, language: galgear_i18n::Language) {
+    settings.language = language;
+    if settings.initial_setup_pending {
+        settings.metadata_provider = match language {
+            galgear_i18n::Language::Chinese => "nextmoe",
+            galgear_i18n::Language::English => "vndb",
+            galgear_i18n::Language::Japanese => "erogamescape",
+        }
+        .into();
+        settings.initial_setup_pending = false;
+    }
+}
+
 pub fn normalize_folder(path: &str) -> Result<String, Message> {
     if path.trim().is_empty() {
         return Err(Message::new("error.folder_required"));
@@ -95,6 +112,49 @@ pub fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn first_language_initializes_source_once_and_survives_reopening() {
+        for (language, source) in [
+            (galgear_i18n::Language::Chinese, "nextmoe"),
+            (galgear_i18n::Language::English, "vndb"),
+            (galgear_i18n::Language::Japanese, "erogamescape"),
+        ] {
+            let temp = tempfile::tempdir().unwrap();
+            let store = ConfigStore::new(temp.path().join("settings.json"));
+            let mut settings = store.load().unwrap();
+            assert!(settings.initial_setup_pending);
+            // 未完成的首次设置即使被其他配置写入保存，下次仍继续提示。
+            store.save(&settings).unwrap();
+            assert!(store.load().unwrap().initial_setup_pending);
+            select_language(&mut settings, language);
+            store.save(&settings).unwrap();
+            let mut reopened = store.load().unwrap();
+            assert_eq!(reopened.language, language);
+            assert_eq!(reopened.metadata_provider, source);
+            assert!(!reopened.initial_setup_pending);
+            reopened.metadata_provider = "bangumi".into();
+            select_language(&mut reopened, galgear_i18n::Language::English);
+            assert_eq!(reopened.metadata_provider, "bangumi");
+        }
+    }
+
+    #[test]
+    fn old_or_invalid_config_is_never_treated_as_a_new_installation() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(temp.path().join("settings.json"));
+        fs::write(
+            &store.path,
+            r#"{"version":1,"language":"ja-JP","metadata_provider":"vndb"}"#,
+        )
+        .unwrap();
+        let settings = store.load().unwrap();
+        assert!(!settings.initial_setup_pending);
+        assert_eq!(settings.metadata_provider, "vndb");
+        assert_eq!(settings.language, galgear_i18n::Language::Japanese);
+        fs::write(&store.path, "invalid configuration").unwrap();
+        assert!(store.load().is_err());
+    }
 
     #[test]
     fn font_shortcut_defaults_for_old_config_and_survives_reopening() {

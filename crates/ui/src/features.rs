@@ -513,6 +513,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "launch" | "launch-normal" | "launch-locale" => {
+            if crate::launcher_picker::open(app, value, action) { return true; }
             let locale = action == "launch-locale"
                 || (action == "launch"
                     && app

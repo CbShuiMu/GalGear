@@ -1,4 +1,4 @@
-//! Compact hour and calendar-date presentation for recorded game sessions.
+//! Duration and calendar-date presentation for recorded game sessions.
 use crate::models::{Catalog, Game};
 use galgear_i18n::{Language, format_text, tr};
 use std::collections::BTreeMap;
@@ -30,7 +30,29 @@ pub(crate) fn replace_catalog(current: &mut Catalog, mut incoming: Catalog) {
     *current = incoming;
 }
 
-pub(crate) fn hours(seconds: u64) -> String {
+pub(crate) enum DurationStyle {
+    Compact,
+    Full,
+}
+
+/// 不足一小时显示整分钟，满一小时后将小时数四舍五入至一位小数。
+pub(crate) fn duration(language: Language, seconds: u64, style: DurationStyle) -> String {
+    let in_minutes = seconds < 3600;
+    let key = match (style, in_minutes) {
+        (DurationStyle::Compact, true) => "playtime.compact_minutes",
+        (DurationStyle::Compact, false) => "playtime.compact_hours",
+        (DurationStyle::Full, true) => "playtime.minutes",
+        (DurationStyle::Full, false) => "playtime.hours",
+    };
+    let value = if in_minutes {
+        (seconds / 60).to_string()
+    } else {
+        hours(seconds)
+    };
+    format_text(language, key, &[("value", &value)])
+}
+
+fn hours(seconds: u64) -> String {
     let tenths = seconds / 360 + u64::from(seconds % 360 >= 180);
     if tenths.is_multiple_of(10) {
         (tenths / 10).to_string()
@@ -56,7 +78,7 @@ pub(crate) fn date_time(seconds: u64) -> String {
     }
 }
 
-pub(crate) fn date(seconds: u64) -> String {
+fn date(seconds: u64) -> String {
     #[cfg(target_arch = "wasm32")]
     {
         crate::bridge::local_date(seconds as f64)

@@ -15,6 +15,103 @@ pub struct ResultData {
     settings: Settings,
 }
 
+#[derive(Serialize)]
+pub(crate) struct Executable {
+    path: String,
+    name: String,
+    icon: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct ConfirmedExecutable {
+    #[serde(flatten)]
+    saved: ResultData,
+    runtime: galgear_core::runtime::Status,
+}
+
+#[tauri::command]
+pub(crate) async fn list_game_executables(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<Executable>, Message> {
+    let game = find_game(&state, &id)?;
+    let cache = state.store.path.with_file_name("icons");
+    tauri::async_runtime::spawn_blocking(move || {
+        game_setup::executables(std::path::Path::new(&game.folder)).map(|paths| {
+            paths
+                .into_iter()
+                .map(|path| {
+                    let icon =
+                        galgear_core::launcher_icons::cached_icon(&path, &cache).and_then(|path| {
+                            path.file_stem().map(|stem| {
+                                format!("http://galgear-icon.localhost/{}", stem.to_string_lossy())
+                            })
+                        });
+                    Executable {
+                        name: path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .into_owned(),
+                        path: display_path(&path),
+                        icon,
+                    }
+                })
+                .collect()
+        })
+    })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?
+}
+
+#[tauri::command]
+pub(crate) async fn confirm_game_executable(
+    id: String,
+    executable: String,
+    app: tauri::AppHandle,
+) -> Result<ConfirmedExecutable, Message> {
+    use tauri::Manager;
+    // 路径验证及磁盘写入在后台执行，与启动、补丁和存档共用写入互斥。
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let saved = save_executable(&state, &id, &executable)?;
+        // UI 的缓存状态可能仍对应旧启动路径，继续启动前检查新路径。
+        let runtime = state
+            .tools
+            .observer()
+            .detect(saved.game.executable.as_deref());
+        Ok(ConfirmedExecutable { saved, runtime })
+    })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?
+}
+
+fn save_executable(state: &AppState, id: &str, executable: &str) -> Result<ResultData, Message> {
+    let _guard = crate::state::begin_write(state)?;
+    let mut game = find_game(state, id)?;
+    if state.tools.observer().detect(game.executable.as_deref())
+        == galgear_core::runtime::Status::Running
+    {
+        return Err(Message::new("error.already_running"));
+    }
+    let selected = game_setup::executables(std::path::Path::new(&game.folder))?
+        .into_iter()
+        .find(|path| display_path(path) == executable)
+        .ok_or_else(|| Message::new("setup.executable_required"))?;
+    let settings = preferences::update(state, |settings| {
+        let edit = settings.game_edits.entry(id.to_owned()).or_default();
+        edit.executable = Some(display_path(&selected));
+        edit.working_directory = selected.parent().map(display_path);
+        edit.launcher_pending = false;
+        Ok(())
+    })?;
+    catalog::apply_edits(&mut game, &settings);
+    Ok(ResultData {
+        game: persist_game(state, game)?,
+        settings,
+    })
+}
+
 #[tauri::command]
 pub async fn choose_setup_executable(
     id: String,
@@ -51,6 +148,7 @@ pub async fn complete_game_setup(
     executable: String,
     confirmed: bool,
     state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<ResultData, Message> {
     let game = find_game(&state, &id)?;
     game_setup::validate(&source, &url, &executable, confirmed)?;
@@ -74,30 +172,90 @@ pub async fn complete_game_setup(
     } else {
         None
     };
-    let mut game = find_game(&state, &id)?;
-    let settings = preferences::update(&state, |settings| {
-        let edit = game_setup::prepare(
-            &game,
-            settings.game_edits.get(&id),
-            &source,
-            &executable,
-            metadata,
-        )?;
-        settings.game_edits.insert(id.clone(), edit);
-        if let Some(Ok((_, path, _))) = &cover {
-            settings.cover_overrides.insert(id.clone(), path.clone());
+    // 资料配置由 preferences 序列化写入，磁盘持久化不占用异步执行器。
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
+        let state = app.state::<AppState>();
+        let mut game = find_game(&state, &id)?;
+        let settings = preferences::update(&state, |settings| {
+            let edit = game_setup::prepare(
+                &game,
+                settings.game_edits.get(&id),
+                &source,
+                &executable,
+                metadata,
+            )?;
+            settings.game_edits.insert(id.clone(), edit);
+            if let Some(Ok((_, path, _))) = &cover {
+                settings.cover_overrides.insert(id.clone(), path.clone());
+            }
+            Ok(())
+        })?;
+        if let Some(Ok((data, _, warning))) = cover {
+            game.cover = Some(data);
+            game.metadata_warning = warning;
+        } else if let Some(Err(error)) = cover {
+            game.metadata_warning = Some(error);
         }
-        Ok(())
-    })?;
-    if let Some(Ok((data, _, warning))) = cover {
-        game.cover = Some(data);
-        game.metadata_warning = warning;
-    } else if let Some(Err(error)) = cover {
-        game.metadata_warning = Some(error);
-    }
-    catalog::apply_edits(&mut game, &settings);
-    Ok(ResultData {
-        game: persist_game(&state, game)?,
-        settings,
+        catalog::apply_edits(&mut game, &settings);
+        Ok(ResultData {
+            game: persist_game(&state, game)?,
+            settings,
+        })
     })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::save_executable;
+    use crate::state::AppState;
+    use galgear_core::{catalog, config::display_path, game_setup, launcher_icons};
+    use std::{fs, path::PathBuf};
+
+    #[test]
+    fn native_executable_choice_extracts_icon_and_persists_only_valid_candidates() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("game");
+        fs::create_dir(&folder).unwrap();
+        let executable = folder.join("汉化启动器.exe");
+        let windows = PathBuf::from(std::env::var_os("SystemRoot").unwrap());
+        fs::copy(windows.join("System32/notepad.exe"), &executable).unwrap();
+        let state = AppState::load(temp.path().join("config")).unwrap();
+        let game = catalog::manual_game(&executable, "Fixture".into()).unwrap();
+        state.catalog.lock().unwrap().games.push(game.clone());
+        state
+            .settings
+            .lock()
+            .unwrap()
+            .game_edits
+            .entry(game.id.clone())
+            .or_default()
+            .launcher_pending = true;
+        let candidates = game_setup::executables(&folder).unwrap();
+        assert_eq!(candidates.len(), 1);
+        let icon = launcher_icons::cached_icon(&candidates[0], &temp.path().join("icons")).unwrap();
+        assert!(fs::metadata(icon).unwrap().len() > 0);
+        assert!(
+            save_executable(
+                &state,
+                &game.id,
+                &display_path(&windows.join("System32/notepad.exe"))
+            )
+            .is_err()
+        );
+        assert!(state.settings.lock().unwrap().game_edits[&game.id].launcher_pending);
+        let result = save_executable(&state, &game.id, &display_path(&candidates[0])).unwrap();
+        let saved = state.store.load().unwrap();
+        assert_eq!(
+            saved.game_edits[&game.id].executable,
+            result.game.executable
+        );
+        assert!(!saved.game_edits[&game.id].launcher_pending);
+        assert_eq!(
+            saved.game_edits[&game.id].working_directory.as_deref(),
+            Some(display_path(&folder).as_str())
+        );
+    }
 }

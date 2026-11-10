@@ -101,3 +101,5 @@
 .editor-dialog .editor-body>.button:last-child{display:flex;margin-left:auto;margin-right:0}
 
 .confirmation>.detail-actions{justify-content:flex-end}
+
+.startup-overlay{z-index:220}.startup-dialog{max-width:540px}.startup-languages{display:grid;gap:16px;margin-top:24px}.startup-languages .button{width:100%}.startup-languages .field-help{margin:6px 0 0;text-align:center}

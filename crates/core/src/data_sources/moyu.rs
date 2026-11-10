@@ -170,6 +170,7 @@ fn resource(row: &Value, title: &str) -> Result<Resource, Message> {
         return Err(api_error("Invalid NextMoe resource"));
     }
     Ok(Resource {
+        cover_url: None, brand: String::new(), release_date: String::new(),
         download_id: Some(resource_id(row["id"].as_str().unwrap_or_default())?.into()),
         title: name,
         url,

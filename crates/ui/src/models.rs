@@ -22,9 +22,13 @@ pub(crate) struct Settings {
     pub(crate) card_size: u32,
     pub(crate) sort_by: String,
     #[serde(default)]
+    pub(crate) custom_order: Vec<String>,
+    #[serde(default)]
     pub(crate) sort_descending: Option<bool>,
     #[serde(default)]
     pub(crate) language: Language,
+    #[serde(default)]
+    pub(crate) initial_setup_pending: bool,
     #[serde(default)]
     pub(crate) game_edits: BTreeMap<String, GameEdit>,
     #[serde(default)]
@@ -195,6 +199,7 @@ pub(crate) struct GameEdit {
     pub(crate) metadata_provider: String,
     pub(crate) setup_pending: bool,
     pub(crate) setup_confirmed: bool,
+    pub(crate) launcher_pending: bool,
     pub(crate) title: Option<String>,
     pub(crate) tags: Vec<String>,
     pub(crate) source_tags: Option<Vec<String>>,
@@ -224,6 +229,7 @@ impl Default for GameEdit {
             metadata_provider: String::new(),
             setup_pending: false,
             setup_confirmed: false,
+            launcher_pending: false,
             title: None,
             tags: Vec::new(),
             source_tags: None,
@@ -317,6 +323,9 @@ pub(crate) struct SaveChange {
 #[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 pub(crate) struct Resource {
+    pub(crate) cover_url: Option<String>,
+    pub(crate) brand: String,
+    pub(crate) release_date: String,
     pub(crate) download_id: Option<String>,
     pub(crate) title: String,
     pub(crate) url: String,

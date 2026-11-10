@@ -96,6 +96,9 @@ impl Metadata {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Resource {
+    pub cover_url: Option<String>,
+    pub brand: String,
+    pub release_date: String,
     /// 补丁资源的 API 身份；不从展示用 web_url 推测。
     #[serde(default)]
     pub download_id: Option<String>,

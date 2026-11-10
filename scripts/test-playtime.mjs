@@ -9,7 +9,7 @@ const calendar = bridge.slice(bridge.indexOf('  local_date_time(seconds)'), brid
 const moduleBytes = readFileSync(new URL('../dist/pkg/galgear_ui_bg.wasm', import.meta.url));
 let instance = 0;
 
-test('last played uses local calendar days across midnight and daylight saving', async () => {
+test('home and game details share local dates and the library switches duration units at one hour', async () => {
   const previousZone = process.env.TZ;
   try {
     for (const scenario of [
@@ -23,7 +23,7 @@ test('last played uses local calendar days across midnight and daylight saving',
       assert.equal(dates.local_date(seconds), scenario.date);
       assert.equal(dates.local_date(Number.MAX_VALUE), '');
       const game = {id:'fixture', title:'Fixture', folder:'F:/Fixture', engine:'unknown', modified:0,
-        last_played:seconds, playtime_seconds:4500, metadata:{brand:'Key', release_date:'2022-09-30'}};
+        last_played:seconds, playtime_seconds:3599, metadata:{brand:'Key', release_date:'2022-09-30'}};
       const settings = {library_folders:['F:/Fixture'], card_size:200, sort_by:'title',
         game_edits:{fixture:{setup_confirmed:true}}};
       const catalog = {games:[game], warnings:[]};
@@ -47,14 +47,22 @@ test('last played uses local calendar days across midnight and daylight saving',
       };
       ui.initSync({module:moduleBytes});
       await new Promise(resolve => setImmediate(resolve));
+      assert.match(html, /<span class="home-playtime">最近游玩 昨天<\/span>/, scenario.zone);
+      ui.dispatch('page', 'games');
+      assert.match(html, /class="library-playtime"><strong>59分<\/strong>/);
       ui.dispatch('game-detail', game.id);
       await new Promise(resolve => setImmediate(resolve));
       const facts = html.match(/<dl class="hero-facts">([\s\S]*?)<\/dl>/)?.[1];
       assert.ok(facts, scenario.zone);
       assert.deepEqual([...facts.matchAll(/<dt>(.*?)<\/dt>/g)].map(match => match[1]),
         ['品牌','发售日期','游玩时间','上次游玩']);
-      assert.match(facts, /<dd>1\.3 小时<\/dd>/);
+      assert.match(facts, /<dt>游玩时间<\/dt><dd>59 分钟<\/dd>/);
       assert.match(facts, /<dt>上次游玩<\/dt><dd>昨天<\/dd>/, scenario.zone);
+      for (const [playtime_seconds, hours] of [[3600, '1'], [3960, '1.1']]) {
+        ui.playtime_updated(JSON.stringify({[game.id]:{playtime_seconds, last_played:seconds}}));
+        assert.ok(html.includes(`class="library-playtime"><strong>${hours}h</strong>`));
+        assert.ok(html.includes(`<dt>游玩时间</dt><dd>${hours} 小时</dd>`));
+      }
     }
   } finally {
     if (previousZone === undefined) delete process.env.TZ;

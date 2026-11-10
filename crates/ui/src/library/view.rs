@@ -111,16 +111,21 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
         } else {
             app.catalog.games.iter().filter(|game| crate::game_setup::visible(&app.settings, game)).count().to_string()
         };
+        let total_seconds = games.iter().fold(0_u64, |seconds, game| {
+            seconds.saturating_add(game.playtime_seconds)
+        });
         let _ = write!(
             html,
-            "<div class=\"library-stats\"><span><strong>{}</strong>{}</span><span><strong>{}</strong>{}</span><span class=\"library-playtime\"><strong>{}h</strong>{}</span></div>",
+            "<div class=\"library-stats\"><span><strong>{}</strong>{}</span><span><strong>{}</strong>{}</span><span class=\"library-playtime\"><strong>{}</strong>{}</span></div>",
             app.settings.library_folders.len(),
             t(app, "library.libraries"),
             count,
             t(app, "library.games"),
-            playtime::hours(games.iter().fold(0_u64, |seconds, game| {
-                seconds.saturating_add(game.playtime_seconds)
-            })),
+            playtime::duration(
+                app.settings.language,
+                total_seconds,
+                playtime::DurationStyle::Compact
+            ),
             t(app, "library.playtime")
         );
         let _ = write!(
@@ -181,15 +186,15 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
                 "",
                 t(app, "games.add_library"),
                 "folder",
-                "quiet",
+                "quiet icon-only",
                 app.busy()
             ),
             button(
                 "manual-game",
                 "",
                 t(app, "games.manual"),
-                "plus",
-                "quiet",
+                "joystick",
+                "quiet icon-only",
                 app.busy()
             )
         );
@@ -227,6 +232,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             )
         );
         warnings_button(html, app);
+        write!(html, r#"<span class="sort-direction {}" {}>"#, if app.settings.sort_by == "custom" { "is-hidden" } else { "" }, if app.settings.sort_by == "custom" { "inert aria-hidden=\"true\"" } else { "" }).unwrap();
         html.push_str(&button(
             "sort-direction",
             "",
@@ -235,6 +241,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             "secondary icon-only",
             app.busy(),
         ));
+        html.push_str("</span>");
         choices::control(html, app, "sort", t(app, "games.sort_label"), false);
         html.push_str("</div>");
     }
@@ -524,7 +531,7 @@ fn page_content(html: &mut String, app: &App) {
             )
         );
     } else {
-        html.push_str("<div class=\"game-grid\">");
+        write!(html, r#"<div class="game-grid" data-custom-sort="{}">"#, app.settings.sort_by == "custom" && app.page == "games").unwrap();
         for (index, game) in games.iter().take(app.library.visible_count).enumerate() {
             let selected = app.library.checked.contains(&game.id);
             let _ = write!(

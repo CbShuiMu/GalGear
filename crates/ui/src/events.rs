@@ -199,6 +199,10 @@ pub fn dispatch(action: &str, value: &str) {
     }
     APP.with(|state| {
         let mut app = state.borrow_mut();
+        if crate::startup::dispatch(&mut app, action, value) {
+            paint(&app);
+            return;
+        }
         let setup_action = action.starts_with("setup-")
             || matches!(action, "check-update" | "check-skill-update" | "update-confirm" | "update-cancel")
             || matches!(action, "dismiss-toast" | "choice-close")
@@ -229,6 +233,7 @@ pub fn dispatch(action: &str, value: &str) {
             || ai::dispatch(&mut app, action, value)
             || cloud::dispatch(&mut app, action, value)
             || crate::ai_summary::dispatch(&mut app, action, value)
+            || crate::launcher_picker::dispatch(&mut app, action, value)
             || game_setup::dispatch(&mut app, action, value)
             || cover_picker::dispatch(&mut app, action, value)
             || local_patches::dispatch(&mut app, action, value)
@@ -587,16 +592,8 @@ pub fn scan_progress(payload: &str) {
         }
         if let Ok(data) = serde_json::from_str::<serde_json::Value>(payload) {
             app.library.scan_folders = data["folders_scanned"].as_u64().unwrap_or(0) as usize;
-            if let Ok(games) = serde_json::from_value::<Vec<Game>>(data["games"].clone()) {
-                for game in games {
-                    if !app.settings.excluded_games.contains(&game.id)
-                        && !app.catalog.games.iter().any(|g| g.id == game.id)
-                    {
-                        app.catalog.games.push(game);
-                    }
-                }
-            }
-            game_setup::sync(&mut app);
+            app.library.scan_completed = data["completed"].as_u64().unwrap_or(0) as usize;
+            app.library.scan_total = data["total"].as_u64().unwrap_or(0) as usize;
             paint(&app);
         }
     });
