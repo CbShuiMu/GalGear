@@ -442,6 +442,17 @@ pub fn search(
     query: &str,
     credentials: &Credentials,
 ) -> Result<Vec<Resource>, Message> {
+    search_with_client(&providers::client()?, source, domain, query, credentials)
+}
+
+/// 使用调用方持有的客户端查询资料，批量任务可复用连接池；鉴权仍逐次传入。
+pub fn search_with_client(
+    client: &Client,
+    source: &str,
+    domain: &str,
+    query: &str,
+    credentials: &Credentials,
+) -> Result<Vec<Resource>, Message> {
     validate_source(source)?;
     let query = query.trim();
     if query.is_empty() || query.chars().count() > 95 {
@@ -450,12 +461,11 @@ pub fn search(
     if source == "2dfan" {
         return providers::search_fan(domain, query, credentials.fan.as_ref());
     }
-    let client = providers::client()?;
     if source == "nextmoe" {
-        return nextmoe::search(&client, query, credentials);
+        return nextmoe::search(client, query, credentials);
     }
     if source == "erogamescape" {
-        return erogamescape::search(&client, query);
+        return erogamescape::search(client, query);
     }
     let value = match source {
         "vndb" => request_json(
@@ -477,7 +487,7 @@ pub fn search(
             .json(&json!({"keyword":query,"filter":{"type":[4]},"sort":"match"})),
         )?,
         "ymgal" => ym_request(
-            &client,
+            client,
             credentials,
             "/open/archive/search-game",
             &[

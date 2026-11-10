@@ -18,21 +18,21 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.4.3 (November 10, 2026)** adds custom library ordering, ErogameScape metadata, and a first-run language picker. Rescans retain matching library entries.
+> **v0.4.4 (November 10, 2026)** adds progress, a stop control, and an unmatched or failed count to batch auto scraping. A timed-out lookup prompts you to retry or choose another source.
 
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.4.3_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.4.3-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.4.4_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.4.4-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
 Choose an interface language on the first run. GalGear sets the default metadata source based on that language, and you can change it in Settings.
 
 1. Add a game library and select the folder containing your games.
-2. After scanning, use the confirmation window to choose each game's metadata source, matching title, and executable. You can save the games you have confirmed and handle the rest later. Use **Batch change** at the top right to change the metadata source for the list, then **Auto search** to find close matches. Review the results afterward to catch incorrect matches.
+2. After scanning, choose a metadata source and matching title for each game. You can pick its executable on first launch. Use **Batch change** to set a source for the list, then **Auto scrape** to find candidates. The notification shows progress and the number of unmatched or failed games. Select **Stop scraping** to end the run. Review the matches before saving. Later runs skip confirmed games.
 3. Open the game details, check the launch configuration, and launch the game. To enable automatic backups, first launch the game and create a save.
 
 ## ✨ Features
@@ -185,6 +185,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## 📝 Release history
+
+### v0.4.4
+
+- Added progress, a stop control, and a results summary to batch auto scraping. Lookups that time out no longer hold up the rest of the batch, and later runs skip confirmed games. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.4).
 
 ### v0.4.3
 

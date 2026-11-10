@@ -3894,6 +3894,31 @@
     "ja-JP": "自動取得",
     "en-US": "Auto scrape"
   },
+  "setup.auto_stop": {
+    "zh-CN": "停止刮削",
+    "ja-JP": "取得を停止",
+    "en-US": "Stop scraping"
+  },
+  "setup.auto_progress": {
+    "zh-CN": "正在刮削 {done}/{total} · 未匹配或失败 {failed}",
+    "ja-JP": "取得中 {done}/{total} · 未一致・失敗 {failed}",
+    "en-US": "Scraping {done}/{total} · Unmatched or failed {failed}"
+  },
+  "setup.auto_complete": {
+    "zh-CN": "刮削完成 {done}/{total} · 未匹配或失败 {failed}",
+    "ja-JP": "取得完了 {done}/{total} · 未一致・失敗 {failed}",
+    "en-US": "Scraping complete {done}/{total} · Unmatched or failed {failed}"
+  },
+  "setup.auto_stopped": {
+    "zh-CN": "已停止刮削 {done}/{total} · 未匹配或失败 {failed}",
+    "ja-JP": "取得停止 {done}/{total} · 未一致・失敗 {failed}",
+    "en-US": "Scraping stopped {done}/{total} · Unmatched or failed {failed}"
+  },
+  "setup.search_timeout": {
+    "zh-CN": "资料查询超时，请稍后重试或更换数据源。",
+    "ja-JP": "情報の検索がタイムアウトしました。再試行するか、データソースを変更してください。",
+    "en-US": "Metadata search timed out. Try again later or choose another source."
+  },
   "save.ai_find": {
     "zh-CN": "AI搜索",
     "ja-JP": "AIで検索",

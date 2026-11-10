@@ -126,15 +126,17 @@ pub async fn credentials_for(state: &AppState, source: &str) -> Result<Credentia
     }
     let path = state.store.path.clone();
     let source = source.to_owned();
-    tauri::async_runtime::spawn_blocking(move || {
-        if source == "2dfan" {
-            data_sources::load(&path, &source)
-        } else {
-            data_sources::oauth::load_fresh(&path, &source)
-        }
-    })
+    tauri::async_runtime::spawn_blocking(move || load_credentials(&path, &source))
     .await
     .map_err(|_| Message::new("error.operation"))?
+}
+
+pub(crate) fn load_credentials(path: &std::path::Path, source: &str) -> Result<Credentials, Message> {
+    match source {
+        "erogamescape" => Ok(Credentials::default()),
+        "2dfan" => data_sources::load(path, source),
+        _ => data_sources::oauth::load_fresh(path, source),
+    }
 }
 
 #[tauri::command]

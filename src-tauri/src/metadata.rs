@@ -6,6 +6,8 @@ use galgear_core::{Game, catalog, providers};
 use galgear_i18n::Message;
 use tauri::{Emitter, State};
 
+pub(crate) mod search;
+
 #[derive(Default)]
 pub(crate) struct AliasState {
     // 同一运行期间每款游戏只查询一次；重启后失败或未匹配项可以再次查询。
@@ -28,14 +30,11 @@ pub(crate) async fn search_metadata(
     source: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<providers::Resource>, Message> {
-    let settings = snapshot(&state)?;
-    let source = source.unwrap_or(settings.metadata_provider);
-    let credentials = data_sources::credentials_for(&state, &source).await?;
-    tauri::async_runtime::spawn_blocking(move || {
-        galgear_core::data_sources::search(&source, &settings.fan_domain, &query, &credentials)
-    })
-    .await
-    .map_err(|e| Message::detail("error.network", e))?
+    let (source, domain) = {
+        let settings = state.settings.lock().map_err(|_| Message::new("error.config_state"))?;
+        (source.unwrap_or_else(|| settings.metadata_provider.clone()), settings.fan_domain.clone())
+    };
+    state.metadata_search.search(state.store.path.clone(), source, domain, query).await
 }
 
 #[tauri::command]

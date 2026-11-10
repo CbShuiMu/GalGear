@@ -16,6 +16,12 @@ pub struct ResultData {
 }
 
 #[derive(Serialize)]
+pub struct SetupResult {
+    game: Game,
+    edit: galgear_core::GameEdit,
+}
+
+#[derive(Serialize)]
 pub(crate) struct Executable {
     path: String,
     name: String,
@@ -149,7 +155,7 @@ pub async fn complete_game_setup(
     confirmed: bool,
     state: State<'_, AppState>,
     app: tauri::AppHandle,
-) -> Result<ResultData, Message> {
+) -> Result<SetupResult, Message> {
     let game = find_game(&state, &id)?;
     game_setup::validate(&source, &url, &executable, confirmed)?;
     let domain = snapshot(&state)?.fan_domain;
@@ -198,9 +204,12 @@ pub async fn complete_game_setup(
             game.metadata_warning = Some(error);
         }
         catalog::apply_edits(&mut game, &settings);
-        Ok(ResultData {
+        // 批量确认只返回本游戏的配置，避免每次传输不断增长的整个游戏库设置。
+        let edit = settings.game_edits.get(&id).cloned()
+            .ok_or_else(|| Message::new("error.config_state"))?;
+        Ok(SetupResult {
             game: persist_game(&state, game)?,
-            settings,
+            edit,
         })
     })
     .await

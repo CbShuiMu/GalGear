@@ -1,7 +1,7 @@
 //! Batch association and executable confirmation, with independent row drafts.
 use crate::{
     choices, models::Game, models::Resource, models::Settings, preferences, requests::Pending,
-    requests::issue, state::App, view::f, view::t, widgets::button, widgets::esc, widgets::icon,
+    requests::issue, state::{App, show_toast}, view::f, view::t, widgets::button, widgets::esc, widgets::icon,
 };
 use galgear_i18n::{Message, format_text};
 use serde::Deserialize;
@@ -14,6 +14,13 @@ pub(crate) struct State {
     page: usize,
     rows: Vec<Draft>,
     deferred: BTreeSet<String>,
+    progress: Option<ScrapeProgress>,
+}
+
+struct ScrapeProgress {
+    total: usize,
+    completed: usize,
+    failed: usize,
 }
 
 struct Draft {
@@ -48,6 +55,9 @@ impl Draft {
 }
 
 impl State {
+    fn scraping(&self) -> bool {
+        self.rows.iter().any(|row| row.automatic)
+    }
     fn busy(&self) -> bool {
         self.rows
             .iter()
@@ -188,9 +198,11 @@ pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
 
 // Each save submits only ready drafts; bound concurrent network work to three games.
 fn pump(app: &mut App) {
-    // Automatic searches share the same three-request limit as metadata saves.
-    let searches = app.setup.rows.iter().filter(|row| row.automatic && row.search_request.is_some()).count();
-    let slots = 3usize.saturating_sub(searches + app.setup.rows.iter().filter(|row| row.saving).count());
+    // 已停止或换源的旧请求仍占用名额，收到响应后才发出下一项。
+    let active = app.requests.values().filter(|request| {
+        matches!(request, Pending::SetupSearch(_) | Pending::SetupSave(_))
+    }).count();
+    let slots = 3usize.saturating_sub(active);
     for _ in 0..slots {
         if let Some(row) = app.setup.rows.iter_mut().find(|row| row.automatic && row.search_request.is_none()) {
             row.search_request = Some(app.requests.next_id());
@@ -207,6 +219,36 @@ fn pump(app: &mut App) {
         let id = row.id.clone();
         issue(app, Pending::SetupSave(id), "complete_game_setup", payload);
     }
+    if !app.setup.scraping() {
+        finish_progress(app, false);
+    }
+}
+
+fn finish_progress(app: &mut App, stopped: bool) {
+    let Some(progress) = app.setup.progress.take() else {
+        return;
+    };
+    if progress.total == 0 {
+        return;
+    }
+    let key = if stopped { "setup.auto_stopped" } else { "setup.auto_complete" };
+    let message = Message::new(key)
+        .arg("done", progress.completed)
+        .arg("total", progress.total)
+        .arg("failed", progress.failed);
+    show_toast(app, message, false);
+}
+
+pub(crate) fn render_progress(html: &mut String, app: &App) {
+    let Some(progress) = &app.setup.progress else {
+        return;
+    };
+    write!(html, r#"<div id="setup-scrape-toast" class="toast save-ai-toast" role="status" aria-atomic="true"><span>{}</span></div>"#,
+        f(app, "setup.auto_progress", &[
+            ("done", &progress.completed.to_string()),
+            ("total", &progress.total.to_string()),
+            ("failed", &progress.failed.to_string()),
+        ])).unwrap();
 }
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
@@ -220,12 +262,23 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         if let Ok(page) = value.parse::<usize>() { app.setup.page = page.min(app.setup.rows.len().saturating_sub(1) / 40); app.choices.open = None; }
         return true;
     }
+    if action == "setup-auto-stop" {
+        for row in &mut app.setup.rows {
+            if row.automatic {
+                row.automatic = false;
+                row.search_request = None;
+            }
+        }
+        finish_progress(app, true);
+        return true;
+    }
     if action == "setup-defer-all" {
         if !app.setup.busy() {
             app.setup
                 .deferred
                 .extend(app.setup.rows.iter().map(|row| row.id.clone()));
             app.setup.rows.clear();
+            app.setup.progress = None;
             app.setup.open = false;
         }
         return true;
@@ -239,7 +292,8 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     }
     if action == "setup-auto" {
         if !app.setup.busy() {
-            for row in &mut app.setup.rows {
+            let mut total = 0;
+            for row in app.setup.rows.iter_mut().filter(|row| !row.confirmed || row.url.is_empty()) {
                 let Some(game) = app.catalog.games.iter().find(|game| game.id == row.id) else { continue };
                 row.query = game.folder.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(&game.title).into();
                 row.candidates.clear();
@@ -249,7 +303,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 row.confirmed = false;
                 row.error = None;
                 row.automatic = true;
+                total += 1;
             }
+            app.setup.progress = Some(ScrapeProgress { total, completed: 0, failed: 0 });
             pump(app);
         }
         return true;
@@ -337,10 +393,12 @@ pub(crate) fn resolve(
         return false;
     };
     let Some(index) = app.setup.rows.iter().position(|row| row.id == *id) else {
+        pump(app);
         return true;
     };
     let row = &mut app.setup.rows[index];
     if matches!(kind, Pending::SetupSearch(_)) && row.search_request != Some(request_id) {
+        pump(app);
         return true;
     }
     let automatic = row.automatic && matches!(kind, Pending::SetupSearch(_));
@@ -380,20 +438,22 @@ pub(crate) fn resolve(
                     #[derive(Deserialize)]
                     struct ResultData {
                         game: Game,
-                        settings: Settings,
+                        settings: Option<Settings>,
+                        edit: Option<crate::models::GameEdit>,
                     }
                     let mut data: ResultData =
                         serde_json::from_str(payload).map_err(|error| error.to_string())?;
                     if data.game.id != *id {
                         return Err("Unexpected game in setup response".into());
                     }
+                    let edit = data.edit.take().or_else(|| {
+                        data.settings.as_mut().and_then(|settings| settings.game_edits.remove(id))
+                    }).ok_or_else(|| "Missing game edit in setup response".to_owned())?;
                     if let Some(game) = app.catalog.games.iter_mut().find(|game| game.id == *id) {
                         *game = data.game;
                     }
                     // Responses may finish out of order; merge only this game's edit.
-                    if let Some(edit) = data.settings.game_edits.remove(id) {
-                        app.settings.game_edits.insert(id.clone(), edit);
-                    }
+                    app.settings.game_edits.insert(id.clone(), edit);
                     app.setup.deferred.insert(id.clone());
                 }
                 _ => {}
@@ -402,6 +462,12 @@ pub(crate) fn resolve(
         })()
         .map_err(|error| Message::detail("error.read_data", error))
     };
+    if automatic && let Some(progress) = &mut app.setup.progress {
+        progress.completed += 1;
+        if result.is_err() || app.setup.rows[index].candidates.is_empty() {
+            progress.failed += 1;
+        }
+    }
     match result {
         Err(error) => app.setup.rows[index].error = Some(error),
         Ok(()) if matches!(kind, Pending::SetupSave(_)) => {
@@ -409,7 +475,7 @@ pub(crate) fn resolve(
         }
         _ => {}
     }
-    if automatic || matches!(kind, Pending::SetupSave(_)) {
+    if matches!(kind, Pending::SetupSearch(_) | Pending::SetupSave(_)) {
         pump(app);
         if app.setup.rows.is_empty() {
             app.setup.open = false;
@@ -515,7 +581,8 @@ pub(crate) fn render(html: &mut String, app: &App) {
     }
     let busy = app.setup.busy();
     let ready = app.setup.rows.iter().filter(|row| row.can_save()).count();
-    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help">{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table"><thead><tr>"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button("setup-auto","",t(app,"setup.auto"),"search","quiet",busy))).unwrap();
+    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help">{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table">"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button(if app.setup.scraping() { "setup-auto-stop" } else { "setup-auto" },"",t(app,if app.setup.scraping() { "setup.auto_stop" } else { "setup.auto" }),if app.setup.scraping() { "close" } else { "search" },"quiet",busy && !app.setup.scraping()))).unwrap();
+    html.push_str("<thead><tr>");
     for key in [
         "setup.game",
         "setup.source",
@@ -540,6 +607,10 @@ pub(crate) fn render(html: &mut String, app: &App) {
         let status = if row.saving {
             "setup.saving"
         } else if row.queued {
+            "setup.queued"
+        } else if row.search_request.is_some() {
+            "setup.searching"
+        } else if row.automatic {
             "setup.queued"
         } else if row.confirmed {
             "setup.confirmed"
@@ -588,7 +659,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
     if app.setup.rows.len() > 40 {
         write!(html, "<div class=\"setup-pagination\">{}<span>{}</span>{}</div>", button("setup-page", &page.saturating_sub(1).to_string(), t(app,"common.previous"), "chevron_left", "quiet icon-only", page == 0), f(app,"setup.page", &[("page", &(page+1).to_string()), ("total", &app.setup.rows.len().div_ceil(40).to_string())]), button("setup-page", &(page+1).to_string(), t(app,"common.next"), "chevron", "quiet icon-only", (page+1)*40 >= app.setup.rows.len())).unwrap();
     }
-    write!(html,r#"<footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,"setup.later"),"","quiet",busy),button("setup-save","",t(app,if busy{"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
+    write!(html,r#"<footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,"setup.later"),"","quiet",busy),button("setup-save","",t(app,if app.setup.rows.iter().any(|row| row.saving || row.queued) {"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
 }
 
 #[cfg(test)]
@@ -779,7 +850,8 @@ mod tests {
             resolve(&mut app, &kind, request_id, false, r#"{"key":"ai.network_error"}"#);
         }
         assert!(!app.setup.busy());
-        assert!(app.setup.rows.iter().all(|row| row.error.is_some()));
+        assert!(app.setup.rows[0].can_save());
+        assert!(app.setup.rows[1].error.is_some());
     }
 
     #[test]
