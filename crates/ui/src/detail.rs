@@ -25,6 +25,7 @@ pub(crate) struct State {
     pub(crate) editing: bool,
     pub(crate) editing_configuration: bool,
     pub(crate) tag_draft: Option<crate::detail_tags::Draft>,
+    pub(crate) title_refreshing: std::collections::BTreeSet<u32>,
 }
 
 impl Default for State {
@@ -46,6 +47,7 @@ impl Default for State {
             editing: false,
             editing_configuration: false,
             tag_draft: None,
+            title_refreshing: Default::default(),
         }
     }
 }
@@ -167,6 +169,14 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         .unwrap_or("unknown");
     write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}" data-detail-origin="{}" data-detail-game="{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing && !app.detail.editing_configuration{"editing"}else{""},esc(&game.id),esc(&app.page),esc(&game.id),icon("arrow"),t(app,match app.page.as_str() { "home" => "detail.back_home", "collections" => "detail.back_collections", _ => "detail.back" })).unwrap();
     if app.detail.editing && !app.detail.editing_configuration {
+        html.push_str(&button(
+            "detail-rematch",
+            "",
+            t(app, "detail.rematch"),
+            "database",
+            "quiet icon-only",
+            app.busy() || app.setup.open,
+        ));
         html.push_str(&button(
             "detail-cancel",
             "",
@@ -344,14 +354,16 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     if !app.detail.editing || app.detail.editing_configuration {
         crate::detail_tags::render_add(html, app);
     }
-    html.push_str(&button(
-        "tags-association",
-        "",
-        t(app, "detail.change_tag_source"),
-        "database",
-        "icon-only tag-source-button",
-        (app.detail.editing && !app.detail.editing_configuration) || app.busy(),
-    ));
+    if !app.detail.editing {
+        html.push_str(&button(
+            "tags-association",
+            "",
+            t(app, "detail.change_tag_source"),
+            "database",
+            "icon-only tag-source-button",
+            app.busy(),
+        ));
+    }
     html.push_str("</span></div></section></div></div>");
     if app.detail.editor.is_none()
         && app.detail.confirmation.as_ref().is_none_or(|(action, _)| {
@@ -962,6 +974,11 @@ mod tests {
             render(&mut html, &app, &game);
             assert_eq!(html.matches("data-action=\"detail-save\"").count(), 1);
             assert!(html.contains("draft-meta-description"));
+            assert!(!html.contains("data-action=\"tags-association\""));
+            assert!(
+                html.find("data-action=\"detail-rematch\"").unwrap()
+                    < html.find("data-action=\"detail-cancel\"").unwrap()
+            );
             assert!(!html.contains("editor-open"));
         }
     }

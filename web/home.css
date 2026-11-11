@@ -10,7 +10,7 @@
 }
 [data-theme="dark"] .home-page{--home-shade:9 11 17;--home-text:#f7f7fb;--home-muted:#c9cbd6;--home-ring:#f1f2f7}
 .home-backdrop{position:absolute;inset:0;overflow:hidden;z-index:-2;pointer-events:none}
-.home-backdrop-layer{position:absolute;inset:0;will-change:opacity,transform}
+.home-backdrop-layer{position:absolute;inset:0}
 .home-backdrop-cover{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;filter:none}
 .home-backdrop-bleed{position:absolute;inset:-60px;width:calc(100% + 120px);height:calc(100% + 120px);max-width:none;object-fit:fill;filter:blur(40px);opacity:.85}
 .home-backdrop-soft{position:absolute;inset:0 0 auto auto;width:auto;height:100%;max-width:none;filter:blur(36px);mask-image:linear-gradient(90deg,transparent,#000 10%)}

@@ -151,10 +151,10 @@ test('600 automatic searches keep three slots, advance after failures and retry 
   assert.match(app.html, /正在刮削 0\/600/);
   let failed = 0;
   for (let completed = 1; completed <= 600; completed++) {
-    const active = app.requests.filter(request => request.command === 'search_metadata');
+    const active = app.requests.filter(request => request.command === 'search_game_metadata');
     assert.equal(active.length, Math.min(3, 601 - completed));
     // 逆序完成模拟不同数据源和网络延迟，确保队列不依赖响应顺序。
-    const index = app.requests.findLastIndex(request => request.command === 'search_metadata');
+    const index = app.requests.findLastIndex(request => request.command === 'search_game_metadata');
     const [request] = app.requests.splice(index, 1);
     const mode = completed % 10;
     if (mode === 0) {
@@ -162,16 +162,16 @@ test('600 automatic searches keep three slots, advance after failures and retry 
       app.ui.resolve(request.id, false, JSON.stringify({key: 'setup.search_timeout'}));
     } else if (mode === 5 || mode === 7) {
       failed++;
-      app.ui.resolve(request.id, true, mode === 5 ? '[]' : '{broken');
+      app.ui.resolve(request.id, true, mode === 5 ? JSON.stringify({query: 'Missing', candidates: [], matched_url: null}) : '{broken');
     } else {
-      app.ui.resolve(request.id, true, JSON.stringify([{title: request.payload.query, url: `https://vndb.org/v${completed}`} ]));
+      app.ui.resolve(request.id, true, JSON.stringify({query: request.payload.id, candidates: [{title: request.payload.id, url: `https://vndb.org/v${completed}`}], matched_url: `https://vndb.org/v${completed}`}));
     }
     if (completed < 600) assert.match(app.html, new RegExp(`正在刮削 ${completed}/600`));
   }
   assert.equal(failed, 180);
   assert.doesNotMatch(app.html, /id="setup-scrape-toast"/);
   assert.match(app.html, /刮削完成 600\/600 · 未匹配或失败 180/);
-  assert.equal(app.requests.filter(request => request.command === 'search_metadata').length, 0);
+  assert.equal(app.requests.filter(request => request.command === 'search_game_metadata').length, 0);
   app.ui.dispatch('setup-auto', '');
   assert.match(app.html, /正在刮削 0\/180/);
   app.ui.dispatch('setup-auto-stop', '');
@@ -185,19 +185,19 @@ test('stop and restart wait for old requests and ignore their late results', asy
   games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
   app.finishScan(games);
   app.ui.dispatch('setup-auto', '');
-  const oldRequests = app.requests.filter(request => request.command === 'search_metadata');
+  const oldRequests = app.requests.filter(request => request.command === 'search_game_metadata');
   assert.equal(oldRequests.length, 3);
   app.ui.dispatch('setup-auto-stop', '');
   app.ui.dispatch('setup-auto', '');
-  assert.equal(app.requests.filter(request => request.command === 'search_metadata').length, 3);
+  assert.equal(app.requests.filter(request => request.command === 'search_game_metadata').length, 3);
   for (const old of oldRequests) {
     app.requests.splice(app.requests.indexOf(old), 1);
     app.ui.resolve(old.id, true, '[{"title":"stale","url":"https://vndb.org/v999"}]');
     assert.match(app.html, /正在刮削 0\/6/);
     assert.doesNotMatch(app.html, /stale|v999/);
-    assert.equal(app.requests.filter(request => request.command === 'search_metadata').length, 3);
+    assert.equal(app.requests.filter(request => request.command === 'search_game_metadata').length, 3);
   }
-  for (let i = 0; i < 6; i++) app.reply('search_metadata', [{title: 'Fresh', url: 'https://vndb.org/v1'}]);
+  for (let i = 0; i < 6; i++) app.reply('search_game_metadata', {query: 'Fresh', candidates: [{title: 'Fresh', url: 'https://vndb.org/v1'}], matched_url: 'https://vndb.org/v1'});
   assert.match(app.html, /刮削完成 6\/6/);
   assert.doesNotMatch(app.html, /id="setup-scrape-toast"/);
 });
@@ -208,13 +208,38 @@ test('batch confirmation accepts a single-game edit response', async () => {
   app.settings.game_edits.new = {setup_pending: true};
   app.finishScan([game()]);
   app.ui.dispatch('setup-auto', '');
-  app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
+  app.reply('search_game_metadata', {query: 'Matched', candidates: [{title: 'Matched', url: 'https://vndb.org/v1'}], matched_url: 'https://vndb.org/v1'});
   app.ui.dispatch('setup-save', '');
   app.reply('complete_game_setup', {
     game: game(), edit: {setup_confirmed: true, setup_pending: false, launcher_pending: true},
   });
   assert.doesNotMatch(app.html, /id="setup-title"/);
   assert.match(app.html, /id="home-game-new"/);
+});
+
+test('unmatched automatic candidates remain available and require manual confirmation before saving', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.dispatch('setup-auto', '');
+  assert.deepEqual(app.reply('search_game_metadata', {
+    query: '8  援女交際 ～亜梨紗の情事～',
+    candidates: [{title: '性治疗师', url: 'https://developer.nextmoe.dev/explore/work/226643?nsfw=1'}],
+    matched_url: null,
+  }), {id: 'new', source: 'nextmoe'});
+  assert.match(app.html, /未匹配或失败 1/);
+  assert.match(app.html, /value="8  援女交際 ～亜梨紗の情事～"/);
+  app.ui.dispatch('setup-save', '');
+  assert.equal(app.requests.some(request => request.command === 'complete_game_setup'), false);
+  app.ui.dispatch('choice-toggle', 'setup-candidate:new');
+  assert.match(app.html, /性治疗师/);
+  app.ui.dispatch('setup-candidate', JSON.stringify(['new', 'https://developer.nextmoe.dev/explore/work/226643?nsfw=1']));
+  app.ui.dispatch('setup-save', '');
+  assert.equal(app.requests.some(request => request.command === 'complete_game_setup'), false);
+  app.ui.dispatch('setup-confirm-launcher', 'new');
+  app.ui.dispatch('setup-save', '');
+  assert.equal(app.requests.filter(request => request.command === 'complete_game_setup').length, 1);
 });
 
 test('candidate dropdown renders separate escaped title, brand and release rows', async () => {
@@ -226,6 +251,46 @@ test('candidate dropdown renders separate escaped title, brand and release rows'
   app.reply('search_metadata', [{title: 'Game <Title>', brand: 'Brand & Studio', release_date: '2003-02-28', url: 'https://vndb.org/v1'}]);
   app.ui.dispatch('choice-toggle', 'setup-candidate:new');
   assert.match(app.html, /<span class="choice-copy"><span>Game &lt;Title&gt;<\/span><small>Brand &amp; Studio<\/small><small>2003-02-28<\/small><\/span>/);
+});
+
+test('empty search replaces the disabled candidate picker with a notice and clears it on retry', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.dispatch('setup-search', 'new');
+  app.reply('search_metadata', []);
+  assert.match(app.html, /class="setup-notice" role="status"/);
+  assert.match(app.html, /没有找到对应词条，请修改名称或切换数据源后重试。/);
+  assert.doesNotMatch(app.html, /data-value="setup-candidate:new"/);
+  assert.match(app.html, /data-action="setup-confirm-launcher"[^>]*disabled/);
+  app.ui.dispatch('setup-search', 'new');
+  assert.doesNotMatch(app.html, /class="setup-notice"/);
+  app.reply('search_metadata', [{title: 'Recovered', url: 'https://vndb.org/v1'}]);
+  assert.match(app.html, /data-value="setup-candidate:new"/);
+  app.ui.dispatch('setup-candidate', JSON.stringify(['new', 'https://vndb.org/v1']));
+  app.ui.dispatch('setup-confirm-launcher', 'new');
+  assert.match(app.html, /data-action="setup-confirm-launcher"[^>]*aria-pressed="true"/);
+  assert.doesNotMatch(app.html, /class="setup-notice"/);
+});
+
+test('search failure shows an escaped alert without a misleading empty-result notice', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.dispatch('setup-search', 'new');
+  const index = app.requests.findIndex(request => request.command === 'search_metadata');
+  const [request] = app.requests.splice(index, 1);
+  app.ui.resolve(request.id, false, JSON.stringify({key: 'error.read_data', args: {detail: '<offline> & retry'}}));
+  assert.match(app.html, /class="setup-notice" role="alert"/);
+  assert.match(app.html, /&lt;offline&gt; &amp; retry/);
+  assert.doesNotMatch(app.html, /<offline>|没有找到对应词条/);
+  app.ui.dispatch('setup-search', 'new');
+  assert.doesNotMatch(app.html, /class="setup-notice"/);
+  app.reply('search_metadata', []);
+  assert.match(app.html, /class="setup-notice" role="status"/);
+  assert.doesNotMatch(app.html, /class="setup-notice" role="alert"/);
 });
 
 test('custom order is the last sort option', async () => {

@@ -187,7 +187,8 @@
   background: var(--surface);
   border-color: var(--surface-line);
   box-shadow: var(--surface-shadow);
-  backdrop-filter: blur(18px) saturate(110%);
+  /* Only custom backgrounds make these card surfaces translucent. */
+  backdrop-filter: var(--card-backdrop, none);
 }
 
 .app-shell[data-theme] :is(.library-dialog, .editor-dialog, .choice-popup,
@@ -199,6 +200,12 @@
 
 .app-shell[data-theme] .detail-panel {
   background: var(--canvas);
+}
+
+/* Modal surfaces use an opaque backing to avoid nesting backdrop filters over the home artwork. */
+.app-shell[data-theme] :is(.library-dialog, .editor-dialog) {
+  background: linear-gradient(var(--surface-raised), var(--surface-raised)), var(--canvas);
+  backdrop-filter: none;
 }
 
 .app-shell[data-color-theme="white-pink"] .detail-panel {
@@ -994,6 +1001,10 @@
 
 .app-shell[data-custom-background="true"][data-theme] :is(.main-panel, .detail-panel) {
   background: transparent;
+}
+
+.app-shell[data-custom-background="true"] {
+  --card-backdrop: blur(18px) saturate(110%);
 }
 
 .app-shell[data-custom-background="true"][data-theme="light"] {

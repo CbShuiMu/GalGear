@@ -8,7 +8,8 @@ use crate::{
 };
 use galgear_i18n::Message;
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Write};
+use wasm_bindgen::prelude::wasm_bindgen;
 
 pub(crate) fn begin(app: &mut App) {
     app.form.retain(|key, _| !key.starts_with("draft-"));
@@ -95,23 +96,59 @@ pub(crate) fn refresh_changed_title(app: &mut App, game: &Game) {
     {
         return;
     }
+    let request_id = app.requests.next_id();
     issue(
         app,
         Pending::TitleRefresh(game.id.clone(), game.title.clone()),
         "refresh_title_metadata",
-        json!({"id":game.id,"title":game.title}),
+        json!({"id":game.id,"title":game.title,"requestId":request_id}),
     );
+}
+
+fn current_refresh(app: &App, request_id: u32) -> bool {
+    let Some(Pending::TitleRefresh(id, title)) = app.requests.get(request_id) else {
+        return false;
+    };
+    app.catalog
+        .games
+        .iter()
+        .any(|game| &game.id == id && &game.title == title)
+}
+
+/// 接收已找到新词条的通知；忽略已完成或已被新标题取代的请求。
+#[wasm_bindgen]
+pub fn title_refresh_started(request_id: u32) {
+    crate::state::APP.with(|state| {
+        let mut app = state.borrow_mut();
+        if current_refresh(&app, request_id) && app.detail.title_refreshing.insert(request_id) {
+            crate::view::paint(&app);
+        }
+    });
+}
+
+pub(crate) fn render_refresh_progress(html: &mut String, app: &App) {
+    if app
+        .detail
+        .title_refreshing
+        .iter()
+        .any(|id| current_refresh(app, *id))
+    {
+        write!(html, r#"<div id="title-refresh-toast" class="toast save-ai-toast" role="status" aria-live="polite" aria-atomic="true"><span class="network-spinner" aria-hidden="true"></span><span>{}</span></div>"#, crate::view::t(app, "detail.title_refreshing")).unwrap();
+    }
 }
 
 pub(crate) fn resolve_refresh(
     app: &mut App,
     pending: &Pending,
+    request_id: u32,
     success: bool,
     payload: &str,
 ) -> bool {
     let Pending::TitleRefresh(id, title) = pending else {
         return false;
     };
+    // 先结束此请求的提示，再处理失败或迟到结果；不会关闭其他游戏仍在进行的同步。
+    app.detail.title_refreshing.remove(&request_id);
     if !app
         .catalog
         .games
@@ -188,7 +225,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(payload).unwrap(),
-            json!({"id":"fixture","title":"New title"})
+            json!({"id":"fixture","title":"New title","requestId":refresh})
         );
         for (id, command, _) in &requests {
             if command == "get_preferences" {
@@ -241,11 +278,12 @@ mod tests {
         let mut app = App::default();
         app.catalog.games.push(game("New title"));
         let request = Pending::TitleRefresh("fixture".into(), "New title".into());
-        resolve_refresh(&mut app, &request, true, "null");
+        resolve_refresh(&mut app, &request, 1, true, "null");
         assert_eq!(app.catalog.games[0].tags, ["Old tag"]);
         resolve_refresh(
             &mut app,
             &request,
+            1,
             false,
             r#"{"key":"error.network","args":{}}"#,
         );
@@ -259,6 +297,7 @@ mod tests {
         resolve_refresh(
             &mut app,
             &request,
+            1,
             true,
             &game_json("New title").to_string(),
         );

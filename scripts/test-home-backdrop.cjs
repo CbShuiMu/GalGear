@@ -34,6 +34,7 @@ function fixture() {
     naturalHeight = 900;
     decode() { return new Promise((resolve, reject) => loads.set(this.src, {resolve, reject, image: this})); }
     cloneNode() { const copy = new Image(); copy.src = this.src; return copy; }
+    removeAttribute(name) { if (name === 'src') this.src = ''; }
   }
   const host = new Element();
   const context = vm.createContext({Image, matchMedia: () => motion,
@@ -42,6 +43,7 @@ function fixture() {
   const sync = (target, direction = 0) => context.syncHomeBackdrop(target, direction);
   return {
     host, animations, sync,
+    requestedSources() { return [...loads.keys()]; },
     select(src, direction = 1) { host.dataset.cover = src; sync(host, direction); },
     async load(src, {fail = false, landscape = false} = {}) {
       const load = loads.get(src);
@@ -73,6 +75,8 @@ test('decoded layers fade in opposite horizontal directions and preserve each la
   assert.deepEqual(app.sources(), ['a', 'b']);
   assert.equal(app.host.children[0].dataset.layout, 'portrait');
   assert.equal(app.host.children[1].dataset.layout, 'landscape');
+  assert.equal(app.host.children[0].children.length, 3);
+  assert.equal(app.host.children[1].children.length, 1);
   assert.equal(app.animations.at(-2).frames[1].transform, 'translateX(-45px)');
   assert.equal(app.animations.at(-1).frames[0].transform, 'translateX(45px)');
   await app.finish();
@@ -83,13 +87,28 @@ test('decoded layers fade in opposite horizontal directions and preserve each la
   assert.equal(app.animations.at(-1).frames[0].transform, 'translateX(-45px)');
 });
 
-test('out-of-order decoding cannot replace the final selection', async () => {
+test('rapid selection decodes one image at a time and skips superseded requests', async () => {
   const app = await initial();
   app.select('slow');
+  app.select('skipped');
   app.select('last');
+  assert.deepEqual(app.requestedSources(), ['a', 'slow']);
+  await app.load('slow');
+  assert.deepEqual(app.requestedSources(), ['a', 'slow', 'last']);
+  assert.deepEqual(app.sources(), ['a']);
   await app.load('last');
   await app.finish();
-  await app.load('slow');
+  assert.deepEqual(app.sources(), ['last']);
+});
+
+test('a failed superseded decode releases the queue for the final cover', async () => {
+  const app = await initial();
+  app.select('broken');
+  app.select('last');
+  await app.load('broken', {fail: true});
+  assert.deepEqual(app.sources(), ['a']);
+  await app.load('last');
+  await app.finish();
   assert.deepEqual(app.sources(), ['last']);
 });
 

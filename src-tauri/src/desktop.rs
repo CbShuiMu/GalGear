@@ -94,6 +94,10 @@ pub(crate) fn run() {
         .setup(|app| {
             crate::diagnostics::observe_events(app.handle());
             log::info!("desktop_setup webview_version={:?}", tauri::webview_version());
+            #[cfg(windows)]
+            if let Some(window) = app.get_webview_window("main") {
+                crate::diagnostics::observe_webview(&window);
+            }
             let exe_dir = std::env::current_exe()?
                 .parent()
                 .ok_or_else(|| std::io::Error::other("Executable directory"))?
@@ -220,6 +224,7 @@ pub(crate) fn run() {
             ai_summary::open_ai_route_map,
             game_setup::choose_setup_executable,
             game_setup::complete_game_setup,
+            game_setup::rematch_game_metadata,
             game_setup::list_game_executables,
             game_setup::confirm_game_executable,
             library::reorder_games,
@@ -256,6 +261,7 @@ pub(crate) fn run() {
             crate::updater::check_update,
             crate::updater::install_update,
             metadata::search_metadata,
+            game_setup::search_game_metadata,
             data_sources::get_data_sources,
             data_sources::save_data_source,
             data_sources::login_data_source,

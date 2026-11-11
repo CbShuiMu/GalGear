@@ -182,6 +182,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             "clear_data_source",
             json!({"source":value}),
         ),
+        "detail-rematch" => crate::game_setup::open_rematch(app),
         "detail-edit" => detail_form::begin(app),
         "detail-save" => detail_form::save(app),
         "detail-cancel" => detail_form::cancel(app),

@@ -3,6 +3,8 @@ use crate::{Game, GameEdit, Settings, config::display_path, data_sources, provid
 use galgear_i18n::Message;
 use std::{collections::BTreeSet, path::Path};
 
+pub mod matching;
+
 /// 列出游戏目录直属的普通 EXE 文件，不跟随链接或 Windows 重解析点。
 pub fn executables(folder: &Path) -> Result<Vec<std::path::PathBuf>, Message> {
     let root =
@@ -124,9 +126,96 @@ pub fn prepare(
     Ok(edit)
 }
 
+/// 显式重新匹配会覆盖词条及手动资料保护，保留启动、存档和游玩配置。
+pub fn prepare_rematch(
+    game: &Game,
+    previous: Option<&GameEdit>,
+    source: &str,
+    metadata: providers::Metadata,
+) -> Result<GameEdit, Message> {
+    validate(source, &metadata.url, "", true)?;
+    let previous = previous.cloned().unwrap_or_else(|| GameEdit {
+        play_status: game.play_status,
+        ..Default::default()
+    });
+    let mut edit = crate::game_details::title_refresh::apply(
+        game,
+        &previous,
+        source,
+        metadata.clone(),
+        crate::game_details::MetadataTarget::Tags,
+    );
+    edit = crate::game_details::title_refresh::apply(
+        game,
+        &edit,
+        source,
+        metadata,
+        crate::game_details::MetadataTarget::Details,
+    );
+    edit.title = None;
+    edit.summary_brand = None;
+    edit.setup_pending = false;
+    edit.setup_confirmed = true;
+    // associate(Details) 保留旧本地标签；显式重新匹配应仅采用新词条标签。
+    edit.tags = edit.source_tags.clone().unwrap_or_default();
+    Ok(edit)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rematch_replaces_entry_and_manual_overrides_but_preserves_local_configuration() {
+        let mut game =
+            crate::catalog::manual_game(Path::new("F:/Fixture/game.exe"), "Old title".into())
+                .unwrap();
+        game.tags = vec!["Old tag".into()];
+        let previous = GameEdit {
+            title: Some("Manual title".into()),
+            description: Some("Manual story".into()),
+            summary_release_date: Some("Old date".into()),
+            metadata_overrides: std::collections::BTreeMap::from([(
+                "brand".into(),
+                "Old brand".into(),
+            )]),
+            tag_rules: std::collections::BTreeMap::from([("New tag".into(), None)]),
+            source_tags: Some(vec!["Old source tag".into()]),
+            tag_source_url: Some("https://bgm.tv/subject/1".into()),
+            executable: Some("F:/Fixture/launcher.exe".into()),
+            arguments: vec!["--local".into()],
+            save_path: Some("F:/Fixture/save".into()),
+            launcher_pending: true,
+            play_status: crate::PlayStatus::Playing,
+            ..Default::default()
+        };
+        let metadata = providers::Metadata {
+            title: "New title".into(),
+            url: "https://vndb.org/v2".into(),
+            brand: "New brand".into(),
+            description: "New story".into(),
+            release_date: "2026-01-01".into(),
+            tags: vec!["New tag".into()],
+            ..Default::default()
+        };
+        let edit = prepare_rematch(&game, Some(&previous), "vndb", metadata.clone()).unwrap();
+        assert_eq!(edit.executable, previous.executable);
+        assert_eq!(edit.arguments, previous.arguments);
+        assert_eq!(edit.save_path, previous.save_path);
+        assert_eq!(edit.launcher_pending, previous.launcher_pending);
+        assert_eq!(edit.play_status, previous.play_status);
+        assert_eq!(edit.tag_source_url.as_deref(), Some(metadata.url.as_str()));
+        assert!(edit.metadata_overrides.is_empty() && edit.tag_rules.is_empty());
+        let settings = Settings {
+            game_edits: std::collections::BTreeMap::from([(game.id.clone(), edit)]),
+            ..Default::default()
+        };
+        crate::catalog::apply_edits(&mut game, &settings);
+        assert_eq!(game.title, "New title");
+        assert_eq!(game.tags, ["New tag"]);
+        assert_eq!(game.metadata, Some(metadata.clone()));
+        assert!(prepare_rematch(&game, Some(&previous), "bangumi", metadata).is_err());
+    }
 
     #[test]
     fn setup_imports_only_source_tags_and_preserves_manual_names_and_credits() {

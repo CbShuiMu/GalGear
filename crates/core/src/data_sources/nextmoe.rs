@@ -77,6 +77,7 @@ fn parse_search(value: &Value) -> Result<Vec<Resource>, Message> {
             }
             let preview = parse_metadata(work, &work_url(id))?;
             Ok(Resource {
+                aliases: names(work),
                 cover_url: preview.cover_url,
                 brand: preview.brand,
                 release_date: preview.release_date,
@@ -358,8 +359,34 @@ mod tests {
         ]})).unwrap();
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].title, "中文标题");
+        assert!(results[0].aliases.contains(&"Original".into()));
+        assert!(results[0].aliases.contains(&"中文标题".into()));
         assert_eq!(results[0].url, work_url("15"));
         assert_eq!(results[1].url, work_url("9007199254740993"));
+    }
+
+    #[test]
+    fn automatic_matching_uses_catalog_original_names_and_aliases() {
+        let results = parse_search(&json!({"object":"list","items":[
+            {"object":"work","id":"226643","medium":"galgame","display_name":"セックスセラピスト",
+             "localized":{"zh-Hans":{"value":"性治疗师"}}},
+            {"object":"work","id":"982","medium":"galgame","display_name":"援女交際 ～亜梨紗の情事～",
+             "localized":{"zh-Hans":{"value":"中文译名"}},"titles":[{"title":"別名","latin":"Alternate Title"}]}
+        ]})).unwrap();
+        for query in [
+            "援女交際 ～亜梨紗の情事～",
+            "中文译名",
+            "別名",
+            "Alternate Title",
+        ] {
+            let result = crate::game_setup::matching::resolve(query.into(), results.clone());
+            assert_eq!(result.matched_url, Some(work_url("982")));
+        }
+        assert!(
+            crate::game_setup::matching::resolve("game".into(), results)
+                .matched_url
+                .is_none()
+        );
     }
 
     #[test]

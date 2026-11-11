@@ -87,6 +87,8 @@ impl Metadata {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Resource {
+    /// 数据源提供的原名、译名和别名，用于自动关联时核对作品身份。
+    pub aliases: Vec<String>,
     pub cover_url: Option<String>,
     pub brand: String,
     pub release_date: String,

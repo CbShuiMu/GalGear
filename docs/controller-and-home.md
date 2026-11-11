@@ -8,6 +8,10 @@
 
 设置的外观选项新增「白色」配色，独立于原有粉色、白粉配色，并可搭配亮色或暗色模式。
 
+首页背景同时只解码一张封面，快速切换时仅保留最新的等待目标；横封面不创建额外模糊图层，离开首页时释放未完成的图片请求和动画。资料确认、游戏库及编辑弹窗使用遮罩与不透明底色，避免在首页背景上叠加整窗模糊；普通卡片仅在使用自定义背景时保留背景模糊。主题切换回调校验渲染顺序，防止延迟回调把已经更新的界面覆盖为旧内容。
+
+DOM 重排为尚未使用的同级节点建立索引，避免大列表排序时反复扫描，同时保留海报、输入框和滚动容器的节点。首页海报对齐在每帧先读取几何信息，再更新滚动范围和位置，尺寸未变时不重复写入样式。封面增强完成后仅为当前首页选中的游戏预解码 4K 背景，其他背景在实际选中时加载；当前图片仍保留至替换图片就绪。这些优化不改变首页布局、背景叠层、模糊效果或动画参数。
+
 资料、标签和封面选择器默认跟随设置中的“默认数据源”，各入口手动选择后保留该偏好（重启仍有效），不修改游戏已有资料关联。鲲Gal仅为显示名称，接口仍使用 NextMoe。
 
 首页导航使用提供的 `home_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg` 图标。首页与详情页的启动按钮共用 `game-launch-button` 样式，保持相同的尺寸、胶囊圆角、配色、文字排版及悬停效果。
@@ -46,7 +50,7 @@
 
 ```powershell
 cargo test --workspace --all-targets --locked
-node --test scripts/test-gamepad.mjs scripts/test-library-drag.cjs scripts/test-home-backdrop.cjs
+node --test scripts/test-gamepad.mjs scripts/test-library-drag.cjs scripts/test-home-backdrop.cjs scripts/test-render-transitions.cjs scripts/test-render-reconcile.cjs scripts/test-cover-preload.cjs
 cargo clippy --workspace --all-targets --locked -- -D warnings
 ./scripts/build-frontend.ps1
 node --test scripts/test-playtime.mjs

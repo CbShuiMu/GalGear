@@ -1,8 +1,23 @@
 {
+  "detail.rematch": {
+    "zh-CN": "重新匹配",
+    "ja-JP": "再照合",
+    "en-US": "Rematch"
+  },
+  "detail.rematch_hint": {
+    "zh-CN": "选择并确认新词条后保存，将覆盖当前游戏的标题、资料、标签及可用封面，并退出编辑模式。",
+    "ja-JP": "新しい作品を選択・確認して保存すると、タイトル・作品情報・タグ・取得できたカバー画像を置き換え、編集を終了します。",
+    "en-US": "Select and confirm an entry, then save to replace the title, details, tags and available cover and leave edit mode."
+  },
+  "detail.title_refreshing": {
+    "zh-CN": "正在同步封面，标签与资料",
+    "ja-JP": "カバー画像、タグと作品情報を同期しています",
+    "en-US": "Syncing cover, tags and details"
+  },
   "detail.title_refresh_failed": {
-    "zh-CN": "标题已保存，部分标签或资料未能自动更新：{detail}",
-    "ja-JP": "タイトルは保存されましたが、一部のタグまたは作品情報を自動更新できませんでした：{detail}",
-    "en-US": "Title saved, but some tags or details could not be updated automatically: {detail}"
+    "zh-CN": "标题已保存，部分封面、标签或资料未能自动更新：{detail}",
+    "ja-JP": "タイトルは保存されましたが、一部のカバー画像、タグまたは作品情報を自動更新できませんでした：{detail}",
+    "en-US": "Title saved, but some cover, tags or details could not be updated automatically: {detail}"
   },
   "dialog.library_multiple": {
     "zh-CN": "选择游戏库文件夹（可多选）",
@@ -2910,8 +2925,8 @@
     "en-US": "{value}h"
   },
   "playtime.compact_minutes": {
-    "zh-CN": "{value}分",
-    "ja-JP": "{value}分",
+    "zh-CN": "{value}m",
+    "ja-JP": "{value}m",
     "en-US": "{value}m"
   },
   "date.today": {

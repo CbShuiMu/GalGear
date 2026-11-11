@@ -8,6 +8,44 @@ use galgear_i18n::{Message, tr};
 use std::path::PathBuf;
 use tauri::State;
 
+/// 已下载并校验的封面缓存；内容寻址确保迟到请求不会覆盖当前封面文件。
+pub(crate) struct SourceCover {
+    pub(crate) data: String,
+    pub(crate) path: String,
+}
+
+pub(crate) fn download_source_cover(
+    image_url: &str,
+    url: &str,
+    cache: &std::path::Path,
+) -> Result<SourceCover, Message> {
+    cache_source_cover(&providers::cover_bytes(image_url, url)?, cache)
+}
+
+fn cache_source_cover(bytes: &[u8], cache: &std::path::Path) -> Result<SourceCover, Message> {
+    use sha2::Digest;
+    use std::io::Write;
+    std::fs::create_dir_all(cache).map_err(|error| Message::detail("error.image", error))?;
+    let path = cache.join(format!("source-{:x}.jpg", sha2::Sha256::digest(bytes)));
+    let mut temp = tempfile::NamedTempFile::new_in(cache)
+        .map_err(|error| Message::detail("error.image", error))?;
+    temp.write_all(bytes)
+        .map_err(|error| Message::detail("error.image", error))?;
+    temp.as_file()
+        .sync_all()
+        .map_err(|error| Message::detail("error.image", error))?;
+    let data = scanner::poster_data(temp.path())?;
+    match temp.persist_noclobber(&path) {
+        Ok(_) => {}
+        Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(Message::detail("error.image", error)),
+    }
+    Ok(SourceCover {
+        data,
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
 #[tauri::command]
 pub async fn source_covers(
     id: String,
@@ -58,38 +96,19 @@ pub async fn select_source_cover(
 ) -> Result<Option<Game>, Message> {
     find_game(&state, &id)?;
     galgear_core::data_sources::source_for_url(&url)?;
-    let path = state
-        .store
-        .path
-        .with_file_name("covers")
-        .join(format!("{id}.jpg"));
-    let destination = path.clone();
-    let data = tauri::async_runtime::spawn_blocking(move || {
-        use std::io::Write;
-        let bytes = providers::cover_bytes(&image_url, &url)?;
-        let parent = destination
-            .parent()
-            .ok_or_else(|| Message::new("error.cover_path"))?;
-        std::fs::create_dir_all(parent)
-            .map_err(|error| Message::detail("error.operation", error))?;
-        let mut temp = tempfile::NamedTempFile::new_in(parent)
-            .map_err(|error| Message::detail("error.operation", error))?;
-        temp.write_all(&bytes)
-            .map_err(|error| Message::detail("error.operation", error))?;
-        temp.persist(&destination)
-            .map_err(|error| Message::detail("error.operation", error))?;
-        scanner::poster_data(&destination)
+    let cache = state.store.path.with_file_name("covers");
+    let cover = tauri::async_runtime::spawn_blocking(move || {
+        download_source_cover(&image_url, &url, &cache)
     })
     .await
     .map_err(|error| Message::detail("error.operation", error))??;
     let mut game = find_game(&state, &id)?;
     super::preferences::update(&state, |settings| {
-        settings
-            .cover_overrides
-            .insert(id, path.to_string_lossy().into_owned());
+        settings.cover_overrides.insert(id, cover.path);
         Ok(())
     })?;
-    game.cover = Some(data);
+    game.cover = Some(cover.data);
+    game.cover_artwork = None;
     persist_game(&state, game).map(Some)
 }
 
@@ -246,6 +265,27 @@ pub(crate) async fn reset_cover(id: String, state: State<'_, AppState>) -> Resul
 mod tests {
     use super::*;
     use galgear_core::catalog;
+    #[test]
+    fn downloaded_cover_cache_preserves_old_files_and_rejects_invalid_images() {
+        let temp = tempfile::tempdir().unwrap();
+        let first =
+            cache_source_cover(include_bytes!("../../web/assets/2dfan.png"), temp.path()).unwrap();
+        let original = std::fs::read(&first.path).unwrap();
+        let second = cache_source_cover(
+            include_bytes!("../../web/assets/erogamescape.png"),
+            temp.path(),
+        )
+        .unwrap();
+        assert_ne!(first.path, second.path);
+        assert_ne!(first.data, second.data);
+        assert_eq!(std::fs::read(&first.path).unwrap(), original);
+        let repeat =
+            cache_source_cover(include_bytes!("../../web/assets/2dfan.png"), temp.path()).unwrap();
+        assert_eq!(repeat.path, first.path);
+        assert!(cache_source_cover(b"not an image", temp.path()).is_err());
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
     #[test]
     fn replacing_a_cover_changes_its_url_and_preserves_previous_image() {
         use base64::Engine;

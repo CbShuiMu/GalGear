@@ -46,6 +46,7 @@ function showLatest(state) {
 
 async function loadCover(state, request) {
   const image = new Image();
+  state.loadingImage = image;
   image.alt = '';
   image.decoding = 'async';
   image.src = request.src;
@@ -55,7 +56,7 @@ async function loadCover(state, request) {
     const layer = document.createElement('div');
     layer.className = 'home-backdrop-layer';
     layer.dataset.layout = image.naturalWidth < image.naturalHeight ? 'portrait' : 'landscape';
-    for (const name of ['bleed', 'soft']) {
+    for (const name of layer.dataset.layout === 'portrait' ? ['bleed', 'soft'] : []) {
       const copy = image.cloneNode();
       copy.className = `home-backdrop-${name}`;
       layer.append(copy);
@@ -65,10 +66,20 @@ async function loadCover(state, request) {
     request.layer = layer;
   } catch {
     // An unavailable cover fades to the page surface, never leaves another game's artwork behind.
+  } finally {
+    state.loadingImage = null;
+    if (backdrop === state && state.request !== request) loadLatest(state);
   }
   if (backdrop !== state || state.request !== request || !state.host.isConnected) return;
   request.ready = true;
   showLatest(state);
+}
+
+function loadLatest(state) {
+  const request = state.request;
+  if (state.host.isConnected && !state.loadingImage && request?.src && !request.ready && request.src !== state.src) {
+    void loadCover(state, request);
+  }
 }
 
 export function syncHomeBackdrop(host, direction) {
@@ -76,8 +87,9 @@ export function syncHomeBackdrop(host, direction) {
     if (backdrop) {
       finishTransition(backdrop);
       backdrop.layer?.remove();
+      backdrop.loadingImage?.removeAttribute('src');
     }
-    backdrop = host ? {host, src: '', layer: null, request: null, transition: null} : null;
+    backdrop = host ? {host, src: '', layer: null, request: null, transition: null, loadingImage: null} : null;
   }
   if (!backdrop) return;
   const state = backdrop;
@@ -86,7 +98,8 @@ export function syncHomeBackdrop(host, direction) {
   const request = {src, direction, ready: !src, layer: null};
   state.request = request;
   if (src === state.src) return;
-  if (src) void loadCover(state, request);
+  // Serial decoding bounds memory during rapid navigation, retaining only the latest queued selection.
+  if (src) loadLatest(state);
   else showLatest(state);
 }
 

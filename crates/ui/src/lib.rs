@@ -48,4 +48,5 @@ pub use events::{
     runtime_updated, magpie_hotkey_updated, library_devices_changed, scan_progress, start, tool_failed,
 };
 pub use responses::resolve;
+pub use detail_form::title_refresh_started;
 pub use screenshots::{screenshot_completed, screenshot_updated};

@@ -49,7 +49,7 @@ test('home and game details share local dates and the library switches duration 
       await new Promise(resolve => setImmediate(resolve));
       assert.match(html, /<span class="home-playtime">最近游玩 昨天<\/span>/, scenario.zone);
       ui.dispatch('page', 'games');
-      assert.match(html, /class="library-playtime"><strong>59分<\/strong>/);
+      assert.match(html, /class="library-playtime"><strong>59m<\/strong>/);
       ui.dispatch('game-detail', game.id);
       await new Promise(resolve => setImmediate(resolve));
       const facts = html.match(/<dl class="hero-facts">([\s\S]*?)<\/dl>/)?.[1];

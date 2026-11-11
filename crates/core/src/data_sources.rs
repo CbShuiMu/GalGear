@@ -474,7 +474,7 @@ pub fn search_with_client(
                 source,
                 credentials,
             )
-            .json(&json!({"filters":["search","=",query],"fields":"title,alttitle,image.url,released,developers.name","results":20})),
+            .json(&json!({"filters":["search","=",query],"fields":"title,alttitle,aliases,titles.title,titles.latin,image.url,released,developers.name","results":20})),
         )?,
         "bangumi" => request_json(
             auth(
@@ -541,6 +541,7 @@ pub fn search_with_client(
                 ),
             };
             Ok(Resource {
+                aliases: search_names(source, entry),
                 cover_url: entry["image"]["url"].as_str().or_else(|| entry["images"]["common"].as_str()).map(str::to_owned),
                 brand: join_names(&entry["developers"]),
                 release_date: entry["released"].as_str().or_else(|| entry["date"].as_str()).unwrap_or_default().into(),
@@ -552,6 +553,29 @@ pub fn search_with_client(
         })
         .collect()
 }
+fn search_names(source: &str, entry: &Value) -> Vec<String> {
+    let fields = match source {
+        "vndb" => ["title", "alttitle"],
+        "bangumi" => ["name", "name_cn"],
+        _ => ["name", "chineseName"],
+    };
+    let mut names: Vec<_> = fields.iter().map(|field| text(entry, field)).collect();
+    if source == "vndb" {
+        names.extend(
+            entry["aliases"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|name| name.as_str().map(str::to_owned)),
+        );
+        for title in entry["titles"].as_array().into_iter().flatten() {
+            names.push(text(title, "title"));
+            names.push(text(title, "latin"));
+        }
+    }
+    galgear_tags::normalize(names)
+}
+
 fn join_names(value: &Value) -> String {
     value
         .as_array()
@@ -825,6 +849,24 @@ mod tests {
         let loaded = load(&config, "2dfan");
         credentials::clear(&target).unwrap();
         assert_eq!(loaded.unwrap().fan, Some(saved));
+    }
+
+    #[test]
+    fn search_names_preserve_original_translated_and_alternate_titles() {
+        let value = json!({"title":"Latin", "alttitle":"原名", "aliases":["別名"],
+            "titles":[{"title":"中文译名", "latin":null}]});
+        assert_eq!(
+            search_names("vndb", &value),
+            ["Latin", "原名", "別名", "中文译名"]
+        );
+        assert_eq!(
+            search_names("bangumi", &json!({"name":"原名", "name_cn":"译名"})),
+            ["原名", "译名"]
+        );
+        assert_eq!(
+            search_names("ymgal", &json!({"name":"原名", "chineseName":"译名"})),
+            ["原名", "译名"]
+        );
     }
 
     #[test]

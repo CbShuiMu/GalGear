@@ -1,6 +1,6 @@
 //! Batch association and executable confirmation, with independent row drafts.
 use crate::{
-    choices, models::Game, models::Resource, models::Settings, preferences, requests::Pending,
+    choices, models::Game, models::Resource, models::Settings, models::SetupSearchResult, preferences, requests::Pending,
     requests::issue, state::{App, show_toast}, view::f, view::t, widgets::button, widgets::esc, widgets::icon,
 };
 use galgear_i18n::{Message, format_text};
@@ -11,6 +11,7 @@ use std::{collections::BTreeMap, collections::BTreeSet, fmt::Write};
 #[derive(Default)]
 pub(crate) struct State {
     pub open: bool,
+    rematch: Option<String>,
     page: usize,
     rows: Vec<Draft>,
     deferred: BTreeSet<String>,
@@ -98,11 +99,110 @@ pub(crate) fn sync_default_source(app: &mut App) {
     }
 }
 
+fn draft(app: &App, game: &Game) -> Draft {
+    let url = game
+        .metadata
+        .as_ref()
+        .map(|meta| meta.url.clone())
+        .unwrap_or_default();
+    let source = app
+        .settings
+        .game_edits
+        .get(&game.id)
+        .map(|edit| edit.metadata_provider.clone())
+        .filter(|source| !source.is_empty())
+        .unwrap_or_else(|| {
+            if url.is_empty() {
+                preferences::preferred_source(app, "metadata").into()
+            } else {
+                preferences::source_for_url(&url).0.into()
+            }
+        });
+    let available = preferences::available_source(app, &source).to_owned();
+    let url = if source == available {
+        url
+    } else {
+        String::new()
+    };
+    let source = available;
+    Draft {
+        id: game.id.clone(),
+        source_manual: !url.is_empty()
+            || app
+                .settings
+                .game_edits
+                .get(&game.id)
+                .is_some_and(|edit| !edit.metadata_provider.is_empty()),
+        source,
+        query: game.title.clone(),
+        executable: game.executable.clone().unwrap_or_default(),
+        confirmed: false,
+        url,
+        candidates: Vec::new(),
+        searched: false,
+        search_request: None,
+        automatic: false,
+        picking: false,
+        queued: false,
+        saving: false,
+        error: None,
+    }
+}
+
+/// 复用资料确认窗口；取消时保留详情草稿，成功保存后才丢弃草稿。
+pub(crate) fn open_rematch(app: &mut App) {
+    if !app.detail.editing
+        || app.detail.editing_configuration
+        || app.busy()
+        || app.setup.open
+        || !app.setup.rows.is_empty()
+    {
+        return;
+    }
+    let Some(game) = app
+        .detail
+        .selected
+        .as_ref()
+        .and_then(|id| app.catalog.games.iter().find(|game| &game.id == id))
+    else {
+        return;
+    };
+    let mut row = draft(app, game);
+    row.query = crate::features::form(app, "draft-title");
+    app.setup.rematch = Some(game.id.clone());
+    app.setup.rows.push(row);
+    app.setup.page = 0;
+    app.setup.open = true;
+    app.choices.open = None;
+    app.context_menu = None;
+}
+
 pub(crate) fn sync(app: &mut App) {
-    let game_ids: BTreeSet<_> = app.catalog.games.iter().map(|game| game.id.as_str()).collect();
-    app.setup.rows.retain(|row| game_ids.contains(row.id.as_str()));
-    if !app.initialized || app.busy() || app.library.scanning
-        || matches!(app.library.dialog, Some(crate::library::Dialog::FolderFailures { .. })) {
+    let game_ids: BTreeSet<_> = app
+        .catalog
+        .games
+        .iter()
+        .map(|game| game.id.as_str())
+        .collect();
+    app.setup
+        .rows
+        .retain(|row| game_ids.contains(row.id.as_str()));
+    // 重新匹配期间不混入扫描发现的其他待确认游戏。
+    if app.setup.rematch.is_some() {
+        if app.setup.rows.is_empty() {
+            app.setup.rematch = None;
+            app.setup.open = false;
+        }
+        return;
+    }
+    if !app.initialized
+        || app.busy()
+        || app.library.scanning
+        || matches!(
+            app.library.dialog,
+            Some(crate::library::Dialog::FolderFailures { .. })
+        )
+    {
         return;
     }
     let row_ids: BTreeSet<_> = app.setup.rows.iter().map(|row| row.id.as_str()).collect();
@@ -111,51 +211,7 @@ pub(crate) fn sync(app: &mut App) {
         .games
         .iter()
         .filter(|game| needed(app, game) && !row_ids.contains(game.id.as_str()))
-        .map(|game| {
-            let url = game
-                .metadata
-                .as_ref()
-                .map(|meta| meta.url.clone())
-                .unwrap_or_default();
-            let source = app
-                .settings
-                .game_edits
-                .get(&game.id)
-                .map(|edit| edit.metadata_provider.clone())
-                .filter(|source| !source.is_empty())
-                .unwrap_or_else(|| {
-                    if url.is_empty() {
-                        preferences::preferred_source(app, "metadata").into()
-                    } else {
-                        preferences::source_for_url(&url).0.into()
-                    }
-                });
-            let available = preferences::available_source(app, &source).to_owned();
-            let url = if source == available { url } else { String::new() };
-            let source = available;
-            Draft {
-                id: game.id.clone(),
-                source_manual: !url.is_empty()
-                    || app
-                        .settings
-                        .game_edits
-                        .get(&game.id)
-                        .is_some_and(|edit| !edit.metadata_provider.is_empty()),
-                source,
-                query: game.title.clone(),
-                executable: game.executable.clone().unwrap_or_default(),
-                confirmed: false,
-                url,
-                candidates: Vec::new(),
-                searched: false,
-                search_request: None,
-                automatic: false,
-                picking: false,
-                queued: false,
-                saving: false,
-                error: None,
-            }
-        })
+        .map(|game| draft(app, game))
         .collect();
     if !additions.is_empty() {
         app.setup.rows.extend(additions);
@@ -207,8 +263,8 @@ fn pump(app: &mut App) {
     for _ in 0..slots {
         if let Some(row) = app.setup.rows.iter_mut().find(|row| row.automatic && row.search_request.is_none()) {
             row.search_request = Some(app.requests.next_id());
-            let (id, source, query) = (row.id.clone(), row.source.clone(), row.query.clone());
-            issue(app, Pending::SetupSearch(id), "search_metadata", json!({"query":query,"source":source}));
+            let (id, source) = (row.id.clone(), row.source.clone());
+            issue(app, Pending::SetupSearch(id.clone()), "search_game_metadata", json!({"id":id,"source":source}));
             continue;
         }
         let Some(row) = app.setup.rows.iter_mut().find(|row| row.queued) else {
@@ -218,7 +274,12 @@ fn pump(app: &mut App) {
         row.saving = true;
         let payload = json!({"id":row.id,"source":row.source,"url":row.url,"executable":"","confirmed":row.confirmed});
         let id = row.id.clone();
-        issue(app, Pending::SetupSave(id), "complete_game_setup", payload);
+        let command = if app.setup.rematch.is_some() {
+            "rematch_game_metadata"
+        } else {
+            "complete_game_setup"
+        };
+        issue(app, Pending::SetupSave(id), command, payload);
     }
     if !app.setup.scraping() {
         finish_progress(app, false);
@@ -275,9 +336,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     }
     if action == "setup-defer-all" {
         if !app.setup.busy() {
-            app.setup
-                .deferred
-                .extend(app.setup.rows.iter().map(|row| row.id.clone()));
+            if app.setup.rematch.take().is_none() {
+                app.setup
+                    .deferred
+                    .extend(app.setup.rows.iter().map(|row| row.id.clone()));
+            }
+            app.choices.open = None;
             app.setup.rows.clear();
             app.setup.progress = None;
             app.setup.open = false;
@@ -296,7 +360,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             let mut total = 0;
             for row in app.setup.rows.iter_mut().filter(|row| !row.confirmed || row.url.is_empty()) {
                 let Some(game) = app.catalog.games.iter().find(|game| game.id == row.id) else { continue };
-                row.query = game.folder.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(&game.title).into();
+                row.query.clone_from(&game.title);
                 row.candidates.clear();
                 row.url.clear();
                 row.searched = false;
@@ -416,16 +480,22 @@ pub(crate) fn resolve(
         (|| -> Result<(), String> {
             match kind {
                 Pending::SetupSearch(_) => {
-                    row.candidates =
-                        serde_json::from_str(payload).map_err(|error| error.to_string())?;
-                    row.searched = true;
-                    if automatic && let Some(candidate) = row.candidates.first() {
-                        row.url = candidate.url.clone();
-                        row.confirmed = true;
-                        if !row.can_save() {
-                            row.error = Some(Message::new("setup.executable_required"));
+                    if automatic {
+                        let result: SetupSearchResult = serde_json::from_str(payload)
+                            .map_err(|error| error.to_string())?;
+                        row.query = result.query;
+                        row.candidates = result.candidates;
+                        if let Some(url) = result.matched_url.filter(|url| {
+                            !url.is_empty() && row.candidates.iter().any(|candidate| candidate.url == *url)
+                        }) {
+                            row.url = url;
+                            row.confirmed = true;
                         }
+                    } else {
+                        row.candidates = serde_json::from_str(payload)
+                            .map_err(|error| error.to_string())?;
                     }
+                    row.searched = true;
                 }
                 Pending::SetupExecutable(_) => {
                     let path: Option<String> =
@@ -451,7 +521,7 @@ pub(crate) fn resolve(
                         data.settings.as_mut().and_then(|settings| settings.game_edits.remove(id))
                     }).ok_or_else(|| "Missing game edit in setup response".to_owned())?;
                     if let Some(game) = app.catalog.games.iter_mut().find(|game| game.id == *id) {
-                        *game = data.game;
+                        crate::playtime::replace_game(game, data.game);
                     }
                     // Responses may finish out of order; merge only this game's edit.
                     app.settings.game_edits.insert(id.clone(), edit);
@@ -465,7 +535,7 @@ pub(crate) fn resolve(
     };
     if automatic && let Some(progress) = &mut app.setup.progress {
         progress.completed += 1;
-        if result.is_err() || app.setup.rows[index].candidates.is_empty() {
+        if result.is_err() || !app.setup.rows[index].confirmed {
             progress.failed += 1;
         }
     }
@@ -473,6 +543,14 @@ pub(crate) fn resolve(
         Err(error) => app.setup.rows[index].error = Some(error),
         Ok(()) if matches!(kind, Pending::SetupSave(_)) => {
             app.setup.rows.remove(index);
+            if app.setup.rematch.as_deref() == Some(id) {
+                app.setup.rematch = None;
+                app.detail.metadata_warnings.remove(id);
+                if app.detail.selected.as_ref() == Some(id) {
+                    crate::detail_form::cancel(app);
+                }
+            }
+            app.choices.open = None;
         }
         _ => {}
     }
@@ -583,7 +661,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
     }
     let busy = app.setup.busy();
     let ready = app.setup.rows.iter().filter(|row| row.can_save()).count();
-    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help">{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table">"#,t(app,"setup.title"),f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]),t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button(if app.setup.scraping() { "setup-auto-stop" } else { "setup-auto" },"",t(app,if app.setup.scraping() { "setup.auto_stop" } else { "setup.auto" }),if app.setup.scraping() { "close" } else { "search" },"quiet",busy && !app.setup.scraping()))).unwrap();
+    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help">{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table">"#,t(app,if app.setup.rematch.is_some() { "detail.rematch" } else { "setup.title" }),if app.setup.rematch.is_some() { esc(t(app,"detail.rematch_hint")) } else { f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]) },t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button(if app.setup.scraping() { "setup-auto-stop" } else { "setup-auto" },"",t(app,if app.setup.scraping() { "setup.auto_stop" } else { "setup.auto" }),if app.setup.scraping() { "close" } else { "search" },"quiet",busy && !app.setup.scraping()))).unwrap();
     html.push_str("<thead><tr>");
     for key in [
         "setup.game",
@@ -633,41 +711,108 @@ pub(crate) fn render(html: &mut String, app: &App) {
         );
         write!(html,r#"</td><td><div class="setup-row-field"><input id="setup-query-{}" data-input="setup-query:{}" value="{}" aria-label="{}" autocomplete="off" {}/><button class="icon-button" data-action="setup-search" data-value="{}" aria-label="{}" title="{}" {}>{}</button></div>"#,esc(&row.id),esc(&row.id),esc(&row.query),f(app,"setup.search_for",&[("name",&game.title)]),disabled,esc(&row.id),t(app,"metadata.search"),t(app,"metadata.search"),if row.locked()||row.source.is_empty()||row.query.trim().is_empty()||row.search_request.is_some(){"disabled"}else{""},icon("search")).unwrap();
         html.push_str("</td><td><div class=\"setup-entry-field\">");
-        choices::control(
-            html,
-            app,
-            &format!("setup-candidate:{}", row.id),
-            &format_text(
-                app.settings.language,
-                "setup.entry_for",
-                &[("name", &game.title)],
-            ),
-            row.locked() || row.candidates.is_empty() && row.url.is_empty(),
-        );
-        if row.searched && row.candidates.is_empty() {
+        if row.searched && row.candidates.is_empty() && row.url.is_empty() && row.error.is_none() {
             write!(
                 html,
-                "<small class=\"muted\">{}</small>",
+                r#"<div class="setup-notice" role="status">{}<span>{}</span></div>"#,
+                icon("search"),
                 t(app, "setup.no_results")
             )
             .unwrap();
+        } else {
+            choices::control(
+                html,
+                app,
+                &format!("setup-candidate:{}", row.id),
+                &format_text(
+                    app.settings.language,
+                    "setup.entry_for",
+                    &[("name", &game.title)],
+                ),
+                row.locked() || row.candidates.is_empty() && row.url.is_empty(),
+            );
         }
         write!(html,r#"<button type="button" class="icon-button setup-launcher-check" data-action="setup-confirm-launcher" data-value="{}" aria-pressed="{}" aria-label="{}" title="{}" {}>{}</button></div></td></tr>"#,esc(&row.id),row.confirmed,f(app,"setup.confirm_for",&[("name",&game.title)]),t(app,"common.confirm"),if row.locked() || row.url.is_empty() {"disabled"} else {""},icon("check")).unwrap();
         if let Some(error) = &row.error {
-            write!(html,r#"<tr data-render-key="setup-error-{}"><td colspan="4" class="setup-error" role="alert">{}</td></tr>"#,esc(&row.id),esc(&error.render(app.settings.language))).unwrap();
+            write!(html,r#"<tr data-render-key="setup-error-{}"><td colspan="4" class="setup-error"><div class="setup-notice" role="alert">{}<span>{}</span></div></td></tr>"#,esc(&row.id),icon("error"),esc(&error.render(app.settings.language))).unwrap();
         }
     }
     html.push_str("</tbody></table></div>");
     if app.setup.rows.len() > 40 {
         write!(html, "<div class=\"setup-pagination\">{}<span>{}</span>{}</div>", button("setup-page", &page.saturating_sub(1).to_string(), t(app,"common.previous"), "chevron_left", "quiet icon-only", page == 0), f(app,"setup.page", &[("page", &(page+1).to_string()), ("total", &app.setup.rows.len().div_ceil(40).to_string())]), button("setup-page", &(page+1).to_string(), t(app,"common.next"), "chevron", "quiet icon-only", (page+1)*40 >= app.setup.rows.len())).unwrap();
     }
-    write!(html,r#"<footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,"setup.later"),"","quiet",busy),button("setup-save","",t(app,if app.setup.rows.iter().any(|row| row.saving || row.queued) {"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
+    write!(html,r#"<footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,if app.setup.rematch.is_some() { "common.cancel" } else { "setup.later" }),"","quiet",busy),button("setup-save","",t(app,if app.setup.rows.iter().any(|row| row.saving || row.queued) {"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::GameEdit;
+
+    fn rematch_app() -> App {
+        let mut app = app();
+        dispatch(&mut app, "setup-defer-all", "");
+        app.detail.selected = Some("cached".into());
+        crate::detail_form::begin(&mut app);
+        app.form
+            .insert("draft-title".into(), "Unsaved title".into());
+        open_rematch(&mut app);
+        app
+    }
+
+    #[test]
+    fn rematch_isolated_from_imports_cancel_preserves_draft_and_ignores_late_search() {
+        let mut app = rematch_app();
+        refreshed(&mut app);
+        sync(&mut app);
+        assert_eq!(app.setup.rows.len(), 1);
+        assert_eq!(app.setup.rows[0].id, "cached");
+        assert_eq!(app.setup.rows[0].query, "Unsaved title");
+        dispatch(&mut app, "setup-search", "cached");
+        let request_id = app.requests.last_id();
+        dispatch(&mut app, "setup-defer-all", "");
+        open_rematch(&mut app);
+        resolve(
+            &mut app,
+            &Pending::SetupSearch("cached".into()),
+            request_id,
+            true,
+            r#"[{"title":"Late","url":"https://vndb.org/v99"}]"#,
+        );
+        assert!(app.setup.rows[0].candidates.is_empty());
+        assert!(app.detail.editing);
+        assert_eq!(crate::features::form(&app, "draft-title"), "Unsaved title");
+    }
+
+    #[test]
+    fn rematch_failure_allows_retry_and_only_success_exits_editor() {
+        let mut app = rematch_app();
+        crate::bridge::take_requests();
+        ready(&mut app, "cached");
+        dispatch(&mut app, "setup-save", "");
+        let (id, command, _) = crate::bridge::take_requests().pop().unwrap();
+        assert_eq!(command, "rematch_game_metadata");
+        let kind = app.requests.complete(id).unwrap();
+        resolve(&mut app, &kind, id, false, r#"{"key":"error.network"}"#);
+        assert!(app.setup.open && app.detail.editing);
+        assert!(app.setup.rows[0].error.is_some());
+        assert_eq!(
+            app.catalog.games[0].metadata.as_ref().unwrap().url,
+            "https://vndb.org/v1"
+        );
+        dispatch(&mut app, "setup-save", "");
+        let (id, _, _) = crate::bridge::take_requests().pop().unwrap();
+        dispatch(&mut app, "setup-defer-all", "");
+        assert!(app.setup.open, "saving cannot be dismissed");
+        let kind = app.requests.complete(id).unwrap();
+        resolve(&mut app, &kind, id, true, &saved_response("cached"));
+        assert!(!app.setup.open && !app.detail.editing);
+        assert!(!app.form.contains_key("draft-title"));
+        assert_eq!(
+            app.catalog.games[0].metadata.as_ref().unwrap().url,
+            "https://vndb.org/v3"
+        );
+    }
 
     #[test]
     fn default_source_changes_only_untouched_setup_rows() {
@@ -797,17 +942,17 @@ mod tests {
     }
 
     #[test]
-    fn automatic_scraping_confirms_first_result_but_waits_for_user_to_save() {
+    fn automatic_scraping_confirms_backend_match_but_waits_for_user_to_save() {
         let mut app = app();
         crate::bridge::take_requests();
         dispatch(&mut app, "setup-auto", "");
         let requests = crate::bridge::take_requests();
         assert_eq!(requests.len(), 2);
         for (request_id, command, payload) in &requests {
-            assert_eq!(command, "search_metadata");
-            assert_eq!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["query"], "Test");
+            assert_eq!(command, "search_game_metadata");
+            assert!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["id"].is_string());
             let kind = app.requests.complete(*request_id).unwrap();
-            resolve(&mut app, &kind, *request_id, true, r#"[{"title":"First","url":"https://vndb.org/v1"},{"title":"Second","url":"https://vndb.org/v2"}]"#);
+            resolve(&mut app, &kind, *request_id, true, r#"{"query":"Second","candidates":[{"title":"First","url":"https://vndb.org/v1"},{"title":"Second","url":"https://vndb.org/v2"}],"matched_url":"https://vndb.org/v2"}"#);
         }
         assert!(crate::bridge::take_requests().is_empty());
         assert!(app.setup.open);
@@ -824,7 +969,7 @@ mod tests {
         for (_, command, payload) in &saves {
             assert_eq!(command, "complete_game_setup");
             let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
-            assert_eq!(payload["url"], "https://vndb.org/v1");
+            assert_eq!(payload["url"], "https://vndb.org/v2");
             assert_eq!(payload["confirmed"], true);
         }
     }
@@ -838,7 +983,7 @@ mod tests {
         let requests = crate::bridge::take_requests();
         for (index, (request_id, _, _)) in requests.iter().enumerate() {
             let kind = app.requests.complete(*request_id).unwrap();
-            resolve(&mut app, &kind, *request_id, true, if index == 0 { r#"[{"title":"First","url":"https://vndb.org/v1"}]"# } else { "[]" });
+            resolve(&mut app, &kind, *request_id, true, if index == 0 { r#"{"query":"First","candidates":[{"title":"First","url":"https://vndb.org/v1"}],"matched_url":"https://vndb.org/v1"}"# } else { r#"{"query":"Other","candidates":[],"matched_url":null}"# });
         }
         assert!(crate::bridge::take_requests().is_empty());
         assert!(app.setup.rows[0].error.is_none());

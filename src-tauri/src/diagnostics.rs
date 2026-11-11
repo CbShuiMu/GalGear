@@ -5,7 +5,12 @@ mod privacy;
 #[cfg(test)]
 mod tests;
 #[cfg(windows)]
+mod webview;
+#[cfg(windows)]
 mod windows;
+
+#[cfg(windows)]
+pub(crate) use webview::observe as observe_webview;
 
 use chrono::Local;
 use log::{Level, LevelFilter, Log, Metadata, Record};
@@ -221,6 +226,8 @@ pub(crate) enum FrontendKind {
     JavascriptError,
     WasmPanic,
     Ready,
+    View,
+    Visibility,
 }
 
 #[derive(Deserialize)]
@@ -234,11 +241,53 @@ pub(crate) struct FrontendEvent {
     elapsed_ms: u64,
     #[serde(default)]
     detail: String,
+    #[serde(default)]
+    visible: bool,
+    view: Option<FrontendView>,
 }
 
-/// 前端只上传诊断文本与关联编号，统一在写入边界脱敏和限长。
+#[derive(Deserialize)]
+struct FrontendView {
+    sequence: u32,
+    page: FrontendPage,
+    overlay: FrontendOverlay,
+    phase: ViewPhase,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum FrontendPage {
+    Boot,
+    Home,
+    Games,
+    Collections,
+    Patches,
+    Settings,
+    About,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum FrontendOverlay {
+    None,
+    Setup,
+    Detail,
+    Dialog,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ViewPhase {
+    Applied,
+    Frames,
+    FramesDelayed,
+}
+
+/// 记录前端错误、命令结果与界面进度，日志写入时统一脱敏和限长。
 #[tauri::command]
-pub(crate) fn record_diagnostic(event: FrontendEvent) {
+pub(crate) fn record_diagnostic(webview: tauri::Webview, event: FrontendEvent) {
     match event.kind {
         FrontendKind::CommandOk => {
             log::info!(target: "galgear::command", "command_ok request={} command={} elapsed_ms={}", event.request, event.command, event.elapsed_ms)
@@ -254,6 +303,22 @@ pub(crate) fn record_diagnostic(event: FrontendEvent) {
         }
         FrontendKind::Ready => {
             log::info!(target: "galgear::frontend", "frontend_ready {}", event.detail)
+        }
+        FrontendKind::View => {
+            if let Some(view) = event.view {
+                let (name, level) = match view.phase {
+                    ViewPhase::Applied => ("view_applied", Level::Info),
+                    ViewPhase::Frames => ("view_frames", Level::Info),
+                    ViewPhase::FramesDelayed => ("view_frames_delayed", Level::Warn),
+                };
+                log::log!(target: "galgear::frontend", level,
+                    "{name} window={} view={} page={:?} overlay={:?} visible={} elapsed_ms={}",
+                    webview.label(), view.sequence, view.page, view.overlay, event.visible, event.elapsed_ms);
+            }
+        }
+        FrontendKind::Visibility => {
+            log::info!(target: "galgear::frontend", "frontend_visibility window={} visible={}",
+                webview.label(), event.visible);
         }
     }
 }

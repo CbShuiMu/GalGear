@@ -147,7 +147,10 @@ reducedMotion.addEventListener('change', cancelHomeDetailTransition);
 function updateShelfTail(shelf) {
   const last = shelf.lastElementChild;
   if (last?.matches('.home-game')) {
-    shelf.style.setProperty('--home-last-width', `${last.getBoundingClientRect().width}px`);
+    const width = `${last.getBoundingClientRect().width}px`;
+    if (shelf.style.getPropertyValue('--home-last-width') !== width) {
+      shelf.style.setProperty('--home-last-width', width);
+    }
   }
 }
 
@@ -163,12 +166,14 @@ function alignSelection(game, animate) {
   const step = now => {
     alignmentFrame = 0;
     if (!game.isConnected || !game.classList.contains('selected')) return;
-    updateShelfTail(shelf);
     // Earlier posters shrink during the same transition, so follow their live
     // positions rather than scrolling to a stale offset and snapping at the end.
     const inset = parseFloat(getComputedStyle(shelf).paddingLeft) || 0;
     const target = shelf.scrollLeft + game.getBoundingClientRect().left - shelf.getBoundingClientRect().left - inset;
     const progress = duration ? Math.min(1, (now - started) / duration) : 1;
+    // Read all geometry before extending the scroll range, avoiding a second
+    // forced layout in the same animation frame. The target is in shelf coordinates.
+    updateShelfTail(shelf);
     shelf.scrollLeft = from + (target - from) * (1 - (1 - progress) ** 3);
     if (progress < 1) alignmentFrame = requestAnimationFrame(step);
   };
@@ -185,7 +190,7 @@ export function syncHomePresentation() {
     if (shelf) shelfObserver?.observe(shelf);
   }
   const game = shelf?.querySelector('.home-game.selected') || null;
-  const games = shelf ? [...shelf.children] : [];
+  const games = shelf && game !== selectedGame ? [...shelf.children] : [];
   const direction = game && selectedGame?.isConnected
     ? Math.sign(games.indexOf(game) - games.indexOf(selectedGame)) : 0;
   syncHomeBackdrop(document.querySelector('.home-backdrop'), direction);

@@ -35,7 +35,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
             paint(&app);
             return;
         }
-        if detail_form::resolve_refresh(&mut app, &kind, success, payload) {
+        if detail_form::resolve_refresh(&mut app, &kind, id, success, payload) {
             paint(&app);
             return;
         }

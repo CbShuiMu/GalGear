@@ -129,6 +129,101 @@ fn native_exception_records_fault_code_and_address() {
     assert!(!log.contains("session_end"));
 }
 
+#[cfg(windows)]
+#[test]
+#[ignore = "需要 Windows 桌面和 WebView2，只使用临时 WebView 配置"]
+fn native_webview_records_frontend_view_and_renderer_failure() {
+    use super::{FRONTEND_SCRIPT, LOGGER, observe_webview};
+    use std::{
+        thread,
+        time::{Duration, Instant},
+    };
+    use tauri::{WebviewUrl, WebviewWindowBuilder, webview::PageLoadEvent};
+    use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
+    use windows_core::w;
+
+    let root = tempfile::tempdir().unwrap();
+    initialize_at(&root.path().join("logs")).unwrap();
+    let log_path = LOGGER.get().unwrap().path.clone();
+    let profile = root.path().join("webview");
+    let mut context = tauri::generate_context!();
+    context.config_mut().app.windows.clear();
+    let app = tauri::Builder::default()
+        .any_thread()
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("diagnostics")
+                .js_init_script(FRONTEND_SCRIPT)
+                .build(),
+        )
+        .invoke_handler(tauri::generate_handler![super::record_diagnostic])
+        .setup({
+            let log_path = log_path.clone();
+            move |app| {
+                let window =
+                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("updater.html".into()))
+                        .data_directory(profile)
+                        .visible(false)
+                        .on_page_load(|window, event| {
+                            if event.event() == PageLoadEvent::Finished {
+                                window
+                                    .eval("GalGearDiagnostics.viewApplied('home', 'setup')")
+                                    .unwrap();
+                            }
+                        })
+                        .build()?;
+                observe_webview(&window);
+                let app = app.handle().clone();
+                thread::spawn(move || {
+                    let wait_for = |message| {
+                        let deadline = Instant::now() + Duration::from_secs(10);
+                        while Instant::now() < deadline {
+                            if fs::read_to_string(&log_path).is_ok_and(|log| log.contains(message))
+                            {
+                                return true;
+                            }
+                            thread::sleep(Duration::from_millis(50));
+                        }
+                        false
+                    };
+                    let received_failure = wait_for(
+                        "view_applied window=main view=1 page=Home overlay=Setup",
+                    ) && window
+                        .with_webview(|webview| {
+                            let complete = CallDevToolsProtocolMethodCompletedHandler::create(
+                                Box::new(|_, _| Ok(())),
+                            );
+                            // SAFETY: Tauri 在隔离 WebView 的 UI 线程提供有效控制器。这里只让测试渲染进程退出。
+                            let result = unsafe {
+                                webview.controller().CoreWebView2().and_then(|core| {
+                                    core.CallDevToolsProtocolMethod(
+                                        w!("Page.crash"),
+                                        w!("{}"),
+                                        &complete,
+                                    )
+                                })
+                            };
+                            if let Err(error) = result {
+                                log::warn!(target: "galgear::test", "Page.crash failed: {error}");
+                            }
+                        })
+                        .is_ok()
+                        && wait_for("webview_process_failed window=main kind=renderer_exited");
+                    app.exit(i32::from(!received_failure));
+                });
+                Ok(())
+            }
+        })
+        .build(context)
+        .unwrap();
+    let exit_code = app.run_return(|_, _| {});
+    let log = fs::read_to_string(log_path).unwrap();
+    assert_eq!(exit_code, 0, "{log}");
+    assert!(
+        log.contains("webview_diagnostics_ready window=main browser_pid=Some("),
+        "{log}"
+    );
+}
+
 #[test]
 #[ignore = "Only launched in an isolated child with a temporary log directory"]
 fn crash_child() {

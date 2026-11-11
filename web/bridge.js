@@ -49,6 +49,7 @@ let observedLibraryGrid = null;
 const libraryGridObserver = new ResizeObserver(() => alignLibraryToolbar());
 const pagePositions = new Map();
 let resetPageScroll = false;
+let renderGeneration = 0;
 
 // Keep live inputs, posters and scroll containers across state updates.
 // Replacing the root restarted width transitions and made detail images reload.
@@ -96,13 +97,31 @@ function reconcile(current, next) {
 }
 function reconcileChildren(current, next) {
   let cursor = current.firstChild;
+  let keyed = null;
   for (const desired of [...next.childNodes]) {
     let match = cursor;
     if (!match || !compatible(match, desired)) {
       const key = renderKey(desired);
-      match = key ? [...current.childNodes].find(node => compatible(node, desired)) : null;
+      match = null;
+      if (key) {
+        // Index only the remaining siblings, once per reorder. Consumed nodes must
+        // not be reused when several controls share the same action key.
+        if (!keyed) {
+          keyed = new Map();
+          for (let node = cursor; node; node = node.nextSibling) {
+            const nodeKey = renderKey(node);
+            if (!nodeKey) continue;
+            if (!keyed.has(nodeKey)) keyed.set(nodeKey, new Set());
+            keyed.get(nodeKey).add(node);
+          }
+        }
+        for (const candidate of keyed.get(key) || []) {
+          if (compatible(candidate, desired)) { match = candidate; break; }
+        }
+      }
     }
     if (match) {
+      keyed?.get(renderKey(match))?.delete(match);
       if (match !== cursor) current.insertBefore(match, cursor);
       reconcile(match, desired);
       cursor = match.nextSibling;
@@ -373,12 +392,20 @@ function renderFrame(html) {
     previousEditor = hasEditor;
     const setup = document.querySelector('.setup-dialog');
     const setupKey = setup?.dataset.renderKey || null;
-    if (setupKey && !previousSetup) setupReturnFocus = active;
+    if (setupKey && !previousSetup) setupReturnFocus = active ? {node:active, id:active.id, action:active.dataset.action, value:active.dataset.value} : null;
     document.querySelectorAll('.sidebar,.page-scroll,.detail-overlay,.editor-overlay,.library-overlay').forEach(node => {
       node.inert = !!setup || (node.matches('.sidebar,.page-scroll,.detail-overlay') && (hasEditor || (node.matches('.detail-overlay') && !!detailReturnAnimation)));
     });
     if (setupKey && setupKey !== previousSetup) setup.querySelector('.choice-trigger')?.focus({ preventScroll: true });
-    else if (!setupKey && previousSetup && setupReturnFocus?.isConnected) setupReturnFocus.focus({ preventScroll: true });
+    else if (!setupKey && previousSetup) {
+      const origin = setupReturnFocus;
+      const target = (origin?.node.isConnected && origin.node) ||
+        (origin?.id && document.getElementById(origin.id)) ||
+        (origin?.action && [...document.querySelectorAll('[data-action]')].find(node => node.dataset.action === origin.action && node.dataset.value === origin.value)) ||
+        document.querySelector('.detail-edit-toggle');
+      target?.focus({ preventScroll: true });
+      setupReturnFocus = null;
+    }
     previousSetup = setupKey;
     const context = document.querySelector('.game-context-menu');
     if (context) {
@@ -436,7 +463,10 @@ function renderFrame(html) {
       }, { root: document.getElementById('page-scroll'), rootMargin: '300px' });
       moreObserver.observe(more);
     }
-  
+    const overlay = setup ? 'setup'
+      : hasEditor || hasLibraryDialog || startupDialog ? 'dialog'
+      : hasDialog ? 'detail' : 'none';
+    window.GalGearDiagnostics?.viewApplied(pane?.dataset.scrollKey, overlay);
 }
 
 window.GalGearBridge = {
@@ -466,6 +496,10 @@ window.GalGearBridge = {
     resetPageScroll = true;
   },
   render(html) {
+    const generation = ++renderGeneration;
+    // A queued theme snapshot must never apply HTML older than a subsequent render.
+    activeThemeTransition?.skipTransition();
+    activeThemeTransition = null;
     if (detailTagReorder.deferRender(html)) return;
     if (marqueeDrag) { deferredDragFrame = html; return; }
     if (dragPayload) {
@@ -488,6 +522,7 @@ window.GalGearBridge = {
     const previous = document.documentElement.dataset.theme;
     const previousColorTheme = document.documentElement.dataset.colorTheme;
     const apply = () => {
+      if (generation !== renderGeneration) return;
       if (theme) document.documentElement.dataset.theme = theme;
       if (colorTheme) document.documentElement.dataset.colorTheme = colorTheme;
       renderFrame(html);
@@ -496,12 +531,10 @@ window.GalGearBridge = {
     // Keep the live selection background visible while a settings segment moves.
     if (segmentedAppearanceChange) {
       segmentedAppearanceChange = false;
-      activeThemeTransition?.skipTransition();
       document.querySelector('.theme-fallback')?.remove();
       apply();
       return;
     }
-    activeThemeTransition?.skipTransition();
     if (typeof document.startViewTransition === 'function') {
       const transition = document.startViewTransition(apply);
       activeThemeTransition = transition;
@@ -970,16 +1003,22 @@ try {
     await window.__TAURI__.event.listen('scan-progress', event => ui.scan_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('game-enriched', event => ui.game_enriched(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('cover-enhanced', async event => {
-      // Keep the old artwork until both new images are decoded, including the 4K backdrop.
+      // Keep visible artwork decoded before replacing it. Other games' 4K backgrounds
+      // are decoded by home-backdrop only when selected, avoiding unused image buffers.
       const data = event.payload;
       try {
-        await Promise.all([data.cover, `http://galgear-cover.localhost/${data.cover_artwork.background}`].map(src => {
+        const sources = [data.cover];
+        if (document.querySelector('.home-game.selected')?.dataset.value === data.id) {
+          sources.push(`http://galgear-cover.localhost/${data.cover_artwork.background}`);
+        }
+        await Promise.all(sources.map(src => {
           const image = new Image(); image.src = src; return image.decode();
         }));
         ui.cover_enhanced(JSON.stringify(data));
       } catch (error) { window.GalGearDiagnostics?.error(error); console.warn('Artwork preload failed; keeping current cover', error); }
     });
     await window.__TAURI__.event.listen('enrichment-progress', event => ui.enrichment_progress(JSON.stringify(event.payload)));
+    await window.__TAURI__.event.listen('title-refresh-started', event => ui.title_refresh_started(event.payload));
     await window.__TAURI__.event.listen('fan-download-progress', event => ui.download_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('fan-status-updated', event => ui.fan_status_updated(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('runtime-updated', event => ui.runtime_updated(JSON.stringify(event.payload)));

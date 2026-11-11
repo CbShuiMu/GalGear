@@ -148,6 +148,7 @@ pub(crate) fn paint(app: &App) {
     crate::startup::render(&mut html, app);
     html.push_str("</main><div class=\"notification-stack\">");
     game_setup::render_progress(&mut html, app);
+    crate::detail_form::render_refresh_progress(&mut html, app);
     if app.library.scanning {
         // 扫描提示随任务结束移除，不使用普通消息的定时消失机制。
         let _ = write!(

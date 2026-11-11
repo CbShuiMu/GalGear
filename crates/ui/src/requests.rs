@@ -165,6 +165,10 @@ impl RequestQueue {
         self.pending.remove(&id)
     }
 
+    pub(crate) fn get(&self, id: u32) -> Option<&Pending> {
+        self.pending.get(&id)
+    }
+
     pub(crate) fn values(&self) -> impl Iterator<Item = &Pending> {
         self.pending.values()
     }

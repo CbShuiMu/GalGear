@@ -21,6 +21,33 @@ pub struct SetupResult {
     edit: galgear_core::GameEdit,
 }
 
+#[tauri::command]
+pub(crate) async fn search_game_metadata(
+    id: String,
+    source: String,
+    state: State<'_, AppState>,
+) -> Result<game_setup::matching::SearchResult, Message> {
+    let game = find_game(&state, &id)?;
+    let query = game_setup::matching::query(
+        &game.title,
+        std::path::Path::new(&game.folder),
+        std::path::Path::new(&game.library),
+    );
+    if query.is_empty() {
+        return Ok(game_setup::matching::resolve(query, Vec::new()));
+    }
+    let candidates = state
+        .metadata_search
+        .search(
+            state.store.path.clone(),
+            source,
+            snapshot(&state)?.fan_domain,
+            query.clone(),
+        )
+        .await?;
+    Ok(game_setup::matching::resolve(query, candidates))
+}
+
 #[derive(Serialize)]
 pub(crate) struct Executable {
     path: String,
@@ -156,41 +183,110 @@ pub async fn complete_game_setup(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<SetupResult, Message> {
+    complete(
+        SetupInput {
+            id,
+            source,
+            url,
+            executable,
+            confirmed,
+            rematch: false,
+        },
+        state,
+        app,
+    )
+    .await
+}
+
+/// 在后台刮削并覆盖当前词条，沿用导入确认的校验及持久化流程。
+#[tauri::command]
+pub(crate) async fn rematch_game_metadata(
+    id: String,
+    source: String,
+    url: String,
+    confirmed: bool,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<SetupResult, Message> {
+    complete(
+        SetupInput {
+            id,
+            source,
+            url,
+            executable: String::new(),
+            confirmed,
+            rematch: true,
+        },
+        state,
+        app,
+    )
+    .await
+}
+
+struct SetupInput {
+    id: String,
+    source: String,
+    url: String,
+    executable: String,
+    confirmed: bool,
+    rematch: bool,
+}
+
+async fn complete(
+    input: SetupInput,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<SetupResult, Message> {
+    let SetupInput {
+        id,
+        source,
+        url,
+        executable,
+        confirmed,
+        rematch,
+    } = input;
     let game = find_game(&state, &id)?;
     game_setup::validate(&source, &url, &executable, confirmed)?;
     let domain = snapshot(&state)?.fan_domain;
     let credentials = data_sources::credentials_for(&state, &source).await?;
-    let metadata = tauri::async_runtime::spawn_blocking(move || {
-        galgear_core::data_sources::metadata(&domain, &url, &credentials)
+    let cache = state.store.path.with_file_name("covers");
+    let (metadata, cover) = tauri::async_runtime::spawn_blocking(move || {
+        let metadata = galgear_core::data_sources::metadata(&domain, &url, &credentials)?;
+        let cover = if rematch {
+            // 内容寻址缓存不覆盖旧封面文件；无图或下载失败时仍保留原图。
+            match galgear_core::data_sources::covers(&domain, &url, &credentials) {
+                Ok(covers) => covers.first().map(|cover| {
+                    crate::covers::download_source_cover(&cover.image_url, &url, &cache)
+                        .map(|cover| (cover.data, cover.path, None))
+                }),
+                Err(error) => Some(Err(error)),
+            }
+        } else if game.cover.is_none() && metadata.cover_url.is_some() {
+            Some(providers::save_cover(&game, &metadata, &cache))
+        } else {
+            None
+        };
+        Ok::<_, Message>((metadata, cover))
     })
     .await
     .map_err(|error| Message::detail("error.network", error))??;
-    let cover = if game.cover.is_none() && metadata.cover_url.is_some() {
-        let metadata = metadata.clone();
-        let cache = state.store.path.with_file_name("covers");
-        Some(
-            tauri::async_runtime::spawn_blocking(move || {
-                providers::save_cover(&game, &metadata, &cache)
-            })
-            .await
-            .map_err(|error| Message::detail("error.network", error))?,
-        )
-    } else {
-        None
-    };
     // 资料配置由 preferences 序列化写入，磁盘持久化不占用异步执行器。
     tauri::async_runtime::spawn_blocking(move || {
         use tauri::Manager;
         let state = app.state::<AppState>();
         let mut game = find_game(&state, &id)?;
         let settings = preferences::update(&state, |settings| {
-            let edit = game_setup::prepare(
-                &game,
-                settings.game_edits.get(&id),
-                &source,
-                &executable,
-                metadata,
-            )?;
+            let edit = if rematch {
+                game_setup::prepare_rematch(&game, settings.game_edits.get(&id), &source, metadata)?
+            } else {
+                game_setup::prepare(
+                    &game,
+                    settings.game_edits.get(&id),
+                    &source,
+                    &executable,
+                    metadata,
+                )?
+            };
             settings.game_edits.insert(id.clone(), edit);
             if let Some(Ok((_, path, _))) = &cover {
                 settings.cover_overrides.insert(id.clone(), path.clone());
@@ -199,6 +295,7 @@ pub async fn complete_game_setup(
         })?;
         if let Some(Ok((data, _, warning))) = cover {
             game.cover = Some(data);
+            game.cover_artwork = None;
             game.metadata_warning = warning;
         } else if let Some(Err(error)) = cover {
             game.metadata_warning = Some(error);

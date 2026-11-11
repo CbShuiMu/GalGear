@@ -6,9 +6,25 @@ const source = fs.readFileSync('src-tauri/src/diagnostics/frontend.js', 'utf8');
 
 function setup(handler, loggingFails = false) {
   const records = [], calls = [], listeners = {};
+  const frames = new Map(), timers = new Map();
+  let nextCallback = 0;
+  const schedule = queue => callback => { queue.set(++nextCallback, callback); return nextCallback; };
+  const tick = queue => {
+    const callbacks = [...queue.values()];
+    queue.clear();
+    callbacks.forEach(callback => callback());
+  };
+  const document = {
+    visibilityState: 'visible',
+    addEventListener: (name, callback) => { listeners[name] = callback; },
+  };
   const window = {
     __TAURI_INTERNALS__: {},
     addEventListener: (name, callback) => { listeners[name] = callback; },
+    requestAnimationFrame: schedule(frames),
+    cancelAnimationFrame: id => frames.delete(id),
+    setTimeout: schedule(timers),
+    clearTimeout: id => timers.delete(id),
   };
   Object.defineProperty(window.__TAURI_INTERNALS__, 'invoke', {value: async (command, args, options) => {
     if (command === 'record_diagnostic') {
@@ -17,8 +33,9 @@ function setup(handler, loggingFails = false) {
     }
     calls.push({command, args, options}); return handler(command, args);
   }});
-  vm.runInNewContext(source, {window, performance, Headers, navigator: {userAgent: 'test'}, Error});
-  return {api: window.GalGearDiagnostics, records, calls, listeners};
+  vm.runInNewContext(source, {window, document, performance, Headers, navigator: {userAgent: 'test'}, Error});
+  return {api: window.GalGearDiagnostics, records, calls, listeners, document,
+    advanceFrame: () => tick(frames), expireTimers: () => tick(timers)};
 }
 
 test('correlates concurrent completions without recording payloads', async () => {
@@ -58,4 +75,51 @@ test('captures startup, resource, unhandled rejection and WASM panic diagnostics
   assert.ok(records[2].detail.includes('async failed'));
   assert.equal(records[3].kind, 'wasm_panic');
   assert.ok(records[3].detail.includes('Error'));
+});
+
+test('reports setup dismissal and correlates only the current view with frame callbacks', () => {
+  const {api, records, advanceFrame, expireTimers} = setup(() => {});
+  api.viewApplied('home', 'setup');
+  advanceFrame();
+  api.viewApplied('home', 'none');
+  api.viewApplied('home', 'none');
+  advanceFrame();
+  assert.equal(records.length, 2);
+  advanceFrame();
+  expireTimers();
+  assert.deepEqual(records.map(({view}) => [view.sequence, view.page, view.overlay, view.phase]), [
+    [1, 'home', 'setup', 'applied'],
+    [2, 'home', 'none', 'applied'],
+    [2, 'home', 'none', 'frames'],
+  ]);
+});
+
+test('reports visible frame delay and recovery without recording settings sections', () => {
+  const {api, records, advanceFrame, expireTimers} = setup(() => {});
+  api.viewApplied('settings:private-section', 'none');
+  expireTimers();
+  advanceFrame();
+  advanceFrame();
+  assert.deepEqual(records.map(({view}) => [view.sequence, view.page, view.phase]), [
+    [1, 'settings', 'applied'],
+    [1, 'settings', 'frames_delayed'],
+    [1, 'settings', 'frames'],
+  ]);
+  assert.ok(!JSON.stringify(records).includes('private-section'));
+});
+
+test('cancels pending frame checks when the document becomes hidden', () => {
+  const {api, records, listeners, document, advanceFrame, expireTimers} = setup(() => {});
+  api.viewApplied('home', 'none');
+  document.visibilityState = 'hidden';
+  listeners.visibilitychange();
+  api.viewApplied('games', 'none');
+  expireTimers();
+  advanceFrame();
+  advanceFrame();
+  assert.deepEqual(records.map(({kind, visible, view}) => [kind, visible, view?.phase]), [
+    ['view', true, 'applied'],
+    ['visibility', false, undefined],
+    ['view', false, 'applied'],
+  ]);
 });
