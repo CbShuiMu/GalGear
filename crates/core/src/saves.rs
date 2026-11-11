@@ -1,8 +1,10 @@
 //! Read-only, bounded save discovery. A matching name is evidence, not certainty.
+pub mod ai_find;
 mod kirikiri;
+mod loose;
+pub mod observation;
 mod paths;
 mod steam;
-pub mod ai_find;
 
 use crate::{Game, GameEdit, config::display_path};
 pub use kirikiri::{SaveKind, classify};
@@ -17,6 +19,9 @@ use std::{
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaveLocation {
     pub path: String,
+    /// 混合目录中明确选中的文件。空列表表示专用存档目录。
+    #[serde(default)]
+    pub files: Vec<String>,
     pub source: String,
     pub confidence: String,
     pub exists: bool,
@@ -31,8 +36,53 @@ pub struct SaveReport {
     pub limited: bool,
 }
 
+/// 展开备份范围，文件集合只返回明确选中的文件。
+pub fn location_roots(location: &SaveLocation) -> Vec<String> {
+    if location.files.is_empty() {
+        vec![location.path.clone()]
+    } else {
+        location.files.clone()
+    }
+}
+
+/// 校验文件及其上级路径，拒绝符号链接和 Windows 重解析点。
+pub fn validate_file(path: &Path) -> Result<(), galgear_i18n::Message> {
+    validate_components(path)?;
+    if !path.is_file() || fs::File::open(path).is_err() {
+        return Err(galgear_i18n::Message::new("save.ai_not_found"));
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_components(path: &Path) -> Result<(), galgear_i18n::Message> {
+    for ancestor in path.ancestors() {
+        let metadata = fs::symlink_metadata(ancestor)
+            .map_err(|error| galgear_i18n::Message::detail("backup.error", error))?;
+        let mut linked = metadata.file_type().is_symlink();
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            linked |= metadata.file_attributes() & 0x400 != 0;
+        }
+        if linked {
+            return Err(galgear_i18n::Message::detail(
+                "backup.error",
+                "Save path contains a link",
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn user_roots() -> Vec<(String, PathBuf)> {
     let mut roots = Vec::new();
+    if let Some(path) = std::env::var_os("LOCALAPPDATA") {
+        let local = PathBuf::from(path);
+        if let Some(parent) = local.parent() {
+            roots.push(("local-low".into(), parent.join("LocalLow")));
+        }
+        roots.push(("local".into(), local));
+    }
     if let Some(path) = std::env::var_os("APPDATA") {
         roots.push(("roaming".into(), PathBuf::from(path)));
     }
@@ -155,11 +205,6 @@ fn select_recent_ai(report: &mut SaveReport, selected: &Path, game: &Game) {
     }
 }
 
-pub(crate) fn preferred_ai_path(game: &Game, selected: &Path) -> PathBuf {
-    let mut report = discover(game, None);
-    select_recent_ai(&mut report, selected, game);
-    report.locations.first().map_or_else(|| selected.to_path_buf(), |location| PathBuf::from(&location.path))
-}
 fn save_files(folder: &Path) -> bool {
     fs::read_dir(folder)
         .into_iter()
@@ -182,10 +227,19 @@ fn save_file(e: &fs::DirEntry) -> bool {
     let name = e.file_name().to_string_lossy().to_lowercase();
     metadata.is_file()
         && !metadata.is_symlink()
-        && (name.starts_with("save")
-            || [".dat", ".sav", ".ksd", ".asd", ".rpgsave", ".rmmzsave"]
-                .iter()
-                .any(|suffix| name.ends_with(suffix))
+        && (name == "persistent"
+            || name.starts_with("save")
+            || [
+                ".dat",
+                ".sav",
+                ".save",
+                ".ksd",
+                ".asd",
+                ".rpgsave",
+                ".rmmzsave",
+            ]
+            .iter()
+            .any(|suffix| name.ends_with(suffix))
             || (name.ends_with(".bmp") && classify(&e.path()) == SaveKind::Progress))
         && fs::File::open(e.path()).is_ok()
 }
@@ -208,6 +262,7 @@ fn add(report: &mut SaveReport, path: PathBuf, source: &str, confidence: &str) {
         .any(|p| p.path.eq_ignore_ascii_case(&path))
     {
         report.locations.push(SaveLocation {
+            files: Vec::new(),
             exists: Path::new(&path).is_dir(),
             readable: save_files(Path::new(&path)),
             path,
@@ -226,6 +281,13 @@ pub fn discover_in(
     edit: Option<&GameEdit>,
     roots: &[(String, PathBuf)],
 ) -> SaveReport {
+    if let Some(edit) = edit.filter(|edit| !edit.save_files.is_empty()) {
+        let mut report = loose::selected(&edit.save_files, "manual", "confirmed");
+        for path in &edit.save_paths {
+            add(&mut report, PathBuf::from(path), "manual", "confirmed");
+        }
+        return report;
+    }
     if let Some(edit) = edit.filter(|edit| edit.save_path_auto)
         && let Some(path) = edit.save_path.as_deref()
     {
@@ -246,7 +308,7 @@ pub fn discover_in(
             add(&mut report, PathBuf::from(path), "manual", "confirmed");
         }
         // Older configurations stored a single chosen folder in save_paths.
-        if edit.save_paths.len() == 1 {
+        if !edit.save_paths.is_empty() {
             return report;
         }
     }
@@ -254,6 +316,7 @@ pub fn discover_in(
         return report;
     }
     let folder = Path::new(&game.folder);
+    loose::discover(game, &mut report);
     steam::discover(folder, roots, &mut report);
     if game.engine == "AdvHD"
         && let Ok(paths) = crate::auto_unlock::save_locations(folder)
@@ -339,11 +402,13 @@ pub fn discover_in(
             aliases.insert(value);
         }
     }
+    aliases.extend(game.aliases.iter().map(|alias| game_key(alias)));
     aliases.retain(|s| s.chars().count() >= 4);
     search_local_game_folders(folder, &aliases, 0, false, &mut 0, &mut report);
     for value in configured {
         let Some(resolved) = paths::expand(&value, |variable| match variable {
             "CURRENT" => Some(folder.to_path_buf()),
+            "LOCALAPPDATA" => roots.iter().find(|(source, _)| source == "local").map(|(_, path)| path.clone()),
             "APPDATA" => roots
                 .iter()
                 .find(|(source, _)| source == "roaming")
@@ -410,6 +475,7 @@ pub fn discover_in(
             location.confidence = "confirmed".into();
         }
         if location.source == "game"
+            && location.files.is_empty()
             && location.readable
             && matches!(
                 game.engine.as_str(),
@@ -552,7 +618,7 @@ fn local_save_evidence(folder: &Path) -> bool {
                     .is_some_and(|extension| {
                         matches!(
                             extension.to_ascii_lowercase().as_str(),
-                            "sav" | "rpgsave" | "rmmzsave"
+                            "sav" | "save" | "rpgsave" | "rmmzsave"
                         ) || extension.to_ascii_lowercase().ends_with("save-willplus")
                     })
                     || kirikiri::recognizable(&entry.path()))

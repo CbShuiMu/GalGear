@@ -1,3 +1,6 @@
+import {isCardScrollbar} from './library-card.js';
+import {LONG_PRESS_DELAY_MS, movedPastLongPressSlop} from './press-gesture.js';
+
 // DOM-only long-press gesture. Rust validates and persists the resulting move.
 export function installLibraryReorder({ idsFor, start, finish, commit }) {
   let hold = null;
@@ -197,12 +200,12 @@ export function installLibraryReorder({ idsFor, start, finish, commit }) {
     if (settling) return;
     const card = event.target.closest('.game-card');
     const grid = card?.closest('.game-grid[data-custom-sort="true"]');
-    if (!grid || event.button !== 0 || event.isPrimary === false || event.altKey || event.target.closest('.card-action,.card-remove') || document.querySelector('[aria-modal="true"],.library-bar [data-action=batch-toggle]:disabled')) return;
+    if (!grid || event.button !== 0 || event.isPrimary === false || event.altKey || isCardScrollbar(event) || event.target.closest('.card-action,.card-remove') || document.querySelector('[aria-modal="true"],.library-bar [data-action=batch-toggle]:disabled')) return;
     end(false);
-    hold = { card, grid, pointerId: event.pointerId, x: event.clientX, y: event.clientY, timer: setTimeout(begin, 380) };
+    hold = { card, grid, pointerId: event.pointerId, x: event.clientX, y: event.clientY, timer: setTimeout(begin, LONG_PRESS_DELAY_MS) };
   });
   document.addEventListener('pointermove', event => {
-    if (hold && Math.hypot(event.clientX - hold.x, event.clientY - hold.y) > 6) { clearTimeout(hold.timer); hold = null; }
+    if (hold?.pointerId === event.pointerId && movedPastLongPressSlop(hold, event)) { clearTimeout(hold.timer); hold = null; }
     if (drag && drag.pointerId === event.pointerId) { drag.x = event.clientX; drag.y = event.clientY; event.preventDefault(); }
   });
   document.addEventListener('pointerup', event => {
@@ -219,6 +222,12 @@ export function installLibraryReorder({ idsFor, start, finish, commit }) {
     if (drag?.pointerId === event.pointerId || hold?.pointerId === event.pointerId) end(false);
   });
   document.addEventListener('lostpointercapture', event => { if (drag?.pointerId === event.pointerId) end(false); });
+  document.addEventListener('scroll', event => {
+    if (hold && (hold.card.contains(event.target) || event.target.contains?.(hold.card))) end(false);
+  }, true);
+  document.addEventListener('wheel', event => {
+    if (hold && hold.card.contains(event.target)) end(false);
+  }, {passive: true});
   window.addEventListener('blur', () => end(false));
   window.addEventListener('resize', () => end(false));
   document.addEventListener('keydown', event => {

@@ -212,7 +212,7 @@ pub(crate) fn validate_patch_target(
     let current_save = saves
         .locations
         .iter()
-        .filter(|l| l.confidence == "confirmed" && l.exists)
+        .filter(|l| l.files.is_empty() && l.confidence == "confirmed" && l.exists)
         .filter_map(|l| std::fs::canonicalize(&l.path).ok())
         .any(|path| target.starts_with(path));
     if !target.starts_with(root) && !current_save {

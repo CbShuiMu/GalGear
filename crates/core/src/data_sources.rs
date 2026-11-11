@@ -636,7 +636,6 @@ pub fn parse_vndb(value: &Value, url: &str) -> Result<Metadata, Message> {
         .filter_map(|tag| tag["name"].as_str().map(str::to_owned))
         .collect();
     for staff in vn["staff"].as_array().into_iter().flatten() {
-        meta.tags.push(text(staff, "name"));
         add_credit(
             &mut meta,
             &text(staff, "role"),
@@ -704,7 +703,6 @@ pub fn parse_ymgal(value: &Value, url: &str) -> Result<Metadata, Message> {
         ..Default::default()
     };
     for staff in game["staff"].as_array().into_iter().flatten() {
-        meta.tags.push(text(staff, "emp_name"));
         let link = numeric_id(&staff["pid"])
             .map(|id| format!("https://www.ymgal.games/pa{id}"))
             .unwrap_or_default();
@@ -727,6 +725,17 @@ pub fn parse_ymgal(value: &Value, url: &str) -> Result<Metadata, Message> {
     }
     Ok(meta)
 }
+fn add_bangumi_people(meta: &mut Metadata, people: &Value) {
+    for person in people.as_array().into_iter().flatten() {
+        add_credit(
+            meta,
+            &text(person, "relation"),
+            &text(person, "name"),
+            &format!("https://bgm.tv/person/{}", person["id"]),
+        );
+    }
+}
+
 pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Metadata, Message> {
     let (source, id) = source_for_url(url)?;
     if source == "2dfan" {
@@ -751,15 +760,7 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
                 source,
                 credentials,
             ))?;
-            for person in people.as_array().into_iter().flatten() {
-                meta.tags.push(text(person, "name"));
-                add_credit(
-                    &mut meta,
-                    &text(person, "relation"),
-                    &text(person, "name"),
-                    &format!("https://bgm.tv/person/{}", person["id"]),
-                );
-            }
+            add_bangumi_people(&mut meta, &people);
             Ok(meta)
         }
         "ymgal" => {
@@ -937,16 +938,42 @@ mod tests {
         assert_eq!(meta.voices, "Voice");
     }
     #[test]
-    fn staff_with_other_roles_are_still_imported_as_tags() {
+    fn staff_and_companies_are_kept_out_of_imported_tags() {
         let value = json!({"results":[{"title":"Game","developers":[{"name":"Studio"}],"tags":[{"name":"ADV","spoiler":0}],"staff":[{"name":"Director","role":"director"},{"name":"Alice Smith","role":"scenario"}]}]});
         let meta = parse_vndb(&value, "https://vndb.org/v1").unwrap();
-        assert_eq!(
-            meta.tag_names(),
-            vec!["ADV", "Director", "Alice Smith", "Studio"]
-        );
+        assert_eq!(meta.tags, ["ADV"]);
+        assert_eq!(meta.tag_names(), ["ADV"]);
+        assert_eq!(meta.writers, "Alice Smith");
+        assert_eq!(meta.developer, "Studio");
         let value = json!({"game":{"gid":"1","name":"Game","staff":[{"emp_name":"Producer","job_name":"制作总指挥"}]}});
         let meta = parse_ymgal(&value, "https://www.ymgal.games/ga1").unwrap();
-        assert_eq!(meta.tag_names(), vec!["Producer"]);
+        assert!(meta.tag_names().is_empty());
+    }
+
+    #[test]
+    fn bangumi_related_people_keep_credits_and_links_without_becoming_tags() {
+        let value = json!({"type":4,"name":"Game","tags":[{"name":"ADV"}],
+            "infobox":[{"key":"开发","value":"Studio"}]});
+        let mut meta = parse_bangumi(&value, "https://bgm.tv/subject/1").unwrap();
+        add_bangumi_people(
+            &mut meta,
+            &json!([
+                {"id":2,"name":"Writer","relation":"剧本"},
+                {"id":3,"name":"Voice","relation":"声优"},
+                {"id":4,"name":"Director","relation":"监督"}
+            ]),
+        );
+        assert_eq!(meta.tag_names(), ["ADV"]);
+        assert_eq!(
+            (meta.writers.as_str(), meta.voices.as_str()),
+            ("Writer", "Voice")
+        );
+        assert_eq!(meta.brand, "Studio");
+        assert!(
+            meta.links
+                .iter()
+                .any(|link| link.name == "Voice" && link.url == "https://bgm.tv/person/3")
+        );
     }
 }
 

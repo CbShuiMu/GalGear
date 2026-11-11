@@ -23,6 +23,7 @@ pub(crate) enum Pending {
     Scan,
     Folder,
     Add,
+    AddFolders,
     Remove,
     Preferences,
     Screenshot(String, u32),
@@ -32,6 +33,7 @@ pub(crate) enum Pending {
     ImportPreview,
     ImportCommit,
     Display,
+    LibrarySize,
     Background,
     Theme,
     Language,
@@ -53,8 +55,10 @@ pub(crate) enum Pending {
     Saves,
     ChooseSave,
     FindSave(String),
+    ObserveSaves(String),
     Edit,
     DetailSaved,
+    TitleRefresh(String, String),
     PlayStatus,
     MetadataField(String),
     Manual,
@@ -100,10 +104,12 @@ impl Pending {
                 | Pending::RouteMap(_)
                 | Pending::Scan
                 | Pending::BackgroundScan
+                | Pending::ObserveSaves(_)
                 | Pending::FindSave(_)
                 | Pending::Saves
                 | Pending::LocalPatchList(_)
                 | Pending::SearchMetadata(..)
+                | Pending::TitleRefresh(..)
                 | Pending::CoverOptions
                 | Pending::Resources(_)
                 | Pending::SelectMetadata
@@ -121,6 +127,7 @@ impl Pending {
                 | Pending::RestorePreview
                 | Pending::Runtime(_)
                 | Pending::ConfirmSave(_)
+                | Pending::LibrarySize
                 | Pending::Display
                 | Pending::Theme
                 | Pending::SetupSearch(_)

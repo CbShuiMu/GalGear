@@ -124,6 +124,11 @@ impl App {
 thread_local! { pub(crate) static APP: RefCell<App> = RefCell::new(App::default()); }
 
 pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: u32) {
+    if request_id < app.library.size_request {
+        settings
+            .library_card_size
+            .clone_from(&app.settings.library_card_size);
+    }
     app.screenshots.preserve_settings(&app.settings, &mut settings, request_id);
     app.tool_preferences.preserve_settings(&app.settings, &mut settings, request_id);
     crate::ai_summary::preserve_completed_setup(&app.summary, &mut settings, request_id);

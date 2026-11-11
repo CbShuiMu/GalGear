@@ -117,6 +117,9 @@ pub fn prepare(
     edit.setup_pending = false;
     edit.setup_confirmed = true;
     edit.tags = tags::merge(&game.tags, &metadata.tag_names(), &edit.tag_rules);
+    if edit.source_tags.is_none() {
+        edit.tag_source_url = Some(metadata.url.clone());
+    }
     edit.metadata = Some(metadata);
     Ok(edit)
 }
@@ -124,6 +127,32 @@ pub fn prepare(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn setup_imports_only_source_tags_and_preserves_manual_names_and_credits() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut game =
+            crate::catalog::manual_game(&dir.path().join("game.exe"), "Game".into()).unwrap();
+        game.tags = vec!["Local".into(), "Writer".into()];
+        let metadata = providers::Metadata {
+            url: "https://vndb.org/v1".into(),
+            tags: vec!["ADV".into()],
+            brand: "Studio".into(),
+            writers: "Writer".into(),
+            voices: "Voice".into(),
+            ..Default::default()
+        };
+        let edit = prepare(&game, None, "vndb", "", metadata.clone()).unwrap();
+        assert_eq!(edit.tags, ["Local", "Writer", "ADV"]);
+        let settings = Settings {
+            game_edits: std::collections::BTreeMap::from([(game.id.clone(), edit)]),
+            ..Default::default()
+        };
+        crate::catalog::apply_edits(&mut game, &settings);
+        assert_eq!(game.tags, ["Local", "Writer", "ADV"]);
+        assert_eq!(game.metadata, Some(metadata));
+    }
+
     #[test]
     fn setup_without_launcher_defers_only_new_configuration() {
         let dir = tempfile::tempdir().unwrap();

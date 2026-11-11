@@ -8,9 +8,18 @@ use galgear_i18n::Message;
 use std::{path::Path, path::PathBuf, sync::Mutex};
 use tauri::State;
 
+#[derive(Clone)]
+struct SaveSuggestion {
+    folder: String,
+    report: saves::SaveReport,
+}
+
 #[derive(Default)]
 pub(crate) struct SaveState {
     plan: Mutex<Option<snapshots::Preview>>,
+    observations:
+        Mutex<std::collections::BTreeMap<String, std::sync::Arc<saves::observation::Observation>>>,
+    suggestions: Mutex<std::collections::BTreeMap<String, SaveSuggestion>>,
 }
 
 #[derive(serde::Serialize)]
@@ -26,6 +35,17 @@ pub(crate) async fn detect_saves(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, Message> {
     let game = find_game(&state, &id)?;
+    let pending = state
+        .saves
+        .suggestions
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .get(&id)
+        .filter(|suggestion| suggestion.folder == game.folder)
+        .map(|suggestion| suggestion.report.clone());
+    if let Some(report) = pending {
+        return Ok(serde_json::json!({"id": id, "report": report}));
+    }
     let edit = snapshot(&state)?.game_edits.get(&id).cloned();
     let report =
         tauri::async_runtime::spawn_blocking(move || saves::discover(&game, edit.as_ref()))
@@ -42,30 +62,85 @@ pub(crate) async fn find_save_with_ai(
     let game = find_game(&state, &id)?;
     let original_folder = game.folder.clone();
     let settings = snapshot(&state)?;
+    let original_edit = settings.game_edits.get(&id).cloned().unwrap_or_default();
     let config = state.store.path.clone();
-    let path = tauri::async_runtime::spawn_blocking(move || {
-        saves::ai_find::find(&config, &settings, &game)
+    let data = backup_data(&config, &settings);
+    let report = tauri::async_runtime::spawn_blocking(move || {
+        let report = saves::ai_find::find(&config, &settings, &game)?;
+        let roots: Vec<_> = report
+            .locations
+            .iter()
+            .flat_map(saves::location_roots)
+            .collect();
+        snapshots::validate_roots(&roots, Path::new(&game.folder), &data)?;
+        Ok::<_, Message>(report)
     })
     .await
     .map_err(|_| Message::new("error.operation"))??;
-    // Recheck the game and path after the network request before changing its configuration.
-    if find_game(&state, &id)?.folder != original_folder || !path.is_dir() {
+    let _guard = begin_write(&state)?;
+    if find_game(&state, &id)?.folder != original_folder {
         return Err(Message::new("save.ai_not_found"));
     }
-    update(&state, |settings| {
+    let settings = update(&state, |settings| {
         let edit = settings.game_edits.entry(id.clone()).or_default();
-        let path = galgear_core::config::display_path(&path);
-        edit.save_path = Some(path.clone());
-        edit.save_path_auto = true;
-        if !edit.save_paths.contains(&path) {
-            edit.save_paths.push(path);
+        // 网络请求期间的手动修改优先，迟到的 AI 回答不能覆盖它。
+        if edit.save_files != original_edit.save_files
+            || edit.save_paths != original_edit.save_paths
+            || edit.save_path != original_edit.save_path
+            || edit.save_path_auto != original_edit.save_path_auto
+        {
+            return Err(Message::new("error.operation"));
         }
+        apply_selection(edit, &report);
         Ok(())
     })?;
-    let mut result = detect_saves(id, state.clone()).await?;
-    result["settings"] = serde_json::to_value(snapshot(&state)?)
-        .map_err(|error| Message::detail("error.operation", error))?;
-    Ok(result)
+    state
+        .saves
+        .suggestions
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .remove(&id);
+    Ok(serde_json::json!({"id": id, "report": report, "settings": settings}))
+}
+
+fn apply_selection(edit: &mut galgear_core::GameEdit, report: &saves::SaveReport) {
+    edit.save_files = report
+        .locations
+        .iter()
+        .flat_map(|location| location.files.iter().cloned())
+        .collect();
+    edit.save_paths = report
+        .locations
+        .iter()
+        .filter(|location| location.files.is_empty())
+        .map(|location| location.path.clone())
+        .collect();
+    edit.save_path = (edit.save_files.is_empty() && edit.save_paths.len() == 1)
+        .then(|| edit.save_paths[0].clone());
+    // 已验证的 AI 范围固定保存，后续扫描不能按时间戳更换文件或目录。
+    edit.save_path_auto = false;
+}
+
+fn manual_selection(game: &Game, path: &Path) -> Result<saves::SaveReport, Message> {
+    let path = path
+        .canonicalize()
+        .map_err(|error| Message::detail("error.game_folder", error))?;
+    let mut report = saves::discover(game, None);
+    report.locations.retain(|location| {
+        !location.files.is_empty()
+            && Path::new(&location.path).canonicalize().ok().as_ref() == Some(&path)
+    });
+    if report.locations.is_empty() {
+        report.locations.push(saves::SaveLocation {
+            path: galgear_core::config::display_path(&path),
+            files: Vec::new(),
+            source: "manual".into(),
+            confidence: "confirmed".into(),
+            exists: true,
+            readable: true,
+        });
+    }
+    Ok(report)
 }
 
 #[tauri::command]
@@ -83,6 +158,17 @@ pub(crate) async fn choose_save_folder(
     })
     .await
     .map_err(|_| Message::new("error.operation"))?;
+    if report
+        .locations
+        .iter()
+        .any(|location| !location.files.is_empty())
+        && !report
+            .locations
+            .iter()
+            .any(|location| location.files.is_empty() && location.confidence == "confirmed")
+    {
+        return choose_save_files(id, state).await;
+    }
     let context = settings
         .game_edits
         .get(&id)
@@ -106,6 +192,25 @@ pub(crate) async fn choose_save_folder(
     let Some(path) = path else {
         return Ok(None);
     };
+    let _guard = begin_write(&state)?;
+    if find_game(&state, &id)?.folder != game.folder {
+        return Err(Message::new("error.game_folder"));
+    }
+    let selection_game = game.clone();
+    let selection_path = path.clone();
+    let data = backup_data(&state.store.path, &snapshot(&state)?);
+    let selected = tauri::async_runtime::spawn_blocking(move || {
+        let selected = manual_selection(&selection_game, &selection_path)?;
+        let roots: Vec<_> = selected
+            .locations
+            .iter()
+            .flat_map(saves::location_roots)
+            .collect();
+        snapshots::validate_roots(&roots, Path::new(&selection_game.folder), &data)?;
+        Ok::<_, Message>(selected)
+    })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))??;
     dialogs::remember(&state, &role, &path)?;
     {
         let mut settings = state
@@ -114,19 +219,20 @@ pub(crate) async fn choose_save_folder(
             .map_err(|_| Message::new("error.config_state"))?;
         let mut next = settings.clone();
         let edit = next.game_edits.entry(id.clone()).or_default();
-        let path = galgear_core::config::display_path(&path);
-        edit.save_path = Some(path.clone());
-        edit.save_path_auto = false;
-        if !edit.save_paths.contains(&path) {
-            edit.save_paths.push(path);
-        }
+        apply_selection(edit, &selected);
         state.store.save(&next)?;
         catalog::apply_edits(&mut game, &next);
         *settings = next;
     }
     persist_game(&state, game)?;
+    state
+        .saves
+        .suggestions
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .remove(&id);
     let settings = snapshot(&state)?;
-    let mut result = detect_saves(id, state).await?;
+    let mut result = detect_saves(id, state.clone()).await?;
     result["settings"] =
         serde_json::to_value(settings).map_err(|e| Message::detail("error.operation", e))?;
     Ok(Some(result))
@@ -140,47 +246,235 @@ pub(crate) async fn open_save_folder(
 ) -> Result<(), Message> {
     let game = find_game(&state, &id)?;
     let edit = snapshot(&state)?.game_edits.get(&id).cloned();
-    let check = path.clone();
-    let allowed = tauri::async_runtime::spawn_blocking(move || {
-        saves::discover(&game, edit.as_ref())
+    tauri::async_runtime::spawn_blocking(move || {
+        let report = saves::discover(&game, edit.as_ref());
+        let has_confirmed = report
             .locations
             .iter()
-            .any(|l| l.exists && l.path == check)
+            .any(|location| location.confidence == "confirmed");
+        let mut folders = std::collections::BTreeSet::new();
+        for location in report.locations {
+            if (path.is_empty() && (!has_confirmed || location.confidence == "confirmed"))
+                || location.path == path
+            {
+                let folder = PathBuf::from(location.path);
+                if folder.is_dir() {
+                    folders.insert(folder);
+                }
+            }
+        }
+        if folders.is_empty() {
+            return Err(Message::new("error.game_folder"));
+        }
+        for folder in folders {
+            crate::folders::open(&folder)?;
+        }
+        Ok(())
     })
     .await
-    .map_err(|e| Message::detail("error.operation", e))?;
-    if !allowed {
-        return Err(Message::new("error.game_folder"));
-    }
-    tauri::async_runtime::spawn_blocking(move || crate::folders::open(Path::new(&path)))
-        .await
-        .map_err(|e| Message::detail("error.open_folder", e))?
+    .map_err(|e| Message::detail("error.open_folder", e))?
 }
 
 #[tauri::command]
-pub(crate) fn confirm_save(
+pub(crate) async fn confirm_save(
     id: String,
     path: String,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
+    let _guard = begin_write(&state)?;
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
-    if !saves::discover(&game, settings.game_edits.get(&id))
-        .locations
-        .iter()
-        .any(|l| l.path == path && l.exists)
-    {
+    let search_game = game.clone();
+    let edit = settings.game_edits.get(&id).cloned();
+    let local =
+        tauri::async_runtime::spawn_blocking(move || saves::discover(&search_game, edit.as_ref()))
+            .await
+            .map_err(|error| Message::detail("error.operation", error))?;
+    let suggestion = state
+        .saves
+        .suggestions
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .get(&id)
+        .filter(|suggestion| suggestion.folder == game.folder)
+        .cloned();
+    let suggested = suggestion
+        .as_ref()
+        .map(|suggestion| &suggestion.report)
+        .filter(|report| {
+            report
+                .locations
+                .iter()
+                .any(|location| location.path == path)
+        });
+    let selected: Vec<_> = if let Some(report) = suggested {
+        report
+            .locations
+            .iter()
+            .filter(|location| location.source == "ai" || location.path == path)
+            .collect()
+    } else {
+        local
+            .locations
+            .iter()
+            .filter(|location| location.path == path)
+            .collect()
+    };
+    if selected.is_empty() {
         return Err(Message::new("error.game_folder"));
     }
-    update(&state, |s| {
-        let edit = s.game_edits.entry(id).or_default();
-        edit.save_path = Some(path.clone());
+    let roots: Vec<_> = selected
+        .iter()
+        .flat_map(|location| saves::location_roots(location))
+        .collect();
+    snapshots::validate_roots(
+        &roots,
+        Path::new(&game.folder),
+        &backup_data(&state.store.path, &settings),
+    )?;
+    let result = update(&state, |settings| {
+        let edit = settings.game_edits.entry(id.clone()).or_default();
+        edit.save_files = selected
+            .iter()
+            .flat_map(|location| location.files.iter().cloned())
+            .collect();
+        edit.save_paths = selected
+            .iter()
+            .filter(|location| location.files.is_empty())
+            .map(|location| location.path.clone())
+            .collect();
+        edit.save_path = (edit.save_files.is_empty() && edit.save_paths.len() == 1)
+            .then(|| edit.save_paths[0].clone());
         edit.save_path_auto = false;
-        if !edit.save_paths.contains(&path) {
-            edit.save_paths.push(path);
-        }
         Ok(())
+    })?;
+    state
+        .saves
+        .suggestions
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .remove(&id);
+    Ok(result)
+}
+
+/// 保存前后诊断只记录元数据，比较完成后仍由用户确认文件范围。
+#[tauri::command]
+pub(crate) async fn observe_saves(
+    id: String,
+    finish: bool,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, Message> {
+    let game = find_game(&state, &id)?;
+    let original_folder = game.folder.clone();
+    let observer = state.tools.observer();
+    let baseline = state
+        .saves
+        .observations
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .get(&id)
+        .cloned();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        snapshots::require_stopped(observer.detect(game.executable.as_deref()))?;
+        if finish {
+            let baseline = baseline.ok_or_else(|| Message::new("save.observation_expired"))?;
+            Ok((None, baseline.finish(&game)?))
+        } else {
+            Ok((
+                Some(std::sync::Arc::new(saves::observation::Observation::begin(
+                    &game,
+                )?)),
+                saves::SaveReport::default(),
+            ))
+        }
     })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?;
+    let (baseline, report): (
+        Option<std::sync::Arc<saves::observation::Observation>>,
+        saves::SaveReport,
+    ) = outcome?;
+    if find_game(&state, &id)?.folder != original_folder {
+        return Err(Message::new("save.observation_expired"));
+    }
+    if let Some(baseline) = baseline {
+        state
+            .saves
+            .observations
+            .lock()
+            .map_err(|_| Message::new("error.operation"))?
+            .insert(id.clone(), baseline);
+    } else {
+        state
+            .saves
+            .observations
+            .lock()
+            .map_err(|_| Message::new("error.operation"))?
+            .remove(&id);
+        state
+            .saves
+            .suggestions
+            .lock()
+            .map_err(|_| Message::new("error.operation"))?
+            .insert(
+                id.clone(),
+                SaveSuggestion {
+                    folder: find_game(&state, &id)?.folder,
+                    report: report.clone(),
+                },
+            );
+    }
+    Ok(serde_json::json!({"id":id,"report":report,"observing":!finish}))
+}
+
+/// 手动多选散落存档，复用文件范围校验及配置持久化。
+#[tauri::command]
+pub(crate) async fn choose_save_files(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<serde_json::Value>, Message> {
+    let game = find_game(&state, &id)?;
+    let folder = PathBuf::from(&game.folder);
+    let chosen =
+        tauri::async_runtime::spawn_blocking(move || dialogs::dialog(Some(folder)).pick_files())
+            .await
+            .map_err(|error| Message::detail("error.operation", error))?;
+    let Some(files) = chosen else { return Ok(None) };
+    let _guard = begin_write(&state)?;
+    if find_game(&state, &id)?.folder != game.folder {
+        return Err(Message::new("error.game_folder"));
+    }
+    let settings = snapshot(&state)?;
+    let paths: Vec<_> = files
+        .iter()
+        .map(|file| galgear_core::config::display_path(file))
+        .collect();
+    for file in &files {
+        saves::validate_file(file)?;
+    }
+    let paths = snapshots::validate_roots(
+        &paths,
+        Path::new(&game.folder),
+        &backup_data(&state.store.path, &settings),
+    )?;
+    update(&state, |settings| {
+        let edit = settings.game_edits.entry(id.clone()).or_default();
+        edit.save_files = paths;
+        edit.save_path = None;
+        edit.save_paths.clear();
+        edit.save_path_auto = false;
+        Ok(())
+    })?;
+    state
+        .saves
+        .suggestions
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .remove(&id);
+    let mut result = detect_saves(id, state.clone()).await?;
+    result["settings"] = serde_json::to_value(snapshot(&state)?)
+        .map_err(|error| Message::detail("error.operation", error))?;
+    Ok(Some(result))
 }
 
 #[tauri::command]
@@ -302,8 +596,8 @@ pub(crate) fn confirmed_roots(
     let roots = saves::discover(game, settings.game_edits.get(&game.id))
         .locations
         .into_iter()
-        .filter(|l| l.confidence == "confirmed" && l.exists)
-        .map(|l| l.path)
+        .filter(|l| l.confidence == "confirmed" && (l.exists || l.source == "manual"))
+        .flat_map(|l| saves::location_roots(&l))
         .collect::<Vec<_>>();
     snapshots::validate_roots(
         &roots,
@@ -327,8 +621,11 @@ pub(crate) async fn save_history(
         let roots = saves::discover(&game, settings.game_edits.get(&id))
             .locations
             .into_iter()
-            .filter(|location| location.confidence == "confirmed" && location.exists)
-            .map(|location| location.path)
+            .filter(|location| {
+                location.confidence == "confirmed"
+                    && (location.exists || location.source == "manual")
+            })
+            .flat_map(|location| saves::location_roots(&location))
             .collect::<Vec<_>>();
         let current_snapshot = snapshots::validate_roots(&roots, Path::new(&game.folder), &data)
             .and_then(|roots| snapshots::matching_current(&data, &history, &roots))
@@ -509,6 +806,54 @@ mod tests {
     use std::fs;
 
     #[cfg(windows)]
+    #[test]
+    fn air_manual_selection_and_ai_configuration_back_up_only_selected_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("AIR");
+        std::fs::create_dir(&folder).unwrap();
+        for name in ["air.exe", "SAVE.SAV", "READ.SAV", "resource.dat"] {
+            std::fs::write(folder.join(name), name.as_bytes()).unwrap();
+        }
+        let game = catalog::manual_game(&folder.join("air.exe"), "AIR".into()).unwrap();
+        let report = manual_selection(&game, &folder).unwrap();
+        let mut edit = galgear_core::GameEdit::default();
+        apply_selection(&mut edit, &report);
+        assert_eq!(edit.save_files.len(), 2);
+        assert!(edit.save_path.is_none() && edit.save_paths.is_empty());
+        let persisted: galgear_core::GameEdit =
+            serde_json::from_str(&serde_json::to_string(&edit).unwrap()).unwrap();
+        let selected = saves::discover(&game, Some(&persisted));
+        assert!(
+            selected
+                .locations
+                .iter()
+                .all(|location| location.confidence == "confirmed")
+        );
+        let roots: Vec<_> = selected
+            .locations
+            .iter()
+            .flat_map(saves::location_roots)
+            .collect();
+        let data = temp.path().join("backup");
+        let roots = snapshots::validate_roots(&roots, &folder, &data).unwrap();
+        let saved = snapshots::create(
+            &data,
+            &game.id,
+            &roots,
+            "",
+            10,
+            galgear_core::runtime::Status::Stopped,
+        )
+        .unwrap();
+        assert_eq!(saved.files.len(), 2);
+        assert!(
+            saved
+                .files
+                .iter()
+                .all(|file| ["READ.SAV", "SAVE.SAV"].contains(&file.path.as_str()))
+        );
+    }
+
     #[test]
     fn automatic_backup_reuses_matching_manual_history_after_game_stops() {
         let temp = tempfile::tempdir().unwrap();

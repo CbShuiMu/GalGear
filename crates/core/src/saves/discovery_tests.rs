@@ -98,3 +98,38 @@ fn configured_appdata_is_expanded_without_using_bundled_directory() {
         )));
     }
 }
+
+#[test]
+fn loose_air_files_are_one_candidate_and_manual_selection_is_exact() {
+    let temp = tempfile::tempdir().unwrap();
+    for name in [
+        "air_cn.exe",
+        "SAVE.SAV",
+        "READ.SAV",
+        "resource.dat",
+        "cover.jpg",
+    ] {
+        std::fs::write(temp.path().join(name), name.as_bytes()).unwrap();
+    }
+    let game = crate::catalog::manual_game(&temp.path().join("air_cn.exe"), "AIR".into()).unwrap();
+    let report = super::discover_in(&game, None, &[]);
+    let candidate = report
+        .locations
+        .iter()
+        .find(|location| !location.files.is_empty())
+        .unwrap();
+    assert_eq!(candidate.files.len(), 2);
+    assert_eq!(candidate.confidence, "detected");
+    assert!(candidate.files.iter().all(|file| file.ends_with(".SAV")));
+    let edit = crate::GameEdit {
+        save_files: candidate.files.clone(),
+        ..Default::default()
+    };
+    let confirmed = super::discover_in(&game, Some(&edit), &[]);
+    assert_eq!(confirmed.locations.len(), 1);
+    assert_eq!(confirmed.locations[0].confidence, "confirmed");
+    assert_eq!(
+        super::location_roots(&confirmed.locations[0]),
+        candidate.files
+    );
+}

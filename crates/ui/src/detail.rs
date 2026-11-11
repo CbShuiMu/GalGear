@@ -319,8 +319,10 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     html.push_str("</div></div>");
     write!(
         html,
-        "</div><section class=\"hero-tags\" aria-label=\"{}\"><div class=\"game-tags\">",
-        t(app, "detail.tags")
+        "</div><section class=\"hero-tags\" aria-label=\"{}\"><div class=\"game-tags\" data-tag-reorder=\"{}\">",
+        t(app, "detail.tags"),
+        !app.busy() && !app.detail.editing && app.detail.editor.is_none()
+            && app.detail.tag_draft.is_none() && app.detail.confirmation.is_none()
     )
     .unwrap();
     if app.detail.editing && !app.detail.editing_configuration {
@@ -551,29 +553,61 @@ fn location(html: &mut String, app: &App, game: &Game) {
     write!(html,"<section class=\"detail-card location-card\"><div class=\"utility-heading\"><h3>{}</h3><div class=\"card-heading-actions\">{}{}</div></div><p class=\"location-status\">{}</p><p class=\"path-value\">{}</p></section>",t(app,"detail.location"),button("open-folder",&game.id,t(app,"detail.open_directory"),"folder","quiet",app.busy()),button("relocate",&game.id,t(app,"detail.relocate"),"location_searching","quiet",app.busy()),t(app,if game.available{"detail.located"}else{"games.unavailable"}),esc(&game.folder)).unwrap();
 }
 
+fn save_file_label(app: &App, folder: &str, file: &str) -> String {
+    let folder = folder.replace('/', "\\");
+    let folder = folder.trim_end_matches('\\');
+    let file = file.replace('/', "\\");
+    if file
+        .get(..folder.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(folder))
+        && let Some(relative) = file
+            .get(folder.len()..)
+            .and_then(|suffix| suffix.strip_prefix('\\'))
+    {
+        format!("{}\\{}", t(app, "save.game_directory"), relative)
+    } else {
+        file
+    }
+}
+
 fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
     let report = app.detail.saves.get(&game.id);
-    let selected = edit.save_path.as_deref().filter(|path| !path.trim().is_empty())
-        .or_else(|| (edit.save_paths.len() == 1).then(|| edit.save_paths[0].as_str()));
-    let has_confirmed = report.is_some_and(|report| report.locations.iter().any(|location| location.confidence == "confirmed"));
-    let locations: Vec<_> = report.into_iter().flat_map(|report| &report.locations)
-        .filter(|location| edit.save_path_auto || selected.is_none_or(|path| location.path.eq_ignore_ascii_case(path)))
-        .filter(|location| !has_confirmed || location.confidence == "confirmed").collect();
-    write!(html, "<section class=\"detail-card save-card\"><div class=\"utility-heading\"><h3>{}</h3><div class=\"card-heading-actions\">{}{}",
+    let selected = edit
+        .save_files
+        .is_empty()
+        .then(|| {
+            edit.save_path
+                .as_deref()
+                .filter(|path| !path.trim().is_empty())
+                .or_else(|| (edit.save_paths.len() == 1).then(|| edit.save_paths[0].as_str()))
+        })
+        .flatten();
+    let has_confirmed = report.is_some_and(|report| {
+        report
+            .locations
+            .iter()
+            .any(|location| location.confidence == "confirmed")
+    });
+    let locations: Vec<_> = report
+        .into_iter()
+        .flat_map(|report| &report.locations)
+        .filter(|location| {
+            matches!(location.source.as_str(), "ai" | "observed")
+                || edit.save_path_auto
+                || selected.is_none_or(|path| location.path.eq_ignore_ascii_case(path))
+        })
+        .filter(|location| {
+            matches!(location.source.as_str(), "ai" | "observed")
+                || !has_confirmed
+                || location.confidence == "confirmed"
+        })
+        .collect();
+    write!(html, "<section class=\"detail-card save-card\"><div class=\"utility-heading\"><h3>{}</h3><div class=\"card-heading-actions\">{}{}{}</div></div>",
         t(app, "save.title"),
         button("ai-find-save", &game.id, t(app, "save.ai_find"), "", "quiet", features::save_busy(app)),
-        button("choose-save", &game.id, t(app, "save.choose"), "folder", "quiet", features::save_busy(app))
+        button("choose-save", &game.id, t(app, "save.choose"), "folder", "quiet", features::save_busy(app)),
+        crate::widgets::icon_button("open-save", "", t(app, "detail.open_directory"), "folder_open", "quiet", !locations.iter().any(|location| location.exists))
     ).unwrap();
-    // 多个有效目录保留各自的入口，按钮提示中显示路径以便区分。
-    for location in locations.iter().filter(|location| location.exists) {
-        html.push_str(&crate::widgets::icon_button("open-save", &location.path,
-            &format!("{}: {}", t(app, "detail.open_directory"), location.path),
-            "folder_open", "quiet", false));
-    }
-    if !locations.iter().any(|location| location.exists) {
-        html.push_str(&crate::widgets::icon_button("open-save", "", t(app, "detail.open_directory"), "folder_open", "quiet", true));
-    }
-    html.push_str("</div></div>");
     if let Some(report) = app.detail.saves.get(&game.id) {
         if report.locations.is_empty() {
             write!(
@@ -591,38 +625,47 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
             .unwrap();
         }
         for location in locations {
-            write!(html,"<div class=\"save-entry\"><p class=\"save-status\" title=\"{}\"><span></span>{}</p><p class=\"path-value\">{}</p><div class=\"detail-actions\">",t(app,match location.source.as_str(){"manual"=>"save.manual","config"=>"save.config","roaming"=>"save.roaming","documents"=>"save.documents","saved-games"=>"save.saved_games",_=>"save.game"}),t(app,if !location.exists{"save.uncreated"}else if location.confidence=="confirmed"{"backup.confirmed"}else{"save.candidate"}),esc(&location.path)).unwrap();
-            if location.exists {
-                if location.confidence == "confirmed" {
-                    html.push_str("<span class=\"save-backup-actions\">");
-                    html.push_str(&button(
-                        "backup-saves",
-                        &game.id,
-                        t(app, "backup.create"),
-                        "backup",
-                        "quiet icon-only",
-                        features::save_busy(app) || crate::cloud::busy(app),
-                    ));
-                    html.push_str(&button(
-                        "save-history", &game.id, t(app, "backup.archive"), "history", "quiet icon-only",
-                        features::save_busy(app) || crate::cloud::busy(app),
-                    ));
-                    crate::cloud::detail_upload_button(html, app, &game.id);
-                    html.push_str("</span>");
-                } else {
-                    html.push_str(&button(
-                        "confirm-save",
-                        &location.path,
-                        t(app, "common.confirm"),
-                        "check",
-                        "secondary",
-                        false,
-                    ));
+            write!(html, "<div class=\"save-entry\"><p class=\"save-status\" title=\"{}\"><span></span>{}</p>",
+                t(app, match location.source.as_str() { "manual" => "save.manual", "config" => "save.config", "roaming" => "save.roaming", "documents" => "save.documents", "saved-games" => "save.saved_games", _ => "save.game" }),
+                t(app, if !location.exists { "save.uncreated" } else if location.confidence == "confirmed" { "backup.confirmed" } else { "save.candidate" })
+            ).unwrap();
+            if location.files.is_empty() {
+                write!(html, "<p class=\"path-value\">{}</p>", esc(&location.path)).unwrap();
+            } else {
+                for file in &location.files {
+                    write!(
+                        html,
+                        "<p class=\"path-value\">{}</p>",
+                        esc(&save_file_label(app, &game.folder, file))
+                    )
+                    .unwrap();
                 }
+            }
+            html.push_str("<div class=\"detail-actions\">");
+            if location.confidence == "confirmed" {
+                html.push_str("<span class=\"save-backup-actions\">");
+                html.push_str(&button(
+                    "backup-saves",
+                    &game.id,
+                    t(app, "backup.create"),
+                    "backup",
+                    "quiet icon-only",
+                    features::save_busy(app) || crate::cloud::busy(app),
+                ));
+                html.push_str(&button(
+                    "save-history",
+                    &game.id,
+                    t(app, "backup.archive"),
+                    "history",
+                    "quiet icon-only",
+                    features::save_busy(app) || crate::cloud::busy(app),
+                ));
+                crate::cloud::detail_upload_button(html, app, &game.id);
+                html.push_str("</span>");
             }
             html.push_str("</div></div>");
         }
-        if report.limited {
+        if report.limited && !has_confirmed {
             write!(html, "<p>{}</p>", t(app, "save.limited")).unwrap();
         }
     }
@@ -675,6 +718,31 @@ mod tests {
     use crate::models::MetadataLink;
     use galgear_i18n::Language;
     use serde_json::json;
+    #[test]
+    fn loose_save_card_shows_file_paths_and_only_three_location_actions() {
+        let mut app = App::default();
+        let game: Game = serde_json::from_value(json!({"id":"air","title":"AIR","folder":"D:/Games/AIR","engine":"unknown","modified":0})).unwrap();
+        app.detail.saves.insert(game.id.clone(), serde_json::from_value(json!({"locations":[
+            {"path":"D:/Games/AIR","files":["D:/Games/AIR/SAVE.SAV","D:/Games/AIR/READ.SAV"],"source":"game","confidence":"detected","exists":true,"readable":true}
+        ],"limited":false})).unwrap());
+        let mut html = String::new();
+        saves_card(&mut html, &app, &game, &GameEdit::default());
+        assert!(html.contains("游戏目录\\SAVE.SAV"));
+        assert!(html.contains("游戏目录\\READ.SAV"));
+        assert!(!html.contains("<p class=\"path-value\">D:/Games/AIR</p>"));
+        assert_eq!(html.matches("<button").count(), 3);
+        for action in ["ai-find-save", "choose-save", "open-save"] {
+            assert_eq!(
+                html.matches(&format!("data-action=\"{action}\"")).count(),
+                1
+            );
+        }
+        assert_eq!(
+            save_file_label(&app, "D:/Games/AIR", "D:/Games/AIR2/SAVE.SAV"),
+            "D:\\Games\\AIR2\\SAVE.SAV"
+        );
+    }
+
     #[test]
     fn save_card_limits_history_but_current_save_and_archive_include_older_backups() {
         let mut app = App::default();
@@ -744,12 +812,13 @@ mod tests {
                 {"path":"C:/Goldberg SteamEmu Saves/1230140/remote", "source":"config", "confidence":"confirmed", "exists":true, "readable":true},
                 {"path":"C:/Aniplex/ATRI-MyDearMoments-", "source":"roaming", "confidence":"matched", "exists":true, "readable":true}
             ],
-            "limited":false
+            "limited":true
         })).unwrap());
         let mut html = String::new();
         saves_card(&mut html, &app, &game, &GameEdit::default());
         assert!(html.contains("C:/Goldberg SteamEmu Saves/1230140/remote"));
         assert!(!html.contains("C:/Aniplex/ATRI-MyDearMoments-"));
+        assert!(!html.contains(t(&app, "save.limited")));
         assert!(!html.contains("data-action=\"confirm-save\""));
         assert!(html.contains("data-action=\"backup-saves\""));
 
@@ -758,7 +827,9 @@ mod tests {
         saves_card(&mut html, &app, &game, &GameEdit::default());
         assert!(html.contains("C:/Goldberg SteamEmu Saves/1230140/remote"));
         assert!(html.contains("C:/Aniplex/ATRI-MyDearMoments-"));
-        assert_eq!(html.matches("data-action=\"confirm-save\"").count(), 2);
+        assert!(html.contains(t(&app, "save.limited")));
+        assert!(!html.contains("data-action=\"confirm-save\""));
+        assert_eq!(html.matches("data-action=\"open-save\"").count(), 1);
     }
     #[test]
     fn detail_shows_playtime_and_never_played_without_metadata() {

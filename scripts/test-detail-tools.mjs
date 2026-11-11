@@ -10,6 +10,7 @@ async function fixture({locations, aiAvailable = true} = {}) {
   const settings = {library_folders:['F:/Fixture'], card_size:200, sort_by:'title', game_edits:{fixture:{setup_confirmed:true}}};
   const catalog = {games:[game], warnings:[]};
   const pending = [];
+  const openRequests = [];
   let html = '';
   const ui = await import(`../dist/pkg/galgear_ui.js?detail-tools=${++instance}`);
   const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -17,6 +18,7 @@ async function fixture({locations, aiAvailable = true} = {}) {
     render(value) { html = value; }, reset_scroll() {}, local_date() { return ''; }, local_date_time() { return ''; },
     schedule_toast_expiry() {}, schedule_download_notice_expiry() {},
     request(id, command, payload) {
+      if (command === 'open_save_folder') openRequests.push(JSON.parse(payload));
       if (['set_game_tools', 'set_ai_summary'].includes(command)) {
         pending.push({id, command, payload:JSON.parse(payload)});
         return;
@@ -37,7 +39,7 @@ async function fixture({locations, aiAvailable = true} = {}) {
   ui.dispatch('game-detail', game.id);
   await tick();
   return {
-    ui, settings, pending,
+    ui, settings, pending, openRequests,
     get html() { return html; },
     buttons(action) { return [...html.matchAll(/<button\b[^>]*>/g)].map(match => match[0]).filter(tag => tag.includes(`data-action="${action}"`)); },
     async finish(success = true) {
@@ -96,7 +98,7 @@ test('missing save locations and AI tools disable the same options in both views
   assert.match(app.buttons('open-save')[0], /disabled/);
 });
 
-test('save directory icons follow manual selection in the card header and retain every confirmed path', async () => {
+test('one save directory button follows manual selection and requests all confirmed folders', async () => {
   const app = await fixture({locations:[
     {path:'F:/Fixture/save',exists:true,confidence:'confirmed',source:'manual'},
     {path:'F:/Fixture/extra',exists:true,confidence:'confirmed',source:'manual'},
@@ -104,9 +106,17 @@ test('save directory icons follow manual selection in the card header and retain
   ]});
   const card = app.html.split('class="detail-card save-card"')[1].split('</section>')[0];
   const header = card.split('class="save-entry"')[0];
-  assert.equal(app.buttons('open-save').length, 2);
+  const [openButton, ...otherOpenButtons] = app.buttons('open-save');
+  assert.equal(otherOpenButtons.length, 0);
   assert.ok(header.indexOf('data-action="open-save"') > header.indexOf('data-action="choose-save"'));
-  assert.ok(app.buttons('open-save').every(tag => tag.includes('icon-only')));
+  assert.match(openButton, /icon-only/);
+  assert.match(openButton, /data-value=""/);
+  assert.doesNotMatch(openButton, /\bdisabled\b/);
+  assert.match(card, /F:\/Fixture\/save/);
+  assert.match(card, /F:\/Fixture\/extra/);
+  assert.doesNotMatch(card, /F:\/Fixture\/candidate/);
   assert.match(app.buttons('screenshot-open')[0], /icon-only/);
   assert.doesNotMatch(card.split('class="save-entry"').slice(1).join(''), /data-action="open-save"/);
+  app.ui.dispatch('open-save', '');
+  assert.deepEqual(app.openRequests, [{id:'fixture',path:''}]);
 });

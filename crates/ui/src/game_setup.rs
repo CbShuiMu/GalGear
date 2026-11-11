@@ -101,7 +101,8 @@ pub(crate) fn sync_default_source(app: &mut App) {
 pub(crate) fn sync(app: &mut App) {
     let game_ids: BTreeSet<_> = app.catalog.games.iter().map(|game| game.id.as_str()).collect();
     app.setup.rows.retain(|row| game_ids.contains(row.id.as_str()));
-    if !app.initialized || app.busy() || app.library.scanning {
+    if !app.initialized || app.busy() || app.library.scanning
+        || matches!(app.library.dialog, Some(crate::library::Dialog::FolderFailures { .. })) {
         return;
     }
     let row_ids: BTreeSet<_> = app.setup.rows.iter().map(|row| row.id.as_str()).collect();
@@ -687,7 +688,7 @@ mod tests {
                 .iter()
                 .map(|o| o.value.as_str())
                 .collect::<Vec<_>>(),
-            vec!["nextmoe", "vndb", "erogamescape", "bangumi", "2dfan"]
+            vec!["nextmoe", "2dfan", "vndb", "erogamescape", "bangumi"]
         );
         let before = app.setup.rows[0].source.clone();
         dispatch(&mut app, "setup-batch-source", "ymgal");

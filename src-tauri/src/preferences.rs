@@ -83,6 +83,20 @@ pub(crate) fn set_color_theme(
 }
 
 #[tauri::command]
+pub(crate) fn set_library_card_size(
+    size: String,
+    state: State<'_, AppState>,
+) -> Result<Settings, Message> {
+    if !matches!(size.as_str(), "normal" | "small" | "tiny") {
+        return Err(Message::new("error.operation"));
+    }
+    update(&state, |settings| {
+        settings.library_card_size = size;
+        Ok(())
+    })
+}
+
+#[tauri::command]
 pub(crate) fn set_display(
     cover_scale: u32,
     font_size: u32,

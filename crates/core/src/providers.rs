@@ -38,19 +38,10 @@ pub struct MetadataLink {
 }
 
 impl Metadata {
-    /// All imported categories, people and organizations as local tag names.
+    /// 返回数据源标签字段中的名称，去除空白和重复项并保留原顺序。
+    /// 制作人员、品牌及组织仅保存在资料字段中，由界面独立提供筛选入口。
     pub fn tag_names(&self) -> Vec<String> {
-        crate::tags::normalize(self.tags.iter().cloned().chain(
-            crate::tags::CREDIT_FIELDS.iter().flat_map(|field| {
-                crate::tags::credit_names(
-                    self.field(field).unwrap_or_default(),
-                    self.links
-                        .iter()
-                        .filter(|link| link.field == *field)
-                        .map(|link| link.name.as_str()),
-                )
-            }),
-        ))
+        crate::tags::normalize(self.tags.iter().cloned())
     }
 
     /// Return the cached value of an editable metadata field.
@@ -632,6 +623,25 @@ pub fn fan_patches(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn imported_tags_only_use_tag_fields_and_preserve_real_tags_matching_credit_names() {
+        let mut meta = Metadata {
+            tags: vec![" ADV ".into(), "adv".into(), "".into(), "Studio".into()],
+            ..Default::default()
+        };
+        for field in crate::tags::CREDIT_FIELDS {
+            assert!(meta.set_field(field, "Studio、Person"));
+            meta.links.push(MetadataLink {
+                field: (*field).into(),
+                name: "Linked Person".into(),
+                url: "https://example.com/person".into(),
+            });
+        }
+        assert_eq!(meta.tag_names(), ["ADV", "Studio"]);
+        meta.tags.clear();
+        assert!(meta.tag_names().is_empty());
+    }
 
     #[test]
     fn fan_patch_queries_require_valid_supplied_credentials() {

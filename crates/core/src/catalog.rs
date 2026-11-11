@@ -110,24 +110,43 @@ pub fn is_excluded(game: &Game, settings: &Settings) -> bool {
 /// Register a normalized library directory and reconsider games removed from it.
 /// Re-adding an existing directory leaves its exclusions unchanged.
 pub fn add_library_folder(settings: &mut Settings, path: String) {
-    if settings
+    add_library_folders(settings, vec![path]);
+}
+
+/// 批量注册已规范化的库目录，保留选择顺序，返回实际新增数。
+/// 重复目录不改变排除记录，父子目录分别保留为独立的库。
+pub fn add_library_folders(settings: &mut Settings, paths: Vec<String>) -> usize {
+    let mut known: std::collections::HashSet<_> = settings
         .library_folders
         .iter()
-        .any(|root| root.eq_ignore_ascii_case(&path))
-    {
-        return;
+        .map(|path| path.to_ascii_lowercase())
+        .collect();
+    let mut roots = std::collections::HashSet::new();
+    let previous_len = settings.library_folders.len();
+    for path in paths {
+        if known.insert(path.to_ascii_lowercase()) {
+            roots.insert(std::path::PathBuf::from(path.to_lowercase()));
+            settings.library_folders.push(path);
+        }
     }
-    let root = path.to_lowercase();
+    let added = settings.library_folders.len() - previous_len;
+    if added == 0 {
+        return 0;
+    }
+    // 沿路径祖先查找整批新增根目录，避免每个库都遍历所有排除项。
+    let belongs_to_added = |folder: &str| {
+        Path::new(&folder.to_lowercase())
+            .ancestors()
+            .any(|ancestor| roots.contains(ancestor))
+    };
     settings
         .excluded_paths
-        .retain(|excluded| !Path::new(&excluded.to_lowercase()).starts_with(Path::new(&root)));
+        .retain(|excluded| !belongs_to_added(excluded));
+    let excluded: std::collections::HashSet<_> = settings.excluded_games.iter().collect();
     let restored: std::collections::BTreeSet<_> = settings
         .excluded_entries
         .values()
-        .filter(|game| {
-            settings.excluded_games.contains(&game.id)
-                && Path::new(&game.folder.to_lowercase()).starts_with(Path::new(&root))
-        })
+        .filter(|game| excluded.contains(&game.id) && belongs_to_added(&game.folder))
         .map(|game| game.id.clone())
         .collect();
     settings.excluded_games.retain(|id| !restored.contains(id));
@@ -136,7 +155,7 @@ pub fn add_library_folder(settings: &mut Settings, path: String) {
         edit.setup_confirmed = false;
         edit.setup_pending = true;
     }
-    settings.library_folders.push(path);
+    added
 }
 
 /// 永久清除应用条目，并记录最小扫描排除信息；游戏文件和备份独立保留。
@@ -296,6 +315,85 @@ pub fn save(path: &Path, catalog: &ScanResult) -> Result<(), Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batch_library_restore_preserves_order_boundaries_and_existing_exclusions() {
+        let mut settings = Settings {
+            library_folders: vec!["C:/Existing".into()],
+            excluded_paths: vec![
+                "C:/Existing/Game".into(),
+                "C:/New/Game".into(),
+                "C:/New-other/Game".into(),
+            ],
+            ..Default::default()
+        };
+        for folder in ["C:/New", "C:/New/Child", "C:/Existing", "C:/New-other"] {
+            let game = manual_game(&Path::new(folder).join("game.exe"), folder.into()).unwrap();
+            settings.excluded_games.push(game.id.clone());
+            settings.excluded_entries.insert(game.id.clone(), game);
+        }
+        let added = add_library_folders(
+            &mut settings,
+            ["c:/existing", "C:/New/Child", "C:/New", "c:/new"]
+                .map(String::from)
+                .to_vec(),
+        );
+        assert_eq!(added, 2);
+        assert_eq!(
+            settings.library_folders,
+            ["C:/Existing", "C:/New/Child", "C:/New"]
+        );
+        assert_eq!(
+            settings.excluded_paths,
+            ["C:/Existing/Game", "C:/New-other/Game"]
+        );
+        assert_eq!(settings.excluded_games.len(), 2);
+        assert!(settings.excluded_games.iter().all(|id| {
+            matches!(
+                settings.excluded_entries[id].folder.as_str(),
+                "C:/Existing" | "C:/New-other"
+            )
+        }));
+        assert_eq!(settings.game_edits.len(), 2);
+        assert!(
+            settings
+                .game_edits
+                .values()
+                .all(|edit| edit.setup_pending && !edit.setup_confirmed)
+        );
+        let previous = settings.clone();
+        add_library_folders(&mut settings, previous.library_folders.clone());
+        assert_eq!(settings, previous);
+    }
+
+    #[test]
+    #[ignore = "批量目录性能测试，使用 --release --ignored --nocapture"]
+    fn batch_library_registration_scaling() {
+        for count in [1_000, 10_000, 50_000] {
+            let paths: Vec<_> = (0..count).map(|i| format!("C:/Library/{i}")).collect();
+            let mut settings = Settings {
+                excluded_paths: paths.iter().map(|path| format!("{path}/Game")).collect(),
+                ..Default::default()
+            };
+            for path in &paths {
+                let game = manual_game(&Path::new(path).join("game.exe"), path.clone()).unwrap();
+                settings.excluded_games.push(game.id.clone());
+                settings.excluded_entries.insert(game.id.clone(), game);
+            }
+            settings.excluded_paths.push("C:/Other/Game".into());
+            let selected = paths.iter().chain(&paths).cloned().collect();
+            let start = std::time::Instant::now();
+            assert_eq!(add_library_folders(&mut settings, selected), count);
+            eprintln!(
+                "{count} roots + {count} legacy exclusions + duplicates: {:?}",
+                start.elapsed()
+            );
+            assert_eq!(settings.library_folders, paths);
+            assert_eq!(settings.excluded_paths, ["C:/Other/Game"]);
+            assert!(settings.excluded_games.is_empty());
+            assert_eq!(settings.game_edits.len(), count);
+        }
+    }
 
     #[test]
     fn readding_removed_library_after_restart_requires_setup_for_its_excluded_games() {
@@ -654,13 +752,13 @@ mod tests {
             .description = "New story".into();
         apply_edits(&mut game, &settings);
         assert_eq!(game.metadata.as_ref().unwrap().description, "");
-        assert_eq!(game.tags, vec!["LocalTag", "Edited brand"]);
+        assert_eq!(game.tags, vec!["LocalTag"]);
     }
     #[test]
-    fn cached_metadata_adds_all_credits_and_respects_local_tag_rules() {
+    fn cached_metadata_imports_only_tags_and_respects_local_tag_rules() {
         let mut game = manual_game(Path::new("F:/game.exe"), "Game".into()).unwrap();
         game.metadata = Some(crate::providers::Metadata {
-            tags: vec!["ADV".into()],
+            tags: vec!["ADV".into(), "School".into(), "Romance".into()],
             brand: "Studio".into(),
             developer: "studio".into(),
             writers: "Alice Smith、Bob".into(),
@@ -668,17 +766,15 @@ mod tests {
             ..Default::default()
         });
         apply_edits(&mut game, &Settings::default());
-        assert_eq!(
-            game.tags,
-            vec!["ADV", "studio", "Alice Smith", "Bob", "Composer"]
-        );
+        assert_eq!(game.tags, vec!["ADV", "School", "Romance"]);
         let settings = Settings {
             game_edits: std::collections::BTreeMap::from([(
                 game.id.clone(),
                 crate::GameEdit {
                     tags: vec!["Local".into()],
                     tag_rules: std::collections::BTreeMap::from([
-                        ("bob".into(), None),
+                        ("school".into(), None),
+                        ("romance".into(), Some("恋爱".into())),
                         ("studio".into(), Some("Renamed studio".into())),
                     ]),
                     ..Default::default()
@@ -688,10 +784,7 @@ mod tests {
         };
         apply_edits(&mut game, &settings);
         apply_edits(&mut game, &settings);
-        assert_eq!(
-            game.tags,
-            vec!["Local", "ADV", "Renamed studio", "Alice Smith", "Composer"]
-        );
+        assert_eq!(game.tags, vec!["Local", "ADV", "恋爱"]);
     }
     #[test]
     fn edits_and_missing_entries_survive_scan_and_cache() {

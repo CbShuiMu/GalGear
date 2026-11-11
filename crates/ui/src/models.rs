@@ -3,6 +3,20 @@ use galgear_i18n::{Language, Message};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Clone, Deserialize)]
+pub(crate) struct LibraryFolderFailure {
+    pub(crate) path: String,
+    pub(crate) error: Message,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct LibraryFoldersResult {
+    pub(crate) settings: Settings,
+    pub(crate) added: usize,
+    pub(crate) unchanged: usize,
+    pub(crate) failed: Vec<LibraryFolderFailure>,
+}
+
 #[derive(Clone, Default, Deserialize)]
 #[serde(default)]
 pub(crate) struct Collection {
@@ -20,6 +34,8 @@ pub(crate) struct Settings {
     #[serde(default)]
     pub(crate) excluded_games: Vec<String>,
     pub(crate) card_size: u32,
+    #[serde(default)]
+    pub(crate) library_card_size: String,
     pub(crate) sort_by: String,
     #[serde(default)]
     pub(crate) custom_order: Vec<String>,
@@ -203,12 +219,14 @@ pub(crate) struct GameEdit {
     pub(crate) title: Option<String>,
     pub(crate) tags: Vec<String>,
     pub(crate) source_tags: Option<Vec<String>>,
+    pub(crate) tag_source_url: Option<String>,
     pub(crate) summary_brand: Option<String>,
     pub(crate) summary_release_date: Option<String>,
     pub(crate) executable: Option<String>,
     pub(crate) arguments: Vec<String>,
     pub(crate) working_directory: Option<String>,
     pub(crate) launcher: Option<String>,
+    pub(crate) save_files: Vec<String>,
     pub(crate) save_path: Option<String>,
     pub(crate) save_path_auto: bool,
     pub(crate) metadata: Option<Metadata>,
@@ -233,12 +251,14 @@ impl Default for GameEdit {
             title: None,
             tags: Vec::new(),
             source_tags: None,
+            tag_source_url: None,
             summary_brand: None,
             summary_release_date: None,
             executable: None,
             arguments: Vec::new(),
             working_directory: None,
             launcher: None,
+            save_files: Vec::new(),
             save_path: None,
             save_path_auto: false,
             metadata: None,
@@ -344,6 +364,8 @@ pub(crate) struct SaveReport {
 }
 #[derive(Clone, Default, Deserialize)]
 pub(crate) struct SaveLocation {
+    #[serde(default)]
+    pub(crate) files: Vec<String>,
     pub(crate) path: String,
     pub(crate) source: String,
     pub(crate) confidence: String,

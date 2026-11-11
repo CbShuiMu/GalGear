@@ -1,5 +1,12 @@
 //! One detail draft shared by the in-place editor and its save action.
-use crate::{features, models::Metadata, requests::Pending, requests::issue, state::App};
+use crate::{
+    features,
+    models::{Game, Metadata},
+    requests::Pending,
+    requests::issue,
+    state::{App, show_toast},
+};
+use galgear_i18n::Message;
 use serde_json::json;
 use std::collections::BTreeMap;
 
@@ -77,4 +84,185 @@ pub(crate) fn save(app: &mut App) {
         .collect();
     let payload = json!({"id":id,"draft":{"title":value("draft-title"),"tags":value("draft-tags").split([',','，']).map(str::trim).collect::<Vec<_>>(),"executable":value("draft-executable"),"arguments":value("draft-arguments").lines().collect::<Vec<_>>(),"working_directory":optional("draft-workdir"),"launcher":optional("draft-launcher"),"locale_profile":value("draft-locale"),"metadata":metadata,"metadata_resets":resets,"reset_tag_rules":value("draft-reset-tags")=="true"}});
     issue(app, Pending::DetailSaved, "save_game_details", payload);
+}
+
+pub(crate) fn refresh_changed_title(app: &mut App, game: &Game) {
+    if !app
+        .catalog
+        .games
+        .iter()
+        .any(|old| old.id == game.id && old.title != game.title)
+    {
+        return;
+    }
+    issue(
+        app,
+        Pending::TitleRefresh(game.id.clone(), game.title.clone()),
+        "refresh_title_metadata",
+        json!({"id":game.id,"title":game.title}),
+    );
+}
+
+pub(crate) fn resolve_refresh(
+    app: &mut App,
+    pending: &Pending,
+    success: bool,
+    payload: &str,
+) -> bool {
+    let Pending::TitleRefresh(id, title) = pending else {
+        return false;
+    };
+    if !app
+        .catalog
+        .games
+        .iter()
+        .any(|game| &game.id == id && &game.title == title)
+    {
+        return true;
+    }
+    let result = if success {
+        serde_json::from_str::<Option<Game>>(payload)
+            .map_err(|error| Message::detail("error.read_data", error))
+    } else {
+        Err(Message::from_error(payload))
+    };
+    let warning = match result {
+        Ok(Some(game)) if &game.id == id && &game.title == title => {
+            let warning = game.metadata_warning.clone();
+            if let Some(entry) = app.catalog.games.iter_mut().find(|entry| &entry.id == id) {
+                crate::playtime::replace_game(entry, game);
+            }
+            app.detail.metadata_warnings.remove(id);
+            issue(app, Pending::Preferences, "get_preferences", json!({}));
+            warning
+        }
+        Ok(_) => None,
+        Err(error) => Some(error),
+    };
+    if let Some(warning) = warning {
+        show_toast(
+            app,
+            Message::detail(
+                "detail.title_refresh_failed",
+                warning.render(app.settings.language),
+            ),
+            true,
+        );
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{bridge::take_requests, state::APP};
+
+    fn game_json(title: &str) -> serde_json::Value {
+        json!({"id":"fixture", "title":title, "folder":"F:/Fixture", "engine":"unknown", "modified":0, "tags":["Old tag"]})
+    }
+
+    fn game(title: &str) -> Game {
+        serde_json::from_value(game_json(title)).unwrap()
+    }
+
+    #[test]
+    fn successful_changed_title_save_starts_nonblocking_refresh_and_applies_result() {
+        take_requests();
+        APP.with(|state| {
+            let mut app = state.borrow_mut();
+            *app = App::default();
+            app.catalog.games.push(game("Old title"));
+            issue(
+                &mut app,
+                Pending::DetailSaved,
+                "save_game_details",
+                json!({}),
+            );
+        });
+        let (request, _, _) = take_requests().pop().unwrap();
+        crate::responses::resolve(request, true, &game_json("New title").to_string());
+        let requests = take_requests();
+        let (refresh, _, payload) = requests
+            .iter()
+            .find(|(_, command, _)| command == "refresh_title_metadata")
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(payload).unwrap(),
+            json!({"id":"fixture","title":"New title"})
+        );
+        for (id, command, _) in &requests {
+            if command == "get_preferences" {
+                crate::responses::resolve(*id, true, "{}");
+            }
+        }
+        APP.with(|state| {
+            let app = state.borrow();
+            assert!(!app.busy());
+            assert_eq!(app.catalog.games[0].title, "New title");
+        });
+        let mut result = game_json("New title");
+        result["tags"] = json!(["New tag"]);
+        crate::responses::resolve(*refresh, true, &result.to_string());
+        APP.with(|state| assert_eq!(state.borrow().catalog.games[0].tags, ["New tag"]));
+    }
+
+    #[test]
+    fn unchanged_title_or_failed_save_never_starts_refresh() {
+        for success in [true, false] {
+            take_requests();
+            APP.with(|state| {
+                let mut app = state.borrow_mut();
+                *app = App::default();
+                app.catalog.games.push(game("Same title"));
+                issue(
+                    &mut app,
+                    Pending::DetailSaved,
+                    "save_game_details",
+                    json!({}),
+                );
+            });
+            let (id, _, _) = take_requests().pop().unwrap();
+            let payload = if success {
+                game_json("Same title").to_string()
+            } else {
+                r#"{"key":"error.config_write","args":{}}"#.into()
+            };
+            crate::responses::resolve(id, success, &payload);
+            assert!(
+                !take_requests()
+                    .iter()
+                    .any(|(_, command, _)| command == "refresh_title_metadata")
+            );
+        }
+    }
+
+    #[test]
+    fn empty_failed_and_late_results_preserve_saved_game() {
+        let mut app = App::default();
+        app.catalog.games.push(game("New title"));
+        let request = Pending::TitleRefresh("fixture".into(), "New title".into());
+        resolve_refresh(&mut app, &request, true, "null");
+        assert_eq!(app.catalog.games[0].tags, ["Old tag"]);
+        resolve_refresh(
+            &mut app,
+            &request,
+            false,
+            r#"{"key":"error.network","args":{}}"#,
+        );
+        assert_eq!(app.catalog.games[0].title, "New title");
+        assert_eq!(
+            app.toast.as_ref().unwrap().0.key,
+            "detail.title_refresh_failed"
+        );
+        app.catalog.games[0].title = "Newest title".into();
+        app.toast = None;
+        resolve_refresh(
+            &mut app,
+            &request,
+            true,
+            &game_json("New title").to_string(),
+        );
+        assert_eq!(app.catalog.games[0].title, "Newest title");
+        assert!(app.toast.is_none());
+    }
 }

@@ -1,4 +1,59 @@
 {
+  "detail.title_refresh_failed": {
+    "zh-CN": "标题已保存，部分标签或资料未能自动更新：{detail}",
+    "ja-JP": "タイトルは保存されましたが、一部のタグまたは作品情報を自動更新できませんでした：{detail}",
+    "en-US": "Title saved, but some tags or details could not be updated automatically: {detail}"
+  },
+  "dialog.library_multiple": {
+    "zh-CN": "选择游戏库文件夹（可多选）",
+    "ja-JP": "ライブラリのフォルダーを選択（複数選択可）",
+    "en-US": "Select library folders (multiple selection supported)"
+  },
+  "library.folders_added": {
+    "zh-CN": "游戏库已添加 {added} 个 · 重复跳过 {skipped} 个 · 失败 {failed} 个",
+    "ja-JP": "ライブラリ追加 {added} 件 · 重複スキップ {skipped} 件 · 失敗 {failed} 件",
+    "en-US": "Libraries added {added} · Duplicates skipped {skipped} · Failed {failed}"
+  },
+  "library.folder_failures": {
+    "zh-CN": "游戏库文件夹添加失败",
+    "ja-JP": "ライブラリフォルダーの追加に失敗",
+    "en-US": "Library folders that could not be added"
+  },
+  "library.previous_page": {
+    "zh-CN": "上一页",
+    "ja-JP": "前のページ",
+    "en-US": "Previous page"
+  },
+  "library.next_page": {
+    "zh-CN": "下一页",
+    "ja-JP": "次のページ",
+    "en-US": "Next page"
+  },
+  "display.cards": {
+    "zh-CN": "游戏库卡面尺寸",
+    "ja-JP": "ライブラリのカードサイズ",
+    "en-US": "Library card size"
+  },
+  "display.cards_normal": {
+    "zh-CN": "标准",
+    "ja-JP": "標準",
+    "en-US": "Standard"
+  },
+  "display.cards_small": {
+    "zh-CN": "小",
+    "ja-JP": "小",
+    "en-US": "Small"
+  },
+  "display.cards_tiny": {
+    "zh-CN": "特小",
+    "ja-JP": "極小",
+    "en-US": "Extra small"
+  },
+  "display.cards_help": {
+    "zh-CN": "在游戏库中按 Alt＋滚轮或 Alt＋↑/↓ 调节；向上放大，向下缩小。",
+    "ja-JP": "ライブラリで Alt＋マウスホイール、または Alt＋↑/↓ で調整します。上で拡大、下で縮小。",
+    "en-US": "In the library, use Alt + mouse wheel or Alt + ↑/↓. Up enlarges cards; down shrinks them."
+  },
   "font.hotkey": {
     "zh-CN": "字体调节面板快捷键",
     "ja-JP": "フォント調整パネルのショートカット",
@@ -1193,6 +1248,41 @@
     "zh-CN": "打开存档目录",
     "ja-JP": "セーブフォルダーを開く",
     "en-US": "Open save folder"
+  },
+  "save.observation_begin": {
+    "zh-CN": "保存前后查找",
+    "ja-JP": "保存前後で検索",
+    "en-US": "Find by saving"
+},
+  "save.observation_finish": {
+    "zh-CN": "比较存档变化",
+    "ja-JP": "変更を比較",
+    "en-US": "Compare changes"
+},
+  "save.observation_started": {
+    "zh-CN": "请启动游戏，保存一次并退出游戏，再点击“比较存档变化”。基线保留一小时。",
+    "ja-JP": "ゲームを起動してセーブ後に終了し、「変更を比較」を押してください。記録は1時間有効です。",
+    "en-US": "Start the game, save once and exit, then compare changes. The baseline expires in one hour."
+},
+  "save.observation_expired": {
+    "zh-CN": "诊断基线已失效，请重新开始保存前后查找。",
+    "ja-JP": "記録が無効です。検索を再開してください。",
+    "en-US": "The baseline expired. Start a new comparison."
+},
+  "save.review_candidates": {
+    "zh-CN": "查找完成，请检查候选范围并确认。",
+    "ja-JP": "検索完了。候補の範囲を確認してください。",
+    "en-US": "Search finished. Review and confirm the candidates."
+},
+  "save.confirm_suggestions": {
+    "zh-CN": "确认整组 AI 建议",
+    "ja-JP": "AI提案全体を確認",
+    "en-US": "Confirm AI selection"
+},
+  "save.choose_files": {
+    "zh-CN": "选择存档文件",
+    "ja-JP": "セーブファイルを選択",
+    "en-US": "Choose save files"
   },
   "save.choose": {
     "zh-CN": "手动指定",
@@ -3919,6 +4009,11 @@
     "ja-JP": "情報の検索がタイムアウトしました。再試行するか、データソースを変更してください。",
     "en-US": "Metadata search timed out. Try again later or choose another source."
   },
+  "save.game_directory": {
+    "zh-CN": "游戏目录",
+    "ja-JP": "ゲームフォルダー",
+    "en-US": "Game directory"
+  },
   "save.ai_find": {
     "zh-CN": "AI搜索",
     "ja-JP": "AIで検索",
@@ -3945,9 +4040,9 @@
     "en-US": "Select a model for a configured AI provider in Settings first."
   },
   "save.ai_not_found": {
-    "zh-CN": "AI 未找到有效的本地存档目录。请先运行游戏并保存存档一次，或手动指定。",
+    "zh-CN": "AI 未找到有效的本地存档目录或文件。请先运行游戏并保存存档一次，或手动指定。",
     "ja-JP": "AI は有効なローカルセーブ場所を見つけられませんでした。一度セーブするか、手動で指定してください。",
-    "en-US": "AI could not find a valid local save folder. Run the game and save once, or set it manually."
+    "en-US": "AI could not find valid local save folders or files. Run the game and save once, or set it manually."
   },
   "save.ai_failed": {
     "zh-CN": "AI 搜索存档位置失败：{detail}",
@@ -4693,6 +4788,11 @@
     "zh-CN": "添加标签",
     "ja-JP": "タグを追加",
     "en-US": "Add tag"
+  },
+  "tags.reorder_hint": {
+    "zh-CN": "长按文字拖动排序，或聚焦后按 Alt＋←/→ 调整顺序",
+    "ja-JP": "文字を長押ししてドラッグ、またはフォーカスして Alt＋←/→ で並べ替え",
+    "en-US": "Hold the text to drag, or focus and press Alt + Left/Right to reorder"
   },
   "tags.edit_label": {
     "zh-CN": "编辑标签：{tag}",

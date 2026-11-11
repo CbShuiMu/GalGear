@@ -49,18 +49,28 @@
 .reference-detail .tag-button>.icon{display:none}.reference-detail .tag-edit{margin-top:7px;font-size:calc(var(--ui-font)*.75);color:var(--palette-a08096)}
 :root .app-shell[data-theme] .reference-detail .detail-tag-chip{position:relative;display:inline-flex;align-items:stretch;max-width:100%;min-width:0;border-radius:999px;background:var(--detail-tag)}
 :root .app-shell[data-theme] .reference-detail .detail-tag-chip:not(.tag-input-chip)::before{content:"";position:absolute;inset:0 -28px;border-radius:999px;background:var(--detail-tag);box-shadow:0 0 0 3px var(--detail-utility),0 3px 8px var(--palette-69425920);z-index:-1;opacity:0;pointer-events:none;transition:opacity 120ms ease}
-:root .app-shell[data-theme] .reference-detail .detail-tag-chip:not(.tag-input-chip):is(:hover,:focus-within)::before{opacity:1}
+:root .app-shell[data-theme] .reference-detail .game-tags:not(.tag-reordering) .detail-tag-chip:not(.tag-input-chip):is(:hover,:focus-within)::before{opacity:1}
 :root .app-shell[data-theme] .reference-detail .detail-tag-chip>button.tag-button{min-width:0;background:transparent;border-radius:999px;overflow-wrap:anywhere}
 :root .app-shell[data-theme] .reference-detail .detail-tag-chip>button:is(.tag-remove-button,.tag-edit-button){position:absolute;inset-block:0;right:-28px;display:flex;align-items:center;justify-content:center;width:28px;min-width:0;min-height:0;padding:0;border:0;border-radius:0 999px 999px 0;background:var(--detail-tag);color:var(--pink-dark);opacity:0;visibility:hidden;pointer-events:none;transform:scaleX(0);transform-origin:left;transition:transform 180ms ease,opacity 120ms ease,visibility 0s 180ms}
 :root .app-shell[data-theme] .reference-detail .detail-tag-chip>button:is(.tag-remove-button,.tag-edit-button)>.icon{flex-shrink:0;width:14px;height:14px}
-:root .app-shell[data-theme] .reference-detail .detail-tag-chip:not(.tag-input-chip):is(:hover,:focus-within){z-index:1;border-radius:0}
-:root .app-shell[data-theme] .reference-detail .detail-tag-chip:is(:hover,:focus-within)>button:is(.tag-remove-button,.tag-edit-button){opacity:1;visibility:visible;pointer-events:auto;transform:scaleX(1);transition-delay:0s}
+:root .app-shell[data-theme] .reference-detail .game-tags:not(.tag-reordering) .detail-tag-chip:not(.tag-input-chip):is(:hover,:focus-within){z-index:1;border-radius:0}
+:root .app-shell[data-theme] .reference-detail .game-tags:not(.tag-reordering) .detail-tag-chip:is(:hover,:focus-within)>button:is(.tag-remove-button,.tag-edit-button){opacity:1;visibility:visible;pointer-events:auto;transform:scaleX(1);transition-delay:0s}
 :root .app-shell[data-theme] .reference-detail .detail-tag-chip>button:is(.tag-remove-button,.tag-edit-button):hover{background:var(--palette-f7f0f8)}
 .editor-dialog.tag-remove-dialog{width:min(440px,100%)}
 .tag-remove-dialog .editor-body{line-height:1.8;overflow-wrap:anywhere}
 .tag-remove-actions{display:flex;justify-content:flex-end;gap:10px;padding:0 24px 24px;flex-shrink:0}
 @media(hover:none){.reference-detail .game-tags{padding-inline:0}:root .app-shell[data-theme] .reference-detail .detail-tag-chip::before{display:none}:root .app-shell[data-theme] .reference-detail .detail-tag-chip>button:is(.tag-remove-button,.tag-edit-button){position:static;flex:0 0 28px;opacity:1;visibility:visible;pointer-events:auto;transform:none}}
 @media(prefers-reduced-motion:reduce){:root .app-shell[data-theme] .reference-detail .detail-tag-chip::before,:root .app-shell[data-theme] .reference-detail .detail-tag-chip>button:is(.tag-remove-button,.tag-edit-button){transition:none}}
+.reference-detail .game-tags[data-tag-reorder="true"] .detail-tag-chip:not(.tag-input-chip){cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
+.reference-detail .game-tags[data-tag-reorder="true"] .detail-tag-chip>.tag-button{cursor:pointer}
+.reference-detail .game-tags.tag-reordering{cursor:grabbing}
+.reference-detail .tag-reorder-slot{visibility:hidden;pointer-events:none}
+/* 拖动期间包含触屏常驻按钮在内的两侧操作都隐藏，尺寸保留以免换行抖动。 */
+:root .app-shell[data-theme] .reference-detail .tag-reordering .detail-tag-chip>button:is(.tag-remove-button,.tag-edit-button){opacity:0;visibility:hidden;pointer-events:none;transition:none}
+:root .app-shell[data-theme] .reference-detail .tag-reordering .detail-tag-chip::before{opacity:0;transition:none}
+.tag-drag-layer.reference-detail{position:fixed;inset:0;z-index:2000;pointer-events:none}
+.tag-drag-anchor{position:absolute;left:0;top:0;will-change:transform}
+:root .app-shell[data-theme] .tag-drag-layer.reference-detail .tag-drag-preview{position:absolute;left:0;top:0;margin:0;min-width:0;max-width:none;justify-content:center;overflow-wrap:anywhere;pointer-events:none;transform-origin:top left;background:var(--detail-tag);color:var(--pink-dark);box-shadow:0 8px 20px var(--palette-69425920),0 0 0 1px var(--detail-nav-line);transform:scale(1.06);transition:none;will-change:transform}
 .reference-detail .credit-tag{margin:2px 6px 2px 0;white-space:normal;overflow-wrap:anywhere}.reference-detail .tag-button:hover{color:var(--pink-dark);background:var(--palette-f7f0f8)}
 .reference-detail .detail-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:24px;align-items:start}
 .reference-detail .reading-card{background:var(--palette-fff);border:1px solid var(--palette-eee5ed);border-radius:16px;padding:27px 30px 24px;min-width:0}
@@ -127,7 +137,7 @@
 /* Source and actions share the reading header; launch options live in one dialog. */
 .reference-detail .reading-heading{flex-wrap:wrap;align-items:center;gap:12px}
 .metadata-source{display:flex;align-items:center;gap:9px;flex-shrink:0;font-weight:600;font-size:calc(var(--ui-font)*.9)}
-.metadata-source img,.source-card h2 img{width:22px;height:22px;object-fit:contain;border-radius:4px}
+.metadata-source img,.source-card-title img{width:22px;height:22px;object-fit:contain;border-radius:4px}
 .reference-detail .reading-heading .metadata-actions{margin:0;padding:0;border:0;display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
 .reference-detail .reading-heading .metadata-actions .button{padding:5px 7px;font-size:calc(var(--ui-font)*.75);min-height:30px}
 .reference-detail .hero-actions .game-settings-button{display:grid;place-items:center;width:40px;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--palette-fffafc);color:var(--pink-dark)}
@@ -164,7 +174,7 @@
 .save-card-history ul{list-style:none;padding:0;margin:0;display:grid;gap:9px}
 .save-card-history li{font-size:calc(var(--ui-font)*.8);line-height:1.6;overflow-wrap:anywhere}
 .metadata-provider-picker{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.source-card h2{display:flex;align-items:center;gap:10px}
+.source-card-title{display:flex;align-items:center;gap:10px}
 
 .game-settings-dialog .configuration-summary{margin:14px 0;display:grid;gap:12px}
 .game-settings-dialog .configuration-summary>div{display:grid;grid-template-columns:minmax(130px,35%) minmax(0,1fr);gap:16px;font-size:calc(var(--ui-font)*.875);line-height:1.7}
@@ -289,9 +299,10 @@
 .game-tools-shortcuts .game-settings-button .icon { transition: transform 320ms cubic-bezier(.2,.7,.2,1); }
 .game-tools-reveal { width: 0; overflow: hidden; visibility: hidden; transition: width 320ms cubic-bezier(.2,.7,.2,1), visibility 320ms; }
 .game-tools-buttons { display: flex; align-items: center; gap: 4px; width: max-content; padding: 4px 6px 4px 2px; opacity: 0; transition: opacity 160ms ease; }
-.game-tools-shortcuts:is(:hover,:focus-within) .game-tools-reveal { width: calc(var(--quick-tool-size) * 4 + 20px); visibility: visible; }
-.game-tools-shortcuts:is(:hover,:focus-within) .game-tools-buttons { opacity: 1; }
-.game-tools-shortcuts:is(:hover,:focus-within) .game-settings-button .icon { transform: rotate(90deg); }
+/* 关闭弹窗会把焦点还给齿轮。鼠标聚焦齿轮时，由悬停决定是否展开。 */
+.game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) .game-tools-reveal { width: calc(var(--quick-tool-size) * 4 + 20px); visibility: visible; }
+.game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) .game-tools-buttons { opacity: 1; }
+.game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) .game-settings-button .icon { transform: rotate(90deg); }
 .game-tool-shortcut.tool-locale { --tool-color: #087e8b; }
 .game-tool-shortcut.tool-upscale { --tool-color: #27834e; }
 .game-tool-shortcut.tool-backup { --tool-color: #bd477f; }

@@ -576,10 +576,17 @@ fn save_candidates_in_report(
     let mut found = Vec::new();
     for location in report.locations.iter().filter(|l| l.exists) {
         let root = Path::new(&location.path).canonicalize().map_err(io)?;
-        for entry in fs::read_dir(&root).map_err(io)?.take(2048) {
-            let entry = entry.map_err(io)?;
-            let path = entry.path();
-            if !entry.file_type().map_err(io)?.is_file() {
+        let paths = if location.files.is_empty() {
+            fs::read_dir(&root)
+                .map_err(io)?
+                .take(2048)
+                .map(|entry| entry.map(|entry| entry.path()).map_err(io))
+                .collect::<Result<Vec<_>, _>>()?
+        } else {
+            location.files.iter().map(PathBuf::from).collect()
+        };
+        for path in paths {
+            if !path.is_file() {
                 continue;
             }
             if fs::metadata(&path).map_err(io)?.len() <= 8 * 1024 * 1024 {
@@ -1390,6 +1397,7 @@ mod tests {
             locations: locations
                 .iter()
                 .map(|(path, source)| saves::SaveLocation {
+                    files: Vec::new(),
                     path: crate::config::display_path(path),
                     source: (*source).into(),
                     confidence: "configured".into(),

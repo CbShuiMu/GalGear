@@ -48,6 +48,7 @@ impl StatusFilter {
 
 pub(crate) struct State {
     pub(crate) collection: Option<String>,
+    pub(crate) size_request: u32,
     pub(crate) expanded: BTreeSet<String>,
     pub(crate) tree_open: bool,
     pub(crate) batch: bool,
@@ -74,6 +75,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             collection: None,
+            size_request: 0,
             expanded: BTreeSet::new(),
             tree_open: true,
             batch: false,

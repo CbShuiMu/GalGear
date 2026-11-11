@@ -1,7 +1,7 @@
 //! Local tag names and edit rules. Names have no source identity.
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Structured credits which also act as local library tags.
+/// Structured credits included in library filtering without becoming local tags.
 pub const CREDIT_FIELDS: &[&str] = &[
     "developer",
     "publisher",

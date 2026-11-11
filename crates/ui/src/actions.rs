@@ -225,6 +225,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "refresh" => issue(app, Pending::Scan, "scan_library", json!({"full":true})),
         "cancel-scan" => issue(app, Pending::Open, "cancel_scan", json!({})),
         "detect-saves" => issue(app, Pending::Saves, "detect_saves", json!({"id":value})),
+        "choose-save-files" => issue(
+            app,
+            Pending::ChooseSave,
+            "choose_save_files",
+            json!({"id":value}),
+        ),
         "choose-save" => issue(
             app,
             Pending::ChooseSave,
@@ -324,7 +330,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "open-resource" => issue(app, Pending::Open, "open_resource", json!({"url":value})),
-        "choose-folder" => issue(app, Pending::Folder, "choose_library_folder", json!({})),
+        "choose-folder" => {
+            if !app.busy() {
+                issue(app, Pending::Folder, "choose_library_folders", json!({}));
+            }
+        }
+        "folder-failures-page" => library::folders::change_page(app, value),
         "add-folder" => {
             let path = app.library.path_input.trim().to_owned();
             if path.is_empty() {

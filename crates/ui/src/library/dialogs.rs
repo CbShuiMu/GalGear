@@ -46,6 +46,7 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
         Dialog::Exclude { .. } => "bulk.exclude",
         Dialog::Warnings => "library.warnings_title",
         Dialog::Failures => "bulk.failures",
+        Dialog::FolderFailures { .. } => "library.folder_failures",
         Dialog::Restore => "library.restore",
         Dialog::Tags { .. } => "games.tag_filter",
         Dialog::AddGames => "folders.add_current",
@@ -250,6 +251,9 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                 );
             }
             html.push_str("</ul>");
+        }
+        Dialog::FolderFailures { failed, page } => {
+            crate::library::folders::render_failures(html, app, failed, *page);
         }
         Dialog::Failures => {
             html.push_str("<ul>");

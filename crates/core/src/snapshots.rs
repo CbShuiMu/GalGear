@@ -37,6 +37,9 @@ pub struct Snapshot {
     pub note: String,
     pub locked: bool,
     pub roots: Vec<String>,
+    /// 独立文件目标的索引。旧快照默认为目录。
+    #[serde(default)]
+    pub file_roots: Vec<usize>,
     pub files: Vec<File>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -58,6 +61,8 @@ struct Journal {
     plan: Preview,
     originals: Vec<String>,
     committed: bool,
+    #[serde(default)]
+    absent: Vec<usize>,
 }
 fn journal_path(data: &Path, game: &str) -> Result<PathBuf, Message> {
     Ok(directory(data, game)?.join("restore-journal.json"))
@@ -115,6 +120,20 @@ pub fn recover(
             return Err(error("Unsafe recovery journal"));
         }
         if !old.exists() {
+            if !journal.committed && journal.absent.contains(&index) && target.exists() {
+                let expected = journal
+                    .plan
+                    .snapshot
+                    .files
+                    .iter()
+                    .find(|file| file.root == index)
+                    .ok_or_else(|| error("Missing restored file"))?;
+                crate::saves::validate_file(target)?;
+                if hash(target)? != expected.hash {
+                    return Err(error("Restored saves changed; recovery is pending"));
+                }
+                remove_target(target)?;
+            }
             continue;
         }
         if fs::symlink_metadata(old)
@@ -125,11 +144,26 @@ pub fn recover(
             return Err(error("Recovery path is a link"));
         }
         if journal.committed {
-            fs::remove_dir_all(old).map_err(error)?;
+            remove_target(old)?;
             continue;
         }
         let mut previous = Vec::new();
-        files(old, old, index, &mut previous)?;
+        let file_name = journal
+            .plan
+            .snapshot
+            .file_roots
+            .contains(&index)
+            .then(|| {
+                journal
+                    .plan
+                    .snapshot
+                    .files
+                    .iter()
+                    .find(|file| file.root == index)
+                    .map(|file| file.path.as_str())
+            })
+            .flatten();
+        root_files(old, index, file_name, &mut previous)?;
         let expected: BTreeMap<_, _> = journal
             .plan
             .current
@@ -142,7 +176,7 @@ pub fn recover(
         }
         if target.exists() {
             let mut actual = Vec::new();
-            files(target, target, index, &mut actual)?;
+            root_files(target, index, file_name, &mut actual)?;
             let wanted: Vec<_> = journal
                 .plan
                 .snapshot
@@ -154,7 +188,7 @@ pub fn recover(
             if fingerprints(&actual) != fingerprints(&wanted) {
                 return Err(error("Restored saves changed; recovery is pending"));
             }
-            fs::remove_dir_all(target).map_err(error)?;
+            remove_target(target)?;
         }
         fs::rename(old, target).map_err(error)?;
     }
@@ -219,6 +253,7 @@ fn copy_file(from: &Path, to: &Path) -> Result<(), Message> {
 fn files(root: &Path, path: &Path, index: usize, output: &mut Vec<File>) -> Result<(), Message> {
     for entry in fs::read_dir(path).map_err(error)? {
         let entry = entry.map_err(error)?;
+        crate::saves::validate_components(&entry.path())?;
         let kind = entry.file_type().map_err(error)?;
         if kind.is_symlink() {
             return Err(error("Save folders must not contain links"));
@@ -239,10 +274,61 @@ fn files(root: &Path, path: &Path, index: usize, output: &mut Vec<File>) -> Resu
     }
     Ok(())
 }
+fn root_files(
+    path: &Path,
+    index: usize,
+    name: Option<&str>,
+    output: &mut Vec<File>,
+) -> Result<(), Message> {
+    crate::saves::validate_components(path)?;
+    if let Some(name) = name {
+        if !path.is_file() {
+            return Err(error("Expected a save file"));
+        }
+        output.push(File {
+            root: index,
+            path: name.into(),
+            size: fs::metadata(path).map_err(error)?.len(),
+            hash: hash(path)?,
+        });
+        Ok(())
+    } else {
+        files(path, path, index, output)
+    }
+}
+
+fn root_source(root: &str, relative: &Path) -> PathBuf {
+    let path = Path::new(root);
+    if path.is_file() {
+        path.to_path_buf()
+    } else {
+        path.join(relative)
+    }
+}
+
+fn remove_target(path: &Path) -> Result<(), Message> {
+    crate::saves::validate_components(path)?;
+    if path.is_file() {
+        fs::remove_file(path).map_err(error)
+    } else {
+        fs::remove_dir_all(path).map_err(error)
+    }
+}
+
 fn inventory(roots: &[String]) -> Result<Vec<File>, Message> {
     let mut result = Vec::new();
     for (index, root) in roots.iter().enumerate() {
-        files(Path::new(root), Path::new(root), index, &mut result)?;
+        let path = Path::new(root);
+        if !path.try_exists().map_err(error)? {
+            continue;
+        }
+        let name = path.is_file().then(|| {
+            path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        });
+        root_files(path, index, name.as_deref(), &mut result)?;
     }
     result.sort_by(|a, b| (a.root, &a.path).cmp(&(b.root, &b.path)));
     if result.iter().map(|f| f.size).sum::<u64>() > 2 * 1024 * 1024 * 1024 {
@@ -294,14 +380,18 @@ pub fn validate_roots(
     };
     let mut canonical: Vec<PathBuf> = Vec::new();
     for root in roots {
-        if fs::symlink_metadata(root)
-            .map_err(error)?
-            .file_type()
-            .is_symlink()
-        {
-            return Err(error("Save location is a link"));
-        }
-        let root = fs::canonicalize(root).map_err(error)?;
+        let path = Path::new(root);
+        let root = if path.try_exists().map_err(error)? {
+            crate::saves::validate_components(path)?;
+            fs::canonicalize(path).map_err(error)?
+        } else {
+            let parent = path.parent().ok_or_else(|| error("Missing save parent"))?;
+            crate::saves::validate_components(parent)?;
+            fs::canonicalize(parent).map_err(error)?.join(
+                path.file_name()
+                    .ok_or_else(|| error("Missing save filename"))?,
+            )
+        };
         if root == game
             || game.starts_with(&root)
             || broad.iter().any(|p| p.starts_with(&root))
@@ -485,6 +575,9 @@ fn create_compared(
     let (game_id, _title) = game;
     let status = check();
     require_stopped(status)?;
+    if roots.iter().any(|root| !Path::new(root).exists()) {
+        return Err(error("A selected save is missing"));
+    }
     let entries = inventory(roots)?;
     if entries.is_empty() {
         return Err(Message::new("backup.no_saves"));
@@ -492,7 +585,7 @@ fn create_compared(
     if let Some(snapshot) = matching_entries(
         data,
         &list(data, game_id)?,
-        roots.len(),
+        roots,
         &entries,
         automatic.then_some(roots),
     ) {
@@ -535,7 +628,7 @@ fn create_compared(
         let target = temporary.path().join(file.root.to_string()).join(&relative);
         fs::create_dir_all(target.parent().ok_or_else(|| error("Missing parent"))?)
             .map_err(error)?;
-        copy_file(&Path::new(&roots[file.root]).join(&relative), &target)?;
+        copy_file(&root_source(&roots[file.root], &relative), &target)?;
         if hash(&target)? != file.hash {
             return Err(error("Save changed while copying"));
         }
@@ -552,6 +645,11 @@ fn create_compared(
         size: entries.iter().map(|f| f.size).sum(),
         note: note.into(),
         locked: false,
+        file_roots: roots
+            .iter()
+            .enumerate()
+            .filter_map(|(index, root)| Path::new(root).is_file().then_some(index))
+            .collect(),
         roots: roots.to_vec(),
         files: entries,
     };
@@ -579,7 +677,7 @@ pub fn matching_current(
         return Ok(None);
     }
     Ok(
-        matching_entries(data, history, roots.len(), &entries, Some(roots))
+        matching_entries(data, history, roots, &entries, Some(roots))
             .map(|snapshot| snapshot.id.clone()),
     )
 }
@@ -587,13 +685,20 @@ pub fn matching_current(
 fn matching_entries<'a>(
     data: &Path,
     history: &'a [Snapshot],
-    root_count: usize,
+    roots: &[String],
     entries: &[File],
     semantic_roots: Option<&[String]>,
 ) -> Option<&'a Snapshot> {
     let current = fingerprints(entries);
+    let root_count = roots.len();
+    let file_roots: Vec<_> = roots
+        .iter()
+        .enumerate()
+        .filter_map(|(index, root)| Path::new(root).is_file().then_some(index))
+        .collect();
     history.iter().find(|snapshot| {
         snapshot.roots.len() == root_count
+            && snapshot.file_roots == file_roots
             && snapshot.files.len() == entries.len()
             && (fingerprints(&snapshot.files) == current
                 || semantic_roots.is_some_and(|roots| equivalent_entries(data, snapshot, roots, entries)))
@@ -637,7 +742,7 @@ fn equivalent_entries(
         let Some(root) = roots.get(file.root) else {
             return false;
         };
-        let Some(current) = crate::saves::backup_identity(&Path::new(root).join(&path)) else {
+        let Some(current) = crate::saves::backup_identity(&root_source(root, &path)) else {
             return false;
         };
         crate::saves::backup_identity(&directory.join(file.root.to_string()).join(path))
@@ -783,6 +888,43 @@ fn prune(data: &Path, game: &str, retention: usize) -> Result<(), Message> {
 }
 
 /// Preview uses current confirmed roots; recorded old absolute paths are never targets.
+fn validate_file_roots(snapshot: &Snapshot, targets: &[String]) -> Result<(), Message> {
+    if snapshot
+        .file_roots
+        .iter()
+        .any(|index| *index >= targets.len())
+    {
+        return Err(error("Invalid file root"));
+    }
+    for (index, target) in targets.iter().enumerate() {
+        let path = Path::new(target);
+        crate::saves::validate_components(if path.exists() {
+            path
+        } else {
+            path.parent().ok_or_else(|| error("Missing save parent"))?
+        })?;
+        if snapshot.file_roots.contains(&index) {
+            let entries: Vec<_> = snapshot
+                .files
+                .iter()
+                .filter(|file| file.root == index)
+                .collect();
+            if entries.len() != 1
+                || relative(&entries[0].path)?.components().count() != 1
+                || Path::new(target).file_name() != Path::new(&entries[0].path).file_name()
+                || (Path::new(target).exists() && !Path::new(target).is_file())
+            {
+                return Err(error("Confirm the matching save file before restoring"));
+            }
+        } else if !Path::new(target).is_dir() {
+            return Err(error(
+                "Confirm the matching save directory before restoring",
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn preview(
     data: &Path,
     game: &str,
@@ -797,6 +939,7 @@ pub fn preview(
             "Confirm all current save locations in the original order",
         ));
     }
+    validate_file_roots(&snapshot, targets)?;
     let current = fingerprints(&inventory(targets)?);
     let wanted = fingerprints(&snapshot.files);
     let mut changes = Vec::new();
@@ -854,6 +997,7 @@ pub fn restore_checked(
 ) -> Result<(), Message> {
     let status = check();
     require_stopped(status)?;
+    validate_file_roots(&plan.snapshot, &plan.targets)?;
     if journal_path(data, &plan.snapshot.game_id)?.exists() {
         return Err(error("An interrupted restore needs recovery first"));
     }
@@ -861,7 +1005,9 @@ pub fn restore_checked(
         return Err(error("Saves changed after preview; preview again"));
     }
     let original = load(data, &plan.snapshot.game_id, &plan.snapshot.id)?;
-    if fingerprints(&original.files) != fingerprints(&plan.snapshot.files) {
+    if original.file_roots != plan.snapshot.file_roots
+        || fingerprints(&original.files) != fingerprints(&plan.snapshot.files)
+    {
         return Err(error("Snapshot changed after preview"));
     }
     let source = directory(data, &original.game_id)?.join(&original.id);
@@ -891,10 +1037,16 @@ pub fn restore_checked(
         stages.push(stage);
     }
     if !plan.current.is_empty() {
+        let existing: Vec<_> = plan
+            .targets
+            .iter()
+            .filter(|target| Path::new(target).exists())
+            .cloned()
+            .collect();
         create_checked(
             data,
             &original.game_id,
-            &plan.targets,
+            &existing,
             "Before restore",
             retention,
             &check,
@@ -910,10 +1062,16 @@ pub fn restore_checked(
             .iter()
             .map(|s| display_path(&s.path().with_extension("original")))
             .collect(),
+        absent: plan
+            .targets
+            .iter()
+            .enumerate()
+            .filter_map(|(index, target)| (!Path::new(target).exists()).then_some(index))
+            .collect(),
         committed: false,
     };
     write_journal(&path, &journal)?;
-    let mut originals = Vec::new();
+    let mut originals: Vec<(PathBuf, PathBuf)> = Vec::new();
     require_stopped(check())?;
     for (index, stage) in stages.iter().enumerate() {
         let target = Path::new(&plan.targets[index]);
@@ -921,13 +1079,32 @@ pub fn restore_checked(
         if old.exists() {
             return Err(error("Rollback directory already exists"));
         }
-        if let Err(err) = fs::rename(target, &old).and_then(|()| fs::rename(stage.path(), target)) {
+        let replacement = if original.file_roots.contains(&index) {
+            stage.path().join(
+                &original
+                    .files
+                    .iter()
+                    .find(|file| file.root == index)
+                    .ok_or_else(|| error("Missing file target"))?
+                    .path,
+            )
+        } else {
+            stage.path().to_path_buf()
+        };
+        let move_old = if journal.absent.contains(&index) {
+            Ok(())
+        } else {
+            fs::rename(target, &old)
+        };
+        if let Err(err) = move_old.and_then(|()| fs::rename(&replacement, target)) {
             if old.exists() && !target.exists() {
                 fs::rename(&old, target).map_err(error)?;
             }
             for (target, old) in originals.iter().rev() {
-                fs::remove_dir_all(target).map_err(error)?;
-                fs::rename(old, target).map_err(error)?;
+                remove_target(target)?;
+                if old.exists() {
+                    fs::rename(old, target).map_err(error)?;
+                }
             }
             fs::remove_file(&path).map_err(error)?;
             return Err(error(err));
@@ -937,7 +1114,9 @@ pub fn restore_checked(
     journal.committed = true;
     write_journal(&path, &journal)?;
     for (_, old) in originals {
-        fs::remove_dir_all(old).map_err(error)?;
+        if old.exists() {
+            remove_target(&old)?;
+        }
     }
     fs::remove_file(path).map_err(error)?;
     Ok(())
@@ -1258,6 +1437,7 @@ mod tests {
             &Journal {
                 plan,
                 originals: vec![display_path(&old)],
+                absent: Vec::new(),
                 committed: false,
             },
         )
@@ -1325,3 +1505,6 @@ mod tests {
         assert_eq!(fs::read(saves.join("slot.sav")).unwrap(), b"current");
     }
 }
+
+#[cfg(test)]
+mod file_tests;

@@ -4,9 +4,11 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {test} = require('node:test');
 
-const source = fs.readFileSync(path.join(__dirname, '../web/library-reorder.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../web/library-reorder.js'), 'utf8').replace(/^import .*;\r?\n/gm, '');
+const pressSource = fs.readFileSync(path.join(__dirname, '../web/press-gesture.js'), 'utf8').replaceAll('export ', '');
+const cardSource = fs.readFileSync(path.join(__dirname, '../web/library-card.js'), 'utf8').replaceAll('export function', 'function');
 
-function fixture({reducedMotion = false} = {}) {
+function fixture({reducedMotion = false, cardWidth = 200, columns = 4} = {}) {
   const listeners = new Map(), frames = new Map(), timers = new Map();
   const animations = [], commits = [];
   let sequence = 0, finishes = 0, resolveSave;
@@ -27,6 +29,7 @@ function fixture({reducedMotion = false} = {}) {
       };
     }
     get isConnected() { return !!this.parentElement; }
+    contains(node) { return node === this || this.children.some(child => child.contains(node)); }
     append(child) { this.insertBefore(child, null); }
     insertBefore(child, before) {
       child.remove();
@@ -70,12 +73,12 @@ function fixture({reducedMotion = false} = {}) {
       return copy;
     }
     getBoundingClientRect() {
-      let x = 0, y = 100, width = 200, height = 280;
+      let x = 0, y = 100, width = cardWidth, height = cardWidth * 1.4;
       if (this === grid || this === pane) { width = 960; height = 650; }
       else if (this.parentElement === grid) {
         const index = grid.children.filter(child => !child.hidden).indexOf(this);
-        x = (index % 4) * 240;
-        y += Math.floor(index / 4) * 300;
+        x = (index % columns) * (cardWidth + 40);
+        y += Math.floor(index / columns) * (cardWidth * 1.4 + 20);
       } else if (this.parentElement?.className === 'reorder-stack') {
         const [left, top] = this.parentElement.style.transform.match(/-?\d+(?:\.\d+)?/g).map(Number);
         x = left + Number(this.style['--stack-index']) * 12;
@@ -121,6 +124,8 @@ function fixture({reducedMotion = false} = {}) {
     requestAnimationFrame(callback) { frames.set(++sequence, callback); return sequence; },
     cancelAnimationFrame: id => frames.delete(id),
   });
+  vm.runInContext(cardSource, context);
+  vm.runInContext(pressSource, context);
   vm.runInContext(source.replace('export function', 'function'), context);
   context.installLibraryReorder({
     idsFor: () => JSON.stringify(['a', 'c']),
@@ -133,6 +138,12 @@ function fixture({reducedMotion = false} = {}) {
   });
   return {
     cards, grid, shell, animations, commits,
+    content(className) {
+      const child = new Element(className);
+      child.closest = selector => selector === '.card-tags' && className === 'card-tags' ? child : cards[0].closest(selector);
+      cards[0].append(child);
+      return child;
+    },
     get finishes() { return finishes; },
     save: () => resolveSave(),
     event(type, extra = {}) {
@@ -192,5 +203,56 @@ test('reduced motion keeps destination and persistence behavior without animatio
   app.save();
   await new Promise(setImmediate);
   assert.equal(app.finishes, 1);
+  assert.ok(app.cards.every(card => !card.hidden));
+});
+
+
+test('compact cards land at measured slots for both smaller sizes', async () => {
+  for (const [cardWidth, columns] of [[177,5], [145,6]]) {
+    const app = fixture({cardWidth, columns, reducedMotion:true});
+    app.event('pointerdown', {clientX:cardWidth/2, clientY:150}); app.hold();
+    app.event('pointerup', {clientX:2*(cardWidth+40)+cardWidth/2,clientY:150});
+    assert.deepEqual(app.commits, [{ids:['a','c'],before:'e'}]);
+    assert.deepEqual(app.grid.children.map(card=>card.dataset.gameId), ['b','d','a','c','e']);
+    app.save(); await new Promise(setImmediate);
+    assert.equal(app.finishes,1);
+    assert.ok(app.cards.every(card=>!card.hidden));
+  }
+});
+
+
+test('title and middle tags both start the same long-press reorder', () => {
+  for (const region of ['card-title', 'card-tags']) {
+    const app = fixture();
+    const target = app.content(region);
+    app.event('pointerdown', {target}); app.hold();
+    assert.equal(app.cards.filter(card => card.hidden).length, 2);
+    app.event('keydown', {key:'Escape'});
+    assert.equal(app.finishes, 1);
+  }
+});
+
+test('short clicks and tag scrolling never start a reorder', () => {
+  for (const region of ['card-title', 'card-tags']) {
+    const app = fixture(); const target = app.content(region);
+    app.event('pointerdown', {target}); app.event('pointerup', {target}); app.hold();
+    assert.ok(app.cards.every(card => !card.hidden));
+    assert.equal(app.commits.length, 0);
+  }
+  for (const type of ['scroll', 'wheel']) {
+    const app = fixture(); const target = app.content('card-tags');
+    app.event('pointerdown', {target}); app.event(type, {target}); app.hold();
+    assert.ok(app.cards.every(card => !card.hidden));
+    assert.equal(app.finishes, 0);
+  }
+});
+
+test('scrollbar presses and action buttons cannot arm a long press', () => {
+  const app = fixture(); const tags = app.content('card-tags');
+  Object.assign(tags, {clientWidth:190,offsetWidth:200,clientHeight:80,scrollHeight:160});
+  app.event('pointerdown', {target:tags,clientX:199}); app.hold();
+  assert.ok(app.cards.every(card => !card.hidden));
+  const button = {closest: selector => selector === '.card-action,.card-remove' ? button : app.cards[0].closest(selector)};
+  app.event('pointerdown', {target:button}); app.hold();
   assert.ok(app.cards.every(card => !card.hidden));
 });

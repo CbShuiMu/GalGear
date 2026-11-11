@@ -53,16 +53,34 @@
 .child-collections{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}.child-collection{display:flex;align-items:center;gap:9px;background:var(--palette-fffafc);border:1px solid var(--line);border-radius:9px;padding:13px 16px;max-width:100%;color:var(--palette-765d70);font-size:calc(var(--ui-font)*.82)}.child-collection>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.child-collection>.icon:last-child{width:15px;opacity:.6;margin-left:12px}
 /* Preserve the reference cover size while larger windows can still enlarge cards. */
 .library-page{--library-card-min-width:227px;--library-column-gap:20px;--library-min-content-inset:36px}
-.library-page .game-grid{--card-width:clamp(var(--library-card-min-width),18vw,312px);grid-template-columns:repeat(auto-fill,min(var(--card-width),100%));gap:24px var(--library-column-gap);justify-content:start}
+.library-page .game-grid{--card-width:clamp(var(--library-card-min-width),18vw,312px);grid-template-columns:repeat(var(--library-columns,auto-fill),min(var(--card-width),100%));gap:24px var(--library-column-gap);justify-content:start}
 .library-page .game-card{position:relative;display:block;border:0;padding:0;background:none;min-width:0;width:100%;aspect-ratio:360/518;max-height:500px;text-align:left;cursor:grab;transform:none;animation:none}
 .game-face,.card-overlay{position:absolute;inset:0;width:100%;height:100%;border-radius:11px}
 .game-face{display:block;border:0;background:none;padding:0;text-align:left;color:inherit}.game-face:focus-visible{outline:3px solid var(--pink);outline-offset:4px}.game-face .poster{height:100%;aspect-ratio:auto;transition:none;box-shadow:var(--poster-shadow)}.game-face .cover-hint{display:none}.game-face .poster>img,.game-face .poster-fallback{transform:none;transition:filter .18s}
-/* The overlay lets clicks through to the poster; only its buttons receive clicks. */
+/* Empty overlay space reaches the cover; tags share its click action through the bridge. */
 .card-overlay{display:flex;flex-direction:column;gap:18px;padding:24px;background:#17111AB8;color:#FFF;overflow:hidden;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .16s,visibility 0s .16s}
 .card-heading{display:flex;gap:8px;align-items:flex-start;min-height:0;max-height:44%;flex-shrink:0}.card-heading h3{min-width:0;overflow:auto;max-height:100%;font-size:calc(var(--ui-font)*1.06);font-weight:600;line-height:1.6;scrollbar-width:thin}.card-title{display:block;width:100%;padding:0;border:0;background:none;text-align:left;color:inherit;font:inherit;overflow-wrap:anywhere;pointer-events:auto}.card-title:hover{color:#FFD6E8}
+/* Use the system families directly because LocalUI only exposes a single face. */
+.library-page .card-heading h3{font-family:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","Microsoft YaHei",sans-serif}
 .card-tags{display:flex;align-content:flex-start;align-items:flex-start;flex-wrap:wrap;gap:7px;min-height:0;overflow:auto;scrollbar-width:thin;font-size:calc(var(--ui-font)*.78);line-height:1.55}.card-tag{max-width:100%;padding:4px 8px;border:1px solid #FFFFFF26;border-radius:5px;background:#FFFFFF1F;color:#FFF;overflow-wrap:anywhere}.card-tags>.muted{color:#FFFFFFB3}
 .card-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;padding-top:16px;border-top:1px solid #FFFFFF33;flex-shrink:0}.card-action{display:grid;place-items:center;width:44px;height:44px;flex:0 1 44px;padding:10px;border:1px solid transparent;border-radius:9px;background:none;pointer-events:auto}.card-action>.icon{width:23px;height:23px}.card-action.favorite{color:#EF4444}.card-action.finished{color:#F2C653}.card-action.delete{color:#FF7387}.card-action.favorite:hover{background:#EF444424;border-color:#EF444466}.card-action.finished:hover{background:#F2C65324;border-color:#F2C65366}.card-action.delete:hover{background:#FF738724;border-color:#FF738766}.card-action.favorite.is-active>.icon{fill:currentColor}.card-action.finished.is-active>.icon{fill:currentColor;stroke:none}
 .card-heading,.card-tags,.card-actions{opacity:0;translate:0 7px;transition:opacity .14s,translate .14s}
+/* Compact titles can grow up to their line limit while scrollable tags keep a minimum height. */
+.library-page[data-card-size=small] .card-overlay,.library-page[data-card-size=tiny] .card-overlay{padding:12px;gap:8px}
+.library-page[data-card-size=small] .card-heading,.library-page[data-card-size=tiny] .card-heading{max-height:none;overflow:hidden;flex-shrink:1}
+.library-page[data-card-size=small] .card-heading h3,.library-page[data-card-size=tiny] .card-heading h3{overflow:hidden;font-size:calc(var(--ui-font)*.9);line-height:1.6;min-width:0}
+.library-page[data-card-size=small] .card-heading h3{font-weight:400}
+.library-page[data-card-size=tiny] .card-heading h3{font-weight:300}
+.library-page[data-card-size=small] .card-title,.library-page[data-card-size=tiny] .card-title{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+.library-page[data-card-size=small] .card-title{-webkit-line-clamp:4}
+.library-page[data-card-size=tiny] .card-title{-webkit-line-clamp:3}
+.library-page .card-tags{cursor:pointer;flex:1 1 auto;min-height:2.8em;pointer-events:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.library-page[data-card-size=small] .card-tags,.library-page[data-card-size=tiny] .card-tags{flex-basis:0;gap:5px;font-size:calc(var(--ui-font)*.75)}
+.library-page[data-card-size=small] .card-tag,.library-page[data-card-size=tiny] .card-tag{padding:2px 5px;overflow-wrap:anywhere}
+.library-page[data-card-size=small] .card-actions,.library-page[data-card-size=tiny] .card-actions{gap:2px;padding-top:6px;margin-top:0}
+.library-page[data-card-size=small] .card-action,.library-page[data-card-size=tiny] .card-action{width:30px;height:30px;min-height:30px;flex-basis:30px;padding:5px}
+.library-page[data-card-size=small] .card-action>.icon,.library-page[data-card-size=tiny] .card-action>.icon{width:19px;height:19px}
+.library-page[data-card-size=tiny] .card-overlay{padding:10px;gap:6px}
 .game-card:has(:focus-visible){outline:3px solid var(--pink);outline-offset:4px}
 .game-card:not(.is-selectable):has(:focus-visible) .card-overlay{opacity:1;visibility:visible;transition-delay:0s}
 .game-card:not(.is-selectable):has(:focus-visible) .poster :is(img,.poster-fallback){filter:blur(2px)}
@@ -174,3 +192,4 @@
 
 .setup-entry-field .setup-launcher-check{border:1px solid var(--button-line);border-radius:50%}
 .setup-entry-field .setup-launcher-check[aria-pressed=true]{color:var(--pink-dark);background:var(--pink-soft);border-color:var(--pink)}
+.library-folder-failures{overflow-wrap:anywhere}

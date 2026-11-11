@@ -1,4 +1,4 @@
-//! 详情顶部本地标签的增删改；资料中的人物、品牌等标签仍仅用于筛选。
+//! 详情顶部本地标签的增删改与排序；资料中的人物、品牌等标签仍仅用于筛选。
 use crate::{
     requests::{Pending, issue},
     state::App,
@@ -7,6 +7,57 @@ use crate::{
 };
 use serde_json::json;
 use std::fmt::Write;
+
+#[derive(serde::Deserialize)]
+struct Move {
+    id: String,
+    tag: String,
+    before: Option<String>,
+}
+
+fn reorder(app: &mut App, value: &str) {
+    if app.busy()
+        || app.detail.editing
+        || app.detail.editor.is_some()
+        || app.detail.tag_draft.is_some()
+        || app.detail.confirmation.is_some()
+    {
+        return;
+    }
+    let Ok(movement) = serde_json::from_str::<Move>(value) else {
+        return;
+    };
+    if app.detail.selected.as_ref() != Some(&movement.id) {
+        return;
+    }
+    let Some(game) = app.catalog.games.iter().find(|game| game.id == movement.id) else {
+        return;
+    };
+    let Some(from) = game.tags.iter().position(|tag| tag == &movement.tag) else {
+        return;
+    };
+    let target = match movement.before.as_ref() {
+        Some(before) => match game.tags.iter().position(|tag| tag == before) {
+            Some(index) => index,
+            None => return,
+        },
+        None => game.tags.len(),
+    };
+    let to = target.saturating_sub(usize::from(from < target));
+    if from == to {
+        return;
+    }
+    let mut names = game.tags.clone();
+    let tag = names.remove(from);
+    names.insert(to, tag);
+    // 只提交移动意图，使用最新标签计算；成功响应负责更新目录及后续编辑草稿。
+    issue(
+        app,
+        Pending::Edit,
+        "edit_tags",
+        json!({"id":game.id,"names":names}),
+    );
+}
 
 #[derive(Default)]
 pub(crate) struct Draft {
@@ -26,6 +77,7 @@ pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     match action {
+        "detail-tag-reorder" => reorder(app, value),
         "detail-tag-add" | "detail-tag-edit" => {
             if app.busy() || app.detail.editing || app.detail.editor.is_some() {
                 return true;
@@ -153,8 +205,9 @@ pub(crate) fn render_tag(html: &mut String, app: &App, tag: &str) {
         galgear_i18n::format_text(app.settings.language, "tags.remove_label", &[("tag", tag)]);
     let _ = write!(
         html,
-        r#"<span class="detail-tag-chip" data-render-key="detail-tag:{}">{}{}{}</span>"#,
+        r#"<span class="detail-tag-chip" data-render-key="detail-tag:{}" title="{}">{}{}{}</span>"#,
         esc(tag),
+        esc(t(app, "tags.reorder_hint")),
         icon_button(
             "detail-tag-edit",
             tag,
@@ -278,6 +331,91 @@ mod tests {
         );
         app.detail.selected = Some("game".into());
         app
+    }
+
+    #[test]
+    fn reorder_moves_to_front_middle_and_end_without_changing_names() {
+        for (tag, before, expected) in [
+            ("剧情", Some("ADV"), vec!["剧情", "ADV", "学园"]),
+            ("ADV", Some("剧情"), vec!["学园", "ADV", "剧情"]),
+            ("ADV", None, vec!["学园", "剧情", "ADV"]),
+        ] {
+            let mut app = fixture(&["ADV", "学园", "剧情"]);
+            dispatch(
+                &mut app,
+                "detail-tag-reorder",
+                &json!({"id":"game","tag":tag,"before":before}).to_string(),
+            );
+            let requests = take_requests();
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0].1, "edit_tags");
+            assert_eq!(
+                serde_json::from_str::<Value>(&requests[0].2).unwrap()["names"],
+                json!(expected)
+            );
+            assert_eq!(app.catalog.games[0].tags, ["ADV", "学园", "剧情"]);
+        }
+    }
+
+    #[test]
+    fn reorder_ignores_invalid_stale_and_unchanged_moves() {
+        let mut app = fixture(&["ADV", "学园"]);
+        for movement in [
+            json!({"id":"other","tag":"ADV","before":null}),
+            json!({"id":"game","tag":"missing","before":null}),
+            json!({"id":"game","tag":"ADV","before":"missing"}),
+            json!({"id":"game","tag":"ADV","before":"ADV"}),
+            json!({"id":"game","tag":"ADV","before":"学园"}),
+            json!({"id":"game","tag":"学园","before":null}),
+            json!("invalid"),
+        ] {
+            dispatch(&mut app, "detail-tag-reorder", &movement.to_string());
+            assert!(take_requests().is_empty());
+        }
+        let movement = json!({"id":"game","tag":"ADV","before":null}).to_string();
+        crate::detail_form::begin(&mut app);
+        dispatch(&mut app, "detail-tag-reorder", &movement);
+        assert!(take_requests().is_empty());
+        crate::detail_form::cancel(&mut app);
+        dispatch(&mut app, "detail-tag-add", "");
+        dispatch(&mut app, "detail-tag-reorder", &movement);
+        assert!(take_requests().is_empty());
+    }
+
+    #[test]
+    fn reorder_success_and_failure_are_reflected_in_the_edit_field() {
+        for success in [false, true] {
+            let mut app = fixture(&["ADV", "学园", "剧情"]);
+            let movement = json!({"id":"game","tag":"ADV","before":null}).to_string();
+            dispatch(&mut app, "detail-tag-reorder", &movement);
+            dispatch(&mut app, "detail-tag-reorder", &movement);
+            let requests = take_requests();
+            assert_eq!(requests.len(), 1);
+            let saved = json!({"id":"game", "title":"Game", "folder":"X:/Fixture",
+                "engine":"unknown", "modified":0, "tags":["学园", "剧情", "ADV"]});
+            APP.with(|state| *state.borrow_mut() = app);
+            responses::resolve(
+                requests[0].0,
+                success,
+                &if success {
+                    saved.to_string()
+                } else {
+                    "save failed".into()
+                },
+            );
+            APP.with(|state| {
+                let mut app = state.borrow_mut();
+                crate::detail_form::begin(&mut app);
+                assert_eq!(
+                    crate::features::form(&app, "draft-tags"),
+                    if success {
+                        "学园, 剧情, ADV"
+                    } else {
+                        "ADV, 学园, 剧情"
+                    }
+                );
+            });
+        }
     }
 
     #[test]

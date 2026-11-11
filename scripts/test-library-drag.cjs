@@ -6,6 +6,7 @@ const { test } = require('node:test');
 
 // Exercise the bridge's actual event handlers without requiring a desktop session.
 const bridge = fs.readFileSync(path.join(__dirname, '../web/bridge.js'), 'utf8');
+const cardSource = fs.readFileSync(path.join(__dirname, '../web/library-card.js'), 'utf8').replaceAll('export function', 'function');
 const keyboard = bridge.slice(bridge.indexOf("document.addEventListener('keydown', event => {"), bridge.indexOf("window.addEventListener('resize', placeChoice);"));
 const gestures = bridge.slice(bridge.indexOf('function markDropTarget('), bridge.indexOf("document.addEventListener('dragover', event => {"));
 
@@ -105,6 +106,7 @@ function fixture({ batch = false, selected = [], collections = false, selectedFo
     requestAnimationFrame(callback) { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame(id) { frames.delete(id); },
   });
+  vm.runInContext(cardSource, context);
   vm.runInContext(`
     let wasmReady = true, pointerDrag = null, marqueeDrag = null, marqueeFrame = null;
     let dragPreview = null, dragPayload = '', dragHoverTimer = null, dragHoverKey = null;

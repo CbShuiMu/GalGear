@@ -175,6 +175,7 @@ pub(crate) fn edit_game(
             .clone_from(&previous.metadata_overrides);
         edit.tag_rules.clone_from(&previous.tag_rules);
         edit.source_tags.clone_from(&previous.source_tags);
+        edit.tag_source_url.clone_from(&previous.tag_source_url);
         edit.summary_brand.clone_from(&previous.summary_brand);
         edit.summary_release_date
             .clone_from(&previous.summary_release_date);

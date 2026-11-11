@@ -35,6 +35,10 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
             paint(&app);
             return;
         }
+        if detail_form::resolve_refresh(&mut app, &kind, success, payload) {
+            paint(&app);
+            return;
+        }
         if crate::skill_update::resolve(&mut app, &kind, id, success, payload) {
             paint(&app);
             return;
@@ -126,8 +130,15 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
         } else {
             let handled: Result<(), String> = (|| {
                 match kind {
-                    Pending::LauncherList | Pending::LauncherSave => {},
-                    Pending::Screenshot(..) | Pending::ImportPreview | Pending::ImportCommit | Pending::MagpieModes | Pending::ExportPotato | Pending::FindSave(_)
+                    Pending::LauncherList | Pending::LauncherSave => {}
+                    Pending::Screenshot(..)
+                    | Pending::TitleRefresh(..)
+                    | Pending::ImportPreview
+                    | Pending::ImportCommit
+                    | Pending::MagpieModes
+                    | Pending::ExportPotato
+                    | Pending::FindSave(_)
+                    | Pending::ObserveSaves(_)
                     | Pending::Background
                     | Pending::Ai(_)
                     | Pending::Cloud(_)
@@ -365,22 +376,33 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         }
                     }
                     Pending::Folder => {
-                        let path: Option<String> =
+                        let paths: Option<Vec<String>> =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
-                        if let Some(path) = path {
+                        if let Some(paths) = paths.filter(|paths| !paths.is_empty()) {
                             issue(
                                 &mut app,
-                                Pending::Add,
-                                "add_library_folder",
-                                json!({"path":path}),
+                                Pending::AddFolders,
+                                "add_library_folders",
+                                json!({"paths":paths}),
                             );
                         }
+                    }
+                    Pending::AddFolders => {
+                        let result = serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        library::folders::added(&mut app, id, result);
                     }
                     Pending::Theme => {
                         let settings: Settings =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         app.settings.theme = settings.theme;
                         app.settings.color_theme = settings.color_theme;
+                    }
+                    Pending::LibrarySize => {
+                        let settings: Settings =
+                            serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        app.settings.library_card_size = settings.library_card_size;
+                        // 已在途的读取可能仍携带保存前的设置。
+                        app.library.size_request = app.requests.next_id();
                     }
                     Pending::Display => {
                         if !app.requests.has_newer_display(id) {
@@ -461,6 +483,9 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                     | Pending::SelectMetadata => {
                         let game: Game =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        if matches!(kind, Pending::DetailSaved) {
+                            detail_form::refresh_changed_title(&mut app, &game);
+                        }
                         if let Some(entry) = app.catalog.games.iter_mut().find(|g| g.id == game.id)
                         {
                             playtime::replace_game(entry, game.clone());

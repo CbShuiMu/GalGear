@@ -6,7 +6,7 @@ use crate::{
 use galgear_core::{Bootstrap, Game, ScanResult, catalog, config::normalize_folder, scanner};
 use galgear_i18n::{Message, tr};
 use std::{path::PathBuf, sync::Arc, sync::atomic::AtomicBool, sync::atomic::Ordering};
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 #[derive(Default)]
 pub(crate) struct ScanState {
@@ -272,6 +272,235 @@ pub(crate) async fn add_library_folder(
         *settings = next;
     }
     bootstrap(state).await
+}
+
+#[tauri::command]
+pub(crate) async fn choose_library_folders(
+    app: tauri::AppHandle,
+) -> Result<Option<Vec<String>>, Message> {
+    // 起始目录检查也可能访问离线磁盘，连同原生对话框一起放到后台。
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let settings = snapshot(&state)?;
+        let context = settings
+            .library_folders
+            .iter()
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+        let start = dialogs::start(&state, "library", &context)?;
+        let paths = pick_library_folders(start, settings.language);
+        if let Some(path) = paths.as_ref().and_then(|paths| paths.first()) {
+            dialogs::remember(&state, "library", path)?;
+        }
+        Ok(paths.map(|paths| {
+            paths
+                .iter()
+                .map(|path| galgear_core::config::display_path(path))
+                .collect()
+        }))
+    })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?
+}
+
+fn pick_library_folders(
+    start: Option<PathBuf>,
+    language: galgear_i18n::Language,
+) -> Option<Vec<PathBuf>> {
+    dialogs::dialog(start)
+        .set_title(tr(language, "dialog.library_multiple"))
+        .pick_folders()
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct LibraryFolderFailure {
+    path: String,
+    error: Message,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct LibraryFoldersResult {
+    settings: galgear_core::Settings,
+    added: usize,
+    unchanged: usize,
+    failed: Vec<LibraryFolderFailure>,
+}
+
+fn persist_library_folders(
+    state: &AppState,
+    paths: Vec<String>,
+) -> Result<LibraryFoldersResult, Message> {
+    let total = paths.len();
+    let mut normalized = Vec::new();
+    let mut failed = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for path in paths {
+        if !seen.insert(path.clone()) {
+            continue;
+        }
+        match normalize_folder(&path) {
+            Ok(path) => normalized.push(path),
+            Err(error) => failed.push(LibraryFolderFailure { path, error }),
+        }
+    }
+    let mut settings = state
+        .settings
+        .lock()
+        .map_err(|_| Message::new("error.config_state"))?;
+    let mut next = settings.clone();
+    let added = catalog::add_library_folders(&mut next, normalized);
+    // 整批仅提交一次。保存失败时内存与磁盘都保持此前已提交的配置。
+    if added > 0 {
+        state.store.save(&next)?;
+        *settings = next.clone();
+    }
+    Ok(LibraryFoldersResult {
+        settings: next,
+        added,
+        unchanged: total - added - failed.len(),
+        failed,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn add_library_folders(
+    paths: Vec<String>,
+    app: tauri::AppHandle,
+) -> Result<LibraryFoldersResult, Message> {
+    // 数量再多也只占用一个后台任务，不为每个目录启动线程或扫描。
+    tauri::async_runtime::spawn_blocking(move || {
+        persist_library_folders(&app.state::<AppState>(), paths)
+    })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::{persist_library_folders, pick_library_folders};
+    use crate::state::AppState;
+    use galgear_core::config::display_path;
+    use std::fs;
+
+    #[test]
+    fn many_folders_deduplicate_and_keep_valid_paths_when_some_fail() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("data")).unwrap();
+        let mut paths = Vec::new();
+        for index in 0..600 {
+            let folder = temp.path().join(format!("库 {index}"));
+            fs::create_dir(&folder).unwrap();
+            paths.push(display_path(&folder));
+        }
+        let first = paths[0].clone();
+        paths.extend([first.clone(), format!("{first}/."), first.to_uppercase()]);
+        let missing = display_path(&temp.path().join("missing"));
+        let file = temp.path().join("file.txt");
+        fs::write(&file, "fixture").unwrap();
+        paths.extend([missing.clone(), display_path(&file), String::new()]);
+        let result = persist_library_folders(&state, paths).unwrap();
+        assert_eq!(result.added, 600);
+        assert_eq!(result.unchanged, 3);
+        assert_eq!(result.failed.len(), 3);
+        assert_eq!(result.failed[0].path, missing);
+        assert_eq!(
+            state.store.load().unwrap().library_folders,
+            result.settings.library_folders
+        );
+        let repeated = persist_library_folders(&state, result.settings.library_folders).unwrap();
+        assert_eq!((repeated.added, repeated.unchanged), (0, 600));
+        let empty = persist_library_folders(&state, Vec::new()).unwrap();
+        assert_eq!(empty.added, 0);
+    }
+
+    #[test]
+    fn failed_batch_save_leaves_memory_unchanged_and_can_retry() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("data")).unwrap();
+        fs::create_dir_all(&state.store.path).unwrap();
+        let paths = vec![display_path(temp.path())];
+        assert!(persist_library_folders(&state, paths.clone()).is_err());
+        assert!(state.settings.lock().unwrap().library_folders.is_empty());
+        fs::remove_dir(&state.store.path).unwrap();
+        assert_eq!(persist_library_folders(&state, paths).unwrap().added, 1);
+        assert_eq!(state.store.load().unwrap().library_folders.len(), 1);
+    }
+
+    #[test]
+    #[ignore = "真实目录批量性能测试，使用 --release --ignored --nocapture"]
+    fn batch_library_disk_stress() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("data")).unwrap();
+        let mut paths = Vec::new();
+        for index in 0..2_000 {
+            let path = temp.path().join(format!("Library {index}"));
+            fs::create_dir(&path).unwrap();
+            paths.push(display_path(&path));
+        }
+        let mut selected: Vec<_> = paths.iter().cycle().take(10_000).cloned().collect();
+        selected
+            .extend((0..1_000).map(|i| display_path(&temp.path().join(format!("Missing {i}")))));
+        let start = std::time::Instant::now();
+        let result = persist_library_folders(&state, selected).unwrap();
+        eprintln!(
+            "11,000 selections, 2,000 real folders, 1,000 failures: {:?}",
+            start.elapsed()
+        );
+        assert_eq!(
+            (result.added, result.unchanged, result.failed.len()),
+            (2_000, 8_000, 1_000)
+        );
+        assert_eq!(state.store.load().unwrap().library_folders, paths);
+        let start = std::time::Instant::now();
+        let scan = galgear_core::scanner::scan(&result.settings);
+        eprintln!("single scan of 2,000 empty folders: {:?}", start.elapsed());
+        assert!(scan.warnings.is_empty());
+        assert!(scan.games.is_empty());
+        assert_eq!(scan.units_completed, scan.units_total);
+    }
+
+    #[test]
+    fn concurrent_batches_merge_without_losing_folders() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("data")).unwrap();
+        let child = temp.path().join("child");
+        fs::create_dir(&child).unwrap();
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| {
+                persist_library_folders(&state, vec![display_path(temp.path())]).unwrap()
+            });
+            let second = scope
+                .spawn(|| persist_library_folders(&state, vec![display_path(&child)]).unwrap());
+            assert_eq!(
+                first.join().unwrap().added + second.join().unwrap().added,
+                2
+            );
+        });
+        assert_eq!(state.store.load().unwrap().library_folders.len(), 2);
+    }
+
+    #[test]
+    #[ignore = "需要交互式桌面，第一次选择全部测试目录，第二次取消"]
+    fn native_multiple_folder_picker_and_cancel() {
+        let temp = tempfile::tempdir().unwrap();
+        for index in 0..80 {
+            fs::create_dir(temp.path().join(format!("Library {index:03}"))).unwrap();
+        }
+        let paths = pick_library_folders(
+            Some(temp.path().to_owned()),
+            galgear_i18n::Language::Chinese,
+        )
+        .unwrap();
+        assert_eq!(paths.len(), 80);
+        assert!(paths.iter().all(|path| path.parent() == Some(temp.path())));
+        assert!(
+            pick_library_folders(
+                Some(temp.path().to_owned()),
+                galgear_i18n::Language::Chinese
+            )
+            .is_none()
+        );
+    }
 }
 
 #[tauri::command]

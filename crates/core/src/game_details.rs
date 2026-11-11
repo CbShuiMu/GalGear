@@ -4,6 +4,8 @@ use galgear_i18n::Message;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path};
 
+pub mod title_refresh;
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MetadataTarget {
@@ -25,6 +27,10 @@ pub fn associate(
     edit.title.get_or_insert_with(|| game.title.clone());
     match target {
         MetadataTarget::Details => {
+            // 在资料源首次分离前保留原标签关联，后续改标题仍搜索原标签源。
+            if edit.tag_source_url.is_none() && edit.source_tags.is_none() {
+                edit.tag_source_url = game.metadata.as_ref().map(|meta| meta.url.clone());
+            }
             edit.tags.clone_from(&game.tags);
             edit.summary_release_date.get_or_insert_with(|| {
                 game.metadata
@@ -50,6 +56,7 @@ pub fn associate(
             edit.metadata = Some(metadata);
         }
         MetadataTarget::Tags => {
+            edit.tag_source_url = Some(metadata.url.clone());
             let names = metadata.tag_names();
             edit.tags.clone_from(&names);
             edit.source_tags = Some(names);
@@ -204,14 +211,21 @@ mod tests {
         let mut game =
             crate::catalog::manual_game(Path::new("F:/Title/game.exe"), "Local title".into())
                 .unwrap();
-        game.tags = vec!["Local tag".into(), "Old tag".into()];
+        game.tags = vec![
+            "Local tag".into(),
+            "Old tag".into(),
+            "Original writer".into(),
+        ];
         game.metadata = Some(Metadata {
             title: "Original source title".into(),
             brand: "Original brand".into(),
+            writers: "Original writer".into(),
+            tags: vec!["Old tag".into(), "Original writer".into()],
             ..Default::default()
         });
         let original = game.metadata.clone();
         let previous = GameEdit {
+            source_tags: Some(game.tags.clone()),
             tag_rules: BTreeMap::from([("new tag".into(), None)]),
             ..Default::default()
         };
@@ -222,6 +236,7 @@ mod tests {
             Metadata {
                 tags: vec!["New tag".into()],
                 brand: "New brand".into(),
+                writers: "Writer".into(),
                 ..Default::default()
             },
             MetadataTarget::Tags,
@@ -236,11 +251,7 @@ mod tests {
         }
         assert_eq!(
             (game.title.as_str(), game.tags, game.metadata),
-            (
-                "Local title",
-                vec!["New tag".into(), "New brand".into()],
-                original
-            )
+            ("Local title", vec!["New tag".into()], original)
         );
     }
 
@@ -258,7 +269,11 @@ mod tests {
             &game,
             None,
             "vndb",
-            Metadata::default(),
+            Metadata {
+                brand: "Studio".into(),
+                writers: "Writer".into(),
+                ..Default::default()
+            },
             MetadataTarget::Tags,
         );
         let mut settings = crate::Settings {
@@ -324,7 +339,7 @@ mod tests {
             ..Default::default()
         };
         crate::catalog::apply_edits(&mut game, &settings);
-        assert_eq!(game.tags, vec!["Imported", "Brand"]);
+        assert_eq!(game.tags, vec!["Imported"]);
         assert_eq!(game.metadata.as_ref().unwrap().brand, "Brand");
         assert_eq!(game.play_status, PlayStatus::Wanted);
     }

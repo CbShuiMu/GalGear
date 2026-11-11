@@ -72,6 +72,17 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     match action {
         "backup-folder" => issue(app, Pending::Preferences, "choose_backup_folder", json!({})),
         "open-backups" => issue(app, Pending::Open, "open_backup_folder", json!({})),
+        "observe-saves" => {
+            if !save_busy(app) {
+                let finish = app.form.contains_key(&format!("save-observing-{value}"));
+                issue(
+                    app,
+                    Pending::ObserveSaves(value.into()),
+                    "observe_saves",
+                    json!({"id":value,"finish":finish}),
+                );
+            }
+        }
         "ai-find-save" => {
             if !save_busy(app) && app.catalog.games.iter().any(|game| game.id == value) {
                 show_toast(app, Message::new("save.ai_searching"), false);
@@ -641,39 +652,87 @@ pub(crate) fn refresh_detail_files(app: &mut App) {
     }
 }
 
-pub(crate) fn resolve_find_save(app: &mut App, kind: &Pending, success: bool, payload: &str) -> bool {
-    let Pending::FindSave(id) = kind else { return false };
+pub(crate) fn resolve_find_save(
+    app: &mut App,
+    kind: &Pending,
+    success: bool,
+    payload: &str,
+) -> bool {
+    let id = match kind {
+        Pending::FindSave(id) | Pending::ObserveSaves(id) => id,
+        _ => return false,
+    };
     let result = if success {
         (|| {
             #[derive(serde::Deserialize)]
             struct Found {
                 id: String,
-                settings: crate::models::Settings,
+                #[serde(default)]
+                observing: bool,
                 report: crate::models::SaveReport,
+                settings: Option<crate::models::Settings>,
             }
-            let mut found: Found = serde_json::from_str(payload)
+            let found: Found = serde_json::from_str(payload)
                 .map_err(|error| Message::detail("error.read_data", error))?;
-            if &found.id != id { return Err(Message::new("error.operation")); }
-            // Only merge this game's save paths; unrelated settings can change during the search.
-            if let Some(edit) = found.settings.game_edits.remove(id) {
-                let current = app.settings.game_edits.entry(id.clone()).or_default();
-                current.save_path = edit.save_path;
-                current.save_path_auto = edit.save_path_auto;
-                current.save_paths = edit.save_paths;
+            if &found.id != id {
+                return Err(Message::new("error.operation"));
+            }
+            if matches!(kind, Pending::ObserveSaves(_)) {
+                let key = format!("save-observing-{id}");
+                if found.observing {
+                    app.form.insert(key, "true".into());
+                    show_toast(app, Message::new("save.observation_started"), false);
+                    return Ok(());
+                }
+                app.form.remove(&key);
+            }
+            if let Some(settings) = found.settings {
+                let saved = settings.game_edits.get(id).cloned().unwrap_or_default();
+                let edit = app.settings.game_edits.entry(id.clone()).or_default();
+                edit.save_files = saved.save_files;
+                edit.save_paths = saved.save_paths;
+                edit.save_path = saved.save_path;
+                edit.save_path_auto = saved.save_path_auto;
             }
             app.detail.saves.insert(id.clone(), found.report);
             if app.detail.selected.as_deref() == Some(id) {
                 app.detail.current_snapshot = None;
-                issue(app, Pending::History(id.clone()), "save_history", json!({"id":id}));
+                issue(
+                    app,
+                    Pending::History(id.clone()),
+                    "save_history",
+                    json!({"id":id}),
+                );
             }
             Ok(())
         })()
-    } else { Err(Message::from_error(payload)) };
+    } else {
+        Err(Message::from_error(payload))
+    };
     match result {
-        Ok(()) => show_toast(app, Message::new("save.ai_success"), false),
+        Ok(()) => {
+            if !app.form.contains_key(&format!("save-observing-{id}")) {
+                show_toast(
+                    app,
+                    Message::new(if matches!(kind, Pending::FindSave(_)) {
+                        "save.ai_success"
+                    } else {
+                        "save.review_candidates"
+                    }),
+                    false,
+                );
+            }
+        }
         Err(error) => {
-            let message = if error.key.starts_with("save.ai_") { error }
-                else { Message::detail("save.ai_failed", error.render(app.settings.language)) };
+            if error.key == "save.observation_expired" {
+                app.form.remove(&format!("save-observing-{id}"));
+            }
+            let message =
+                if matches!(kind, Pending::ObserveSaves(_)) || error.key.starts_with("save.ai_") {
+                    error
+                } else {
+                    Message::detail("save.ai_failed", error.render(app.settings.language))
+                };
             show_toast(app, message, true);
         }
     }
@@ -681,9 +740,17 @@ pub(crate) fn resolve_find_save(app: &mut App, kind: &Pending, success: bool, pa
 }
 
 pub(crate) fn save_busy(app: &App) -> bool {
-    app.requests
-        .values()
-        .any(|p| matches!(p, Pending::History(_) | Pending::RestorePreview | Pending::FindSave(_) | Pending::ChooseSave | Pending::ConfirmSave(_)))
+    app.requests.values().any(|p| {
+        matches!(
+            p,
+            Pending::History(_)
+                | Pending::RestorePreview
+                | Pending::FindSave(_)
+                | Pending::ObserveSaves(_)
+                | Pending::ChooseSave
+                | Pending::ConfirmSave(_)
+        )
+    })
 }
 pub(crate) fn snapshot_name(game: &Game, snapshot: &SaveSnapshot) -> String {
     if !snapshot.name.is_empty() && !snapshot.name.starts_with('_') {
@@ -975,7 +1042,7 @@ mod tests {
     }
 
     #[test]
-    fn ai_save_search_blocks_duplicate_actions_and_merges_only_save_configuration() {
+    fn ai_save_search_blocks_duplicates_and_applies_result_without_confirmation() {
         let mut app = App::default();
         app.catalog.games.push(serde_json::from_value(json!({"id":"game","title":"Game","folder":"F:/Game","engine":"unknown","modified":0})).unwrap());
         app.settings.game_edits.entry("game".into()).or_default().upscale = true;

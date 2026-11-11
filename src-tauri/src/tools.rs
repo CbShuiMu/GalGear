@@ -497,7 +497,7 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
                                     .locations
                                     .into_iter()
                                     .filter(|l| l.confidence == "confirmed" || l.source == "config")
-                                    .map(|l| l.path)
+                                    .flat_map(|location| saves::location_roots(&location))
                                     .collect::<Vec<_>>();
                             if let Err(error) = snapshots::recover(
                                 &data,

@@ -40,8 +40,18 @@ pub async fn apply_game_patch(
         snapshots::require_stopped(observer.detect(game.executable.as_deref()))?;
         let folder = Path::new(&game.folder);
         let report = saves::discover(&game, edit.as_ref());
-        let confirmed: Vec<_> = report.locations.iter().filter(|location| location.exists && location.confidence == "confirmed").collect();
-        let save_path = if confirmed.len() == 1 { Some(Path::new(&confirmed[0].path)) } else { None };
+        let confirmed: Vec<_> = report
+            .locations
+            .iter()
+            .filter(|location| {
+                location.files.is_empty() && location.exists && location.confidence == "confirmed"
+            })
+            .collect();
+        let save_path = if confirmed.len() == 1 {
+            Some(Path::new(&confirmed[0].path))
+        } else {
+            None
+        };
         let plan = folders::preview_to(folder, &name, id, save_path)?;
         snapshots::require_stopped(observer.detect(game.executable.as_deref()))?;
         patches::install(plan, &data)?;

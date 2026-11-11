@@ -230,6 +230,7 @@ pub fn dispatch(action: &str, value: &str) {
         }
         if crate::updates::dispatch(&mut app, action)
             || crate::skill_update::dispatch(&mut app, action)
+            || library::size::dispatch(&mut app, action, value)
             || ai::dispatch(&mut app, action, value)
             || cloud::dispatch(&mut app, action, value)
             || crate::ai_summary::dispatch(&mut app, action, value)

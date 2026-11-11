@@ -18,20 +18,20 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.4.4 (November 10, 2026)** adds progress, a stop control, and an unmatched or failed count to batch auto scraping. A timed-out lookup prompts you to retry or choose another source.
+> **v0.4.5 (November 11, 2026)** adds multi-folder library import, three card sizes, tag reordering in game details, and backup and restore for selected save files.
 
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.4.4_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.4.4-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.4.5_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.4.5-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
 Choose an interface language on the first run. GalGear sets the default metadata source based on that language, and you can change it in Settings.
 
-1. Add a game library and select the folder containing your games.
+1. Select **Add library** and choose one or more folders containing your games.
 2. After scanning, choose a metadata source and matching title for each game. You can pick its executable on first launch. Use **Batch change** to set a source for the list, then **Auto scrape** to find candidates. The notification shows progress and the number of unmatched or failed games. Select **Stop scraping** to end the run. Review the matches before saving. Later runs skip confirmed games.
 3. Open the game details, check the launch configuration, and launch the game. To enable automatic backups, first launch the game and create a save.
 
@@ -39,13 +39,13 @@ Choose an interface language on the first run. GalGear sets the default metadata
 
 | Feature | Description |
 | --- | --- |
-| Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. |
-| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕 Galgame, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. |
+| Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. |
+| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕 Galgame, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. Press and hold a local tag in game details to drag it into order. After a title edit, each source refreshes its metadata or tags when it finds one different match. |
 | Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
 | Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
 | Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, supports capture in Magpie mode, and shows the latest screenshot below the game details. |
-| Backups | Organize backups by game and save time in a configurable shared folder. Back up multiple save folders, add notes, lock backups, preview restores, and back up after a game exits. Existing backups migrate after validation. Start WebDAV transfers manually. [Backups and cloud storage](docs/cloud-storage.md). Start a WebDAV upload from the save card in game details. GalGear checks the saved connection before creating and uploading a local snapshot. |
+| Backups | Organize backups by game and save time in a configurable shared folder. Back up multiple save folders, add notes, lock backups, preview restores, and back up after a game exits. Existing backups migrate after validation. Start WebDAV transfers manually. [Backups and cloud storage](docs/cloud-storage.md). Start a WebDAV upload from the save card in game details. GalGear checks the saved connection before creating and uploading a local snapshot. Back up dedicated save folders or selected save files. [Save discovery and file backups](docs/save-discovery.md). |
 | Patches | **Linked to your library**: select a library game to search and save patches directly in its patch folder. NextMoe hosted downloads require an application key with `moyu:files` permission. Search KunGal and 2DFan, import local patches, automatically extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy and account token. NextMoe is recommended for patch downloads: no points required, with direct download links. |
 | AI (experimental) | **AI-assisted save path discovery**, story recaps, and walkthrough route maps. Requires your own API token, sends necessary game text, and incurs API costs. Route maps may contain spoilers. [AI settings](docs/ai-settings.md). Recaps and route maps are still being tested; before using AI save discovery for the first time, launch the game and create a save. |
 | Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
@@ -185,6 +185,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## 📝 Release history
+
+### v0.4.5
+
+- Added multi-folder library import, card size controls, tag reordering, and backup and restore for selected files. Improved save discovery and metadata matching after renaming a game. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.5).
 
 ### v0.4.4
 

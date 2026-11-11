@@ -1,4 +1,7 @@
+import {syncLibrarySize, installLibrarySize} from "./library-size.js";
+import {isCardScrollbar, libraryCardClickTarget} from "./library-card.js";
 import { installLibraryReorder } from "./library-reorder.js";
+import {detailTagClickTarget, installDetailTagReorder} from './detail-tag-reorder.js';
 // Only the DOM / WebAssembly / Tauri transport bridge lives in JavaScript.
 // Rendering, app state, event decisions and all application logic live in Rust.
 import init, * as ui from './pkg/galgear_ui.js';
@@ -32,6 +35,7 @@ let contextReturnId = null;
 let editorReturnFocus = null;
 let dragPayload = '';
 let pendingReorder = null;
+let pendingTagReorder = null;
 let deferredDragFrame = null;
 let pointerDrag = null;
 let marqueeDrag = null;
@@ -122,6 +126,7 @@ function alignLibraryToolbar() {
     observedLibraryGrid = grid;
     if (grid) libraryGridObserver.observe(grid);
   }
+  const layout = syncLibrarySize(page, grid);
   if (!bar) return;
   const card = grid?.querySelector('.game-card');
   if (!card || bar.classList.contains('collection-bar')) {
@@ -129,10 +134,11 @@ function alignLibraryToolbar() {
     return;
   }
   const bounds = grid.getBoundingClientRect();
-  const cardWidth = card.getBoundingClientRect().width;
+  // Reordering temporarily hides source cards; use measured slots, not their zero-width boxes.
+  const cardWidth = layout?.width ?? card.getBoundingClientRect().width;
   const gap = parseFloat(getComputedStyle(grid).columnGap) || 0;
-  // auto-fill keeps empty columns after filtering; size the toolbar to those too.
-  const columns = Math.max(1, Math.floor((bounds.width + gap + .5) / (cardWidth + gap)));
+  // Keep empty column slots after filtering and align the toolbar to the full row.
+  const columns = layout?.columns ?? Math.max(1, Math.floor((bounds.width + gap + .5) / (cardWidth + gap)));
   const right = bounds.left + Math.min(bounds.width, columns * cardWidth + (columns - 1) * gap);
   const width = Math.max(0, right - bar.getBoundingClientRect().left);
   const value = `${width}px`;
@@ -460,6 +466,7 @@ window.GalGearBridge = {
     resetPageScroll = true;
   },
   render(html) {
+    if (detailTagReorder.deferRender(html)) return;
     if (marqueeDrag) { deferredDragFrame = html; return; }
     if (dragPayload) {
       // Expanding a drop target must not replace the card that owns the native drag.
@@ -518,6 +525,8 @@ window.GalGearBridge = {
   async request(id, command, payload) {
     const reorder = command === "reorder_games" ? pendingReorder : null;
     if (reorder) reorder.started = true;
+    const tagReorder = command === 'edit_tags' ? pendingTagReorder : null;
+    if (tagReorder) tagReorder.started = true;
     try {
       if (!window.__TAURI__?.core) throw { key: 'error.desktop', args: {} };
       const result = await (window.GalGearDiagnostics?.invoke || window.__TAURI__.core.invoke)(command, JSON.parse(payload));
@@ -530,6 +539,8 @@ window.GalGearBridge = {
     } finally {
       reorder?.resolve();
       if (reorder && pendingReorder === reorder) pendingReorder = null;
+      tagReorder?.resolve();
+      if (tagReorder && pendingTagReorder === tagReorder) pendingTagReorder = null;
     }
   }
 };
@@ -538,7 +549,7 @@ document.addEventListener('click', event => {
   if (!wasmReady) return;
   if (performance.now() < suppressCardClickUntil) { event.preventDefault(); event.stopPropagation(); return; }
   if (document.querySelector('.game-context-menu') && !event.target.closest('.game-context-menu')) ui.dispatch('context-close','');
-  const element = event.target.closest('[data-action]');
+  const element = detailTagClickTarget(event) || libraryCardClickTarget(event);
   if (['toggle-theme', 'set-theme', 'set-color-theme'].includes(element?.dataset.action)) {
     segmentedAppearanceChange = !!element.closest('.segmented-control');
     document.documentElement.style.setProperty('--theme-x', `${event.clientX || element.getBoundingClientRect().x + element.clientWidth / 2}px`);
@@ -791,6 +802,7 @@ function finishMarquee(commit=true) {
 }
 document.addEventListener('pointerdown', event => {
   if (pointerDrag || marqueeDrag || event.isPrimary === false) return;
+  if (isCardScrollbar(event) || (event.pointerType === 'touch' && event.target.closest('.card-tags'))) return;
   const source = event.target.closest('[data-game-id]');
   const grid=event.target.closest('.game-grid,.folder-grid');
   if(wasmReady && event.button===0 && !event.altKey && grid && !document.querySelector('.library-bar [data-action=batch-toggle]:disabled') && !event.target.closest('.card-action,.card-remove') && !document.querySelector('.library-overlay,.detail-overlay,.game-context-menu')) {
@@ -915,9 +927,28 @@ document.addEventListener('dragend', () => {
   if (deferredDragFrame) { const frame = deferredDragFrame; deferredDragFrame = null; window.GalGearBridge.render(frame); }
 });
 document.addEventListener('scroll', event => {
+  if (event.target.matches?.('.card-tags') && (marqueeDrag || pointerDrag)) {
+    finishMarquee(false);
+    finishPointerDrag();
+    suppressCardClickUntil = performance.now() + 400;
+  }
   if (wasmReady && !restoringScroll && event.target.isConnected && document.querySelector('.choice-popup') && event.target.matches?.('.page-scroll,.detail-scroll,.setup-table-scroll')) ui.dispatch('choice-close', '');
 }, true);
 
+const detailTagReorder = installDetailTagReorder({
+  render: html => window.GalGearBridge.render(html),
+  commit: movement => new Promise(resolve => {
+    const completion = {resolve, started: false};
+    pendingTagReorder = completion;
+    ui.dispatch('detail-tag-reorder', JSON.stringify(movement));
+    if (!completion.started) { pendingTagReorder = null; resolve(); }
+  })
+});
+
+installLibrarySize({
+  step: direction => { if (wasmReady) ui.dispatch('library-size-step', direction); },
+  isDragging: () => !!(pointerDrag || marqueeDrag || dragPayload || pendingReorder || suppressCardClickUntil === Infinity)
+});
 installLibraryReorder({
   idsFor: id => ui.library_drag_ids(id),
   start: payload => { pointerDrag = null; finishMarquee(false); dragPayload = payload; suppressCardClickUntil = Infinity; document.getSelection()?.removeAllRanges(); },

@@ -29,11 +29,11 @@ pub(crate) fn remember_source(app: &mut App, context: &str, source: &str) {
 
 pub(crate) const SOURCES: [(&str, &str); 6] = [
     ("nextmoe", "鲲Gal"),
+    ("2dfan", "2DFan"),
     ("vndb", "VNDB"),
     ("erogamescape", "ErogameScape"),
     ("bangumi", "Bangumi"),
     ("ymgal", "月幕 Galgame"),
-    ("2dfan", "2DFan"),
 ];
 
 pub(crate) fn source_icon(source: &str) -> &'static str {
@@ -233,7 +233,7 @@ fn account(html: &mut String, app: &App) {
 }
 
 fn fan_account_card(html: &mut String, app: &App) {
-    write!(html,r#"<section class="account-panel"><div class="panel-heading"><h2>{}</h2><span class="connection-status {}">{}</span></div><div class="account-summary"><div><strong>{}</strong><small>{}</small></div><div class="account-balance"><span>{}</span><strong>{}</strong></div></div>"#,t(app,"auth.title"),if app.account.status.status=="authenticated"{"connected"}else{""},account_label(app),esc(app.account.status.username.as_deref().unwrap_or(t(app,"auth.account"))),esc(&app.settings.fan_domain),t(app,"auth.points"),app.account.status.balance.map(|balance|balance.to_string()).unwrap_or_else(||t(app,"auth.unknown").into())).unwrap();
+    write!(html,r#"<section class="account-panel"><div class="panel-heading"><h2 class="source-card-title"><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div><div class="account-summary"><div><strong>{}</strong><small>{}</small></div><div class="account-balance"><span>{}</span><strong>{}</strong></div></div>"#,source_icon("2dfan"),t(app,"auth.title"),if app.account.status.status=="authenticated"{"connected"}else{""},account_label(app),esc(app.account.status.username.as_deref().unwrap_or(t(app,"auth.account"))),esc(&app.settings.fan_domain),t(app,"auth.points"),app.account.status.balance.map(|balance|balance.to_string()).unwrap_or_else(||t(app,"auth.unknown").into())).unwrap();
     if let Some(reason) = &app.account.status.reason {
         write!(
             html,
@@ -274,7 +274,7 @@ fn source_card(html: &mut String, app: &App, source: &str, name: &str) {
         (_, true) => "sources.saved",
         _ => "sources.public",
     };
-    write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source_icon(source),name,if configured{"connected"}else{""},t(app,status)).unwrap();
+    write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2 class="source-card-title"><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source_icon(source),name,if configured{"connected"}else{""},t(app,status)).unwrap();
     if source == "erogamescape" {
         write!(html, r#"<p class="field-help">{}</p><div class="account-actions">{}</div></section>"#, t(app, "sources.erogamescape_help"), button("open-resource", "https://erogamescape.dyndns.org/~ap2/ero/toukei_kaiseki/", "ErogameScape", "link", "quiet", app.busy())).unwrap();
         return;
@@ -485,7 +485,25 @@ fn display(html: &mut String, app: &App) {
     }
     write!(
         html,
-        "</div></div><p>{}</p></section>",
+        r#"</div></div><div class="preference-row"><h3>{}</h3>"#,
+        t(app, "display.cards")
+    )
+    .unwrap();
+    options_start(html, "library-size", t(app, "display.cards"));
+    for (size, label) in crate::library::size::OPTIONS {
+        option(
+            html,
+            "library-size",
+            size,
+            t(app, label),
+            crate::library::size::current(&app.settings.library_card_size) == size,
+            app.busy() || crate::library::size::pending(app),
+        );
+    }
+    write!(
+        html,
+        "</div></div><p>{}</p><p>{}</p></section>",
+        t(app, "display.cards_help"),
         t(app, "display.help")
     )
     .unwrap();
@@ -704,16 +722,12 @@ mod tests {
         for action in ["metadata-provider", "cover-provider"] {
             let mut html = String::new();
             source_picker(&mut html, &app, action, "2dfan", false);
-            for source in ["2dfan", "vndb", "nextmoe"] {
-                assert!(html.contains(&format!("data-value=\"{source}\"")));
-            }
-            assert!(
-                html.find("data-value=\"nextmoe\"").unwrap()
-                    < html.find("data-value=\"2dfan\"").unwrap()
-            );
-            for source in ["bangumi", "ymgal"] {
-                assert!(!html.contains(&format!("data-value=\"{source}\"")));
-            }
+            let sources: Vec<_> = html
+                .split("data-value=\"")
+                .skip(1)
+                .map(|value| value.split_once('"').unwrap().0)
+                .collect();
+            assert_eq!(sources, ["nextmoe", "2dfan", "vndb", "erogamescape"]);
         }
     }
 

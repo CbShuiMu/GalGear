@@ -8,7 +8,7 @@ const bridge = fs.readFileSync(path.join(__dirname, '../web/bridge.js'), 'utf8')
 const align = bridge.slice(bridge.indexOf('function alignLibraryToolbar()'), bridge.indexOf('function measureLibraryBounds()'));
 
 function fixture() {
-  let gridWidth = 1800, cardWidth = 312, count = 20, collection = false;
+  let gridWidth = 1800, cardWidth = 312, count = 20, collection = false, layout;
   const card = {getBoundingClientRect: () => ({width: cardWidth, right: 412})};
   const bar = {
     style: {width: '', removeProperty(key) { delete this[key]; }},
@@ -22,6 +22,7 @@ function fixture() {
   const page = {querySelector: selector => selector === '.library-bar' ? bar : grid};
   const context = vm.createContext({
     document: {querySelector: () => page},
+    syncLibrarySize() { return layout; },
     getComputedStyle: () => ({columnGap: '20px'}),
     libraryGridObserver: {observe() {}, disconnect() {}},
   });
@@ -30,6 +31,7 @@ function fixture() {
     bar,
     align: () => vm.runInContext('alignLibraryToolbar()', context),
     set(options) {
+      layout = options.layout ?? layout;
       gridWidth = options.gridWidth ?? gridWidth;
       cardWidth = options.cardWidth ?? cardWidth;
       count = options.count ?? count;
@@ -71,4 +73,12 @@ test('empty results and collection toolbars clear stale inline widths', () => {
   app.set({collection: true});
   app.align();
   assert.equal(app.bar.style.width, undefined);
+});
+
+
+test('compact toolbar keeps its slots while all dragged source cards are hidden', () => {
+  const app = fixture();
+  app.set({gridWidth: 1098, cardWidth: 0, layout: {columns: 6, width: 145}});
+  app.align();
+  assert.equal(app.bar.style.width, '970px');
 });

@@ -585,6 +585,7 @@ mod tests {
         )
         .unwrap();
         let journal = snapshots::Journal {
+            absent: Vec::new(),
             plan,
             originals: vec![display_path(&old)],
             committed: false,
@@ -621,6 +622,7 @@ mod tests {
     fn conflicting_restore_journals_stop_before_moving_history() {
         let fixture = Fixture::new();
         let journal = snapshots::Journal {
+            absent: Vec::new(),
             plan: snapshots::preview(
                 &fixture.legacy,
                 "game",

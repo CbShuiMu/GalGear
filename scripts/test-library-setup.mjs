@@ -48,15 +48,96 @@ async function emptyHome() {
     get html() { return html; },
     addFolder() {
       ui.dispatch('choose-folder', '');
-      reply('choose_library_folder', 'F:/Fixture');
+      reply('choose_library_folders', ['F:/Fixture']);
       settings.library_folders = ['F:/Fixture'];
-      assert.deepEqual(reply('add_library_folder', bootstrap()), {path: 'F:/Fixture'});
+      assert.deepEqual(reply('add_library_folders', {settings, added: 1, unchanged: 0, failed: []}), {paths: ['F:/Fixture']});
     },
   };
 }
 
 function game(id = 'new') {
   return {id, title: id, folder: `F:/Fixture/${id}`, executable: `F:/Fixture/${id}/game.exe`, engine: 'unknown', modified: 0};
+}
+
+for (const count of [600, 10_000]) {
+  test(`${count} folders use one batch request and one scan, with repeated clicks suppressed`, async () => {
+    const app = await emptyHome();
+    const paths = Array.from({length: count}, (_, i) => `F:/Fixture/Library ${i}`);
+    app.ui.dispatch('choose-folder', '');
+    app.ui.dispatch('choose-folder', '');
+    assert.equal(app.requests.filter(r => r.command === 'choose_library_folders').length, 1);
+    app.reply('choose_library_folders', paths);
+    app.ui.dispatch('choose-folder', '');
+    assert.equal(app.requests.filter(r => r.command === 'choose_library_folders').length, 0);
+    assert.equal(app.requests.filter(r => r.command === 'add_library_folders').length, 1);
+    app.settings.library_folders = paths;
+    assert.deepEqual(app.reply('add_library_folders', {settings: app.settings, added: count, unchanged: 0, failed: []}), {paths});
+    assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 1);
+    assert.ok(app.html.includes(`已添加 ${count} 个`));
+    app.finishScan([]);
+  });
+}
+
+test('cancelled or empty selection makes no batch request', async () => {
+  const app = await emptyHome();
+  for (const selection of [null, []]) {
+    app.ui.dispatch('choose-folder', '');
+    app.reply('choose_library_folders', selection);
+    assert.equal(app.requests.filter(r => r.command === 'add_library_folders').length, 0);
+  }
+});
+
+test('adding during a scan waits and performs a single follow-up scan', async () => {
+  const app = await emptyHome();
+  app.ui.dispatch('refresh', '');
+  app.addFolder();
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 1);
+  app.reply('scan_library', {games: [], warnings: []});
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 1);
+  app.finishScan([]);
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 0);
+});
+
+test('duplicate-only result skips scanning and save failure permits retry', async () => {
+  const app = await emptyHome();
+  app.ui.dispatch('choose-folder', '');
+  app.reply('choose_library_folders', ['F:/Existing']);
+  app.reply('add_library_folders', {settings: app.settings, added: 0, unchanged: 1, failed: []});
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 0);
+  app.ui.dispatch('choose-folder', '');
+  app.reply('choose_library_folders', ['F:/New']);
+  const index = app.requests.findIndex(r => r.command === 'add_library_folders');
+  const [request] = app.requests.splice(index, 1);
+  app.ui.resolve(request.id, false, JSON.stringify({key: 'error.config_write', args: {detail: 'fixture failure'}}));
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 0);
+  assert.match(app.html, /fixture failure/);
+  app.ui.dispatch('choose-folder', '');
+  assert.equal(app.requests.filter(r => r.command === 'choose_library_folders').length, 1);
+});
+
+for (const count of [600, 10_000]) {
+  test(`${count} failures render 40 escaped paths per page and preserve successful additions`, async () => {
+    const app = await emptyHome();
+    const failed = Array.from({length: count}, (_, i) => ({path: `F:/<bad-${i}>`, error: {key: 'error.folder_select'}}));
+    app.ui.dispatch('choose-folder', '');
+    app.reply('choose_library_folders', ['F:/Good', ...failed.map(f => f.path)]);
+    app.settings.library_folders = ['F:/Good'];
+    app.reply('add_library_folders', {settings: app.settings, added: 1, unchanged: 0, failed});
+    assert.equal((app.html.match(/<li><strong>/g) ?? []).length, 40);
+    assert.match(app.html, /&lt;bad-0&gt;/);
+    assert.doesNotMatch(app.html, /<bad-0>/);
+    app.settings.game_edits.new = {setup_pending: true};
+    app.finishScan([game()]);
+    assert.doesNotMatch(app.html, /class="setup-overlay"/);
+    app.ui.dispatch('folder-failures-page', String(Math.ceil(count / 40) - 1));
+    assert.ok(app.html.includes(`&lt;bad-${count - 1}&gt;`));
+    assert.doesNotMatch(app.html, /&lt;bad-0&gt;/);
+    app.ui.dispatch('folder-failures-page', '999999999');
+    assert.ok(app.html.includes(`&lt;bad-${count - 1}&gt;`));
+    assert.equal((app.html.match(/<li><strong>/g) ?? []).length, 40);
+    app.ui.dispatch('library-close', '');
+    assert.match(app.html, /class="setup-overlay"/);
+  });
 }
 
 test('600 automatic searches keep three slots, advance after failures and retry only unresolved games', async () => {
@@ -272,7 +353,7 @@ test('cancelling the folder chooser keeps deferred games deferred', async () => 
   app.finishScan([game()]);
   app.ui.dispatch('setup-defer-all', '');
   app.ui.dispatch('choose-folder', '');
-  app.reply('choose_library_folder', null);
+  app.reply('choose_library_folders', null);
   assert.doesNotMatch(app.html, /class="setup-overlay"/);
 });
 

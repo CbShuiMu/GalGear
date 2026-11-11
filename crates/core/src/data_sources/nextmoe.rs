@@ -244,11 +244,8 @@ fn parse_metadata(work: &Value, url: &str) -> Result<Metadata, Message> {
             (role == "开发" && has_developer_company) || (role == "发行" && has_publisher_company);
         for credit in group["credits"].as_array().into_iter().flatten() {
             let name = localized_name(credit);
-            if !name.is_empty() {
-                meta.tags.push(name.clone());
-                if !use_company_name {
-                    add_credit(&mut meta, role, &name, "");
-                }
+            if !name.is_empty() && !use_company_name {
+                add_credit(&mut meta, role, &name, "");
             }
         }
     }
@@ -416,8 +413,8 @@ mod tests {
             ("Singer", "Composer")
         );
         assert_eq!(meta.release_date, "2016-07-29");
-        assert!(meta.tags.contains(&"Director".into()));
-        assert!(!meta.tags.contains(&"Spoiler".into()));
+        assert_eq!(meta.tags, ["Romance"]);
+        assert_eq!(meta.tag_names(), ["Romance"]);
         assert!(meta.cover_url.is_some());
     }
 

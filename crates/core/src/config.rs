@@ -114,6 +114,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn library_card_size_defaults_for_old_configs_and_survives_reopening() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(dir.path().join("config.json"));
+        fs::write(
+            &store.path,
+            r#"{"version":1,"card_size":240,"cover_scale":150}"#,
+        )
+        .unwrap();
+        let mut settings = store.load().unwrap();
+        assert_eq!(settings.library_card_size, "normal");
+        for size in ["small", "tiny", "normal"] {
+            settings.library_card_size = size.into();
+            store.save(&settings).unwrap();
+            let loaded = store.load().unwrap();
+            assert_eq!(loaded.library_card_size, size);
+            assert_eq!((loaded.card_size, loaded.cover_scale), (240, 150));
+        }
+    }
+
+    #[test]
     fn first_language_initializes_source_once_and_survives_reopening() {
         for (language, source) in [
             (galgear_i18n::Language::Chinese, "nextmoe"),

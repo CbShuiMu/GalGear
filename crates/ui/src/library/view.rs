@@ -459,7 +459,8 @@ fn page_content(html: &mut String, app: &App) {
     );
     let _ = write!(
         html,
-        r#"<section class="collection library-page" aria-label="{}">"#,
+        r#"<section class="collection library-page" data-card-size="{}" aria-label="{}">"#,
+        super::size::current(&app.settings.library_card_size),
         esc(title)
     );
     if app.page == "collections"
@@ -621,7 +622,7 @@ fn card_overlay(html: &mut String, app: &App, game: &Game) {
     );
     let _ = write!(
         html,
-        r#"</div><div class="card-tags" aria-label="{}">"#,
+        r#"</div><div class="card-tags" tabindex="0" aria-label="{}">"#,
         t(app, "detail.tags")
     );
     for tag in game.tags.iter().take(3) {

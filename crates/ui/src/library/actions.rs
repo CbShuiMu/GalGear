@@ -174,8 +174,12 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "library-close" => {
-            app.library.dialog = None;
+            let closed = app.library.dialog.take();
             app.choices.open = None;
+            if matches!(closed, Some(Dialog::FolderFailures { .. })) {
+                // 扫描完成时为报告暂缓了资料确认，关闭后立即接续。
+                crate::game_setup::sync(app);
+            }
         }
         "batch-toggle" => {
             app.library.batch = !app.library.batch;

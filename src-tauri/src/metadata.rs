@@ -7,6 +7,7 @@ use galgear_i18n::Message;
 use tauri::{Emitter, State};
 
 pub(crate) mod search;
+pub(crate) mod title_refresh;
 
 #[derive(Default)]
 pub(crate) struct AliasState {
