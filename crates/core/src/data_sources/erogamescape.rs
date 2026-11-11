@@ -12,7 +12,7 @@ const FROM: &str = "FROM gamelist g LEFT JOIN brandlist b ON g.brandname = b.id"
 type Row = BTreeMap<String, String>;
 
 fn error(detail: impl std::fmt::Display) -> Message {
-    Message::detail("sources.api_error", format!("ErogameScape: {detail}"))
+    Message::detail("sources.erogamescape_error", detail)
 }
 
 pub(super) fn url_id(url: &Url) -> Result<String, Message> {
@@ -248,7 +248,11 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
-        assert!(parse_table("<html>SQL Error</html>").is_err());
+        let error = parse_table("<html>SQL Error</html>").unwrap_err();
+        assert_eq!(
+            error.render(galgear_i18n::Language::Chinese),
+            "数据源请求失败：批评空间：Missing SQL result table"
+        );
         assert!(parse_table(&format!("<table>{HEADER}<tr><td>123</td></tr></table>")).is_err());
     }
 }

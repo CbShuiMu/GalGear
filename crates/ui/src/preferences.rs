@@ -27,13 +27,13 @@ pub(crate) fn remember_source(app: &mut App, context: &str, source: &str) {
     );
 }
 
-pub(crate) const SOURCES: [(&str, &str); 6] = [
-    ("nextmoe", "鲲Gal"),
-    ("2dfan", "2DFan"),
-    ("vndb", "VNDB"),
-    ("erogamescape", "ErogameScape"),
-    ("bangumi", "Bangumi"),
-    ("ymgal", "月幕 Galgame"),
+const SOURCES: [(&str, &str); 6] = [
+    ("nextmoe", "sources.nextmoe"),
+    ("2dfan", "sources.2dfan"),
+    ("bangumi", "sources.bangumi"),
+    ("vndb", "sources.vndb"),
+    ("erogamescape", "sources.erogamescape"),
+    ("ymgal", "sources.ymgal"),
 ];
 
 pub(crate) fn source_icon(source: &str) -> &'static str {
@@ -83,6 +83,16 @@ pub(crate) fn available_source<'a>(app: &'a App, preferred: &'a str) -> &'a str 
         "nextmoe"
     }
 }
+
+/// 按界面顺序返回可用的数据源 ID 及其本地化名称。
+pub(crate) fn available_sources(app: &App) -> impl Iterator<Item = (&'static str, &'static str)> {
+    SOURCES
+        .into_iter()
+        .filter(|(source, _)| source_available(app, source))
+        .map(|(source, name_key)| (source, t(app, name_key)))
+}
+
+/// 返回游戏资料链接对应的数据源 ID 和名称翻译键。
 pub(crate) fn source_for_url(url: &str) -> (&'static str, &'static str) {
     let source = if url.starts_with("https://vndb.org/") {
         "vndb"
@@ -191,7 +201,12 @@ fn option(
         )
         .unwrap();
     }
-    write!(html, "{}</button>", esc(label)).unwrap();
+    if action == "library-display" {
+        write!(html, r#"<span class="display-mode-preview mode-{}" role="img" aria-label="{}" title="{}"><i></i><i></i><i></i></span>"#, esc(value), esc(label), esc(label)).unwrap();
+    } else {
+        html.push_str(&esc(label));
+    }
+    html.push_str("</button>");
 }
 pub(crate) fn source_picker(
     html: &mut String,
@@ -201,7 +216,7 @@ pub(crate) fn source_picker(
     disabled: bool,
 ) {
     options_start(html, action, t(app, "sources.default"));
-    for (source, name) in SOURCES.into_iter().filter(|(source, _)| source_available(app, source)) {
+    for (source, name) in available_sources(app) {
         option(html, action, source, name, source == selected, disabled);
     }
     html.push_str("</div>");
@@ -214,21 +229,23 @@ fn account(html: &mut String, app: &App) {
     )
     .unwrap();
     options_start(html, "source-default", t(app, "sources.default"));
-    for (source, name) in SOURCES {
+    for (source, name_key) in SOURCES {
         option(
             html,
             "source-default",
             source,
-            name,
+            t(app, name_key),
             app.settings.metadata_provider == source,
             app.busy(),
         );
     }
     html.push_str("</div></section>");
-    source_card(html, app, "nextmoe", "鲲Gal");
-    fan_account_card(html, app);
-    for (source, name) in SOURCES.into_iter().filter(|(source, _)| !matches!(*source, "nextmoe" | "2dfan")) {
-        source_card(html, app, source, name);
+    for (source, name_key) in SOURCES {
+        if source == "2dfan" {
+            fan_account_card(html, app);
+        } else {
+            source_card(html, app, source, t(app, name_key));
+        }
     }
 }
 
@@ -264,7 +281,6 @@ fn fan_account_card(html: &mut String, app: &App) {
 }
 
 fn source_card(html: &mut String, app: &App, source: &str, name: &str) {
-    let name = if source == "erogamescape" { t(app, "sources.erogamescape") } else { name };
     let configured = app
         .data_sources
         .iter()
@@ -276,7 +292,20 @@ fn source_card(html: &mut String, app: &App, source: &str, name: &str) {
     };
     write!(html,r#"<section class="settings-card source-card" data-render-key="source-{}"><div class="panel-heading"><h2 class="source-card-title"><img src="{}" alt=""/>{}</h2><span class="connection-status {}">{}</span></div>"#,source,source_icon(source),name,if configured{"connected"}else{""},t(app,status)).unwrap();
     if source == "erogamescape" {
-        write!(html, r#"<p class="field-help">{}</p><div class="account-actions">{}</div></section>"#, t(app, "sources.erogamescape_help"), button("open-resource", "https://erogamescape.dyndns.org/~ap2/ero/toukei_kaiseki/", "ErogameScape", "link", "quiet", app.busy())).unwrap();
+        write!(
+            html,
+            r#"<p class="field-help">{}</p><div class="account-actions">{}</div></section>"#,
+            t(app, "sources.erogamescape_help"),
+            button(
+                "open-resource",
+                "https://erogamescape.dyndns.org/~ap2/ero/toukei_kaiseki/",
+                name,
+                "link",
+                "quiet",
+                app.busy(),
+            )
+        )
+        .unwrap();
         return;
     }
     if source == "ymgal" {
@@ -485,8 +514,10 @@ fn display(html: &mut String, app: &App) {
     }
     write!(
         html,
-        r#"</div></div><div class="preference-row"><h3>{}</h3>"#,
-        t(app, "display.cards")
+        r#"</div></div><div class="preference-row"><h3 class="preference-with-help">{}<span class="settings-help"><button type="button" class="settings-help-trigger" aria-label="{}" aria-describedby="library-size-help">?</button><span id="library-size-help" role="tooltip" class="settings-help-popup">{}</span></span></h3>"#,
+        t(app, "display.cards"),
+        t(app, "display.cards_help_label"),
+        t(app, "display.cards_help")
     )
     .unwrap();
     options_start(html, "library-size", t(app, "display.cards"));
@@ -502,11 +533,22 @@ fn display(html: &mut String, app: &App) {
     }
     write!(
         html,
-        "</div></div><p>{}</p><p>{}</p></section>",
-        t(app, "display.cards_help"),
-        t(app, "display.help")
+        r#"</div></div><div class="preference-row"><h3>{}</h3>"#,
+        t(app, "display.library_mode")
     )
     .unwrap();
+    options_start(html, "library-display", t(app, "display.library_mode"));
+    for (mode, label) in crate::library::display::OPTIONS {
+        option(
+            html,
+            "library-display",
+            mode,
+            t(app, label),
+            crate::library::display::current(&app.settings.library_display_mode) == mode,
+            app.busy() || crate::library::display::pending(app),
+        );
+    }
+    html.push_str("</div></div></section>");
     navigation(html, app);
     background(html, app);
 }
@@ -712,11 +754,15 @@ mod tests {
     #[test]
     fn source_pickers_only_offer_verified_credentials_and_public_sources() {
         let app = App {
-            data_sources: serde_json::from_str(r#"[
+            data_sources: serde_json::from_str(
+                r#"[
                 {"source":"vndb","configured":true},
                 {"source":"ymgal","configured":false},
+                {"source":"bangumi","configured":true},
                 {"source":"nextmoe","configured":false}
-            ]"#).unwrap(),
+            ]"#,
+            )
+            .unwrap(),
             ..Default::default()
         };
         for action in ["metadata-provider", "cover-provider"] {
@@ -727,7 +773,12 @@ mod tests {
                 .skip(1)
                 .map(|value| value.split_once('"').unwrap().0)
                 .collect();
-            assert_eq!(sources, ["nextmoe", "2dfan", "vndb", "erogamescape"]);
+            assert_eq!(
+                sources,
+                ["nextmoe", "2dfan", "bangumi", "vndb", "erogamescape"]
+            );
+            assert!(html.contains("批评空间"));
+            assert!(!html.contains("ErogameScape"));
         }
     }
 

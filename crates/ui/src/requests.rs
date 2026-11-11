@@ -34,6 +34,7 @@ pub(crate) enum Pending {
     ImportCommit,
     Display,
     LibrarySize,
+    LibraryDisplay,
     Background,
     Theme,
     Language,
@@ -128,6 +129,7 @@ impl Pending {
                 | Pending::Runtime(_)
                 | Pending::ConfirmSave(_)
                 | Pending::LibrarySize
+                | Pending::LibraryDisplay
                 | Pending::Display
                 | Pending::Theme
                 | Pending::SetupSearch(_)

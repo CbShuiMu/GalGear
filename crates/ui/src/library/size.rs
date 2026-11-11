@@ -6,9 +6,9 @@ use crate::{
 use serde_json::json;
 
 pub(crate) const OPTIONS: [(&str, &str); 3] = [
-    ("normal", "display.cards_normal"),
-    ("small", "display.cards_small"),
     ("tiny", "display.cards_tiny"),
+    ("small", "display.cards_small"),
+    ("normal", "display.cards_normal"),
 ];
 
 pub(crate) fn current(value: &str) -> &str {

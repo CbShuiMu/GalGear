@@ -47,6 +47,8 @@ pub struct Settings {
     pub card_size: u32,
     /// 游戏库卡面档位；旧配置保持 normal，独立于历史封面缩放设置。
     pub library_card_size: String,
+    /// 游戏库显示模式，poster 为海报墙，caption 为封面加标题；旧配置默认海报墙。
+    pub library_display_mode: String,
     pub sort_by: String,
     pub custom_order: Vec<String>,
     pub sort_descending: Option<bool>,
@@ -109,6 +111,7 @@ impl Default for Settings {
             cover_overrides: BTreeMap::new(),
             card_size: 200,
             library_card_size: "normal".into(),
+            library_display_mode: "poster".into(),
             sort_by: "title".into(),
             custom_order: Vec::new(),
             sort_descending: None,

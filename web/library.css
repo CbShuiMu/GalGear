@@ -83,11 +83,11 @@
 .library-page[data-card-size=tiny] .card-overlay{padding:10px;gap:6px}
 .game-card:has(:focus-visible){outline:3px solid var(--pink);outline-offset:4px}
 .game-card:not(.is-selectable):has(:focus-visible) .card-overlay{opacity:1;visibility:visible;transition-delay:0s}
-.game-card:not(.is-selectable):has(:focus-visible) .poster :is(img,.poster-fallback){filter:blur(2px)}
+.game-card:not(.is-selectable,.with-title):has(:focus-visible) .poster :is(img,.poster-fallback){filter:blur(2px)}
 
 .game-card:not(.is-selectable):has(:focus-visible) :is(.card-heading,.card-tags,.card-actions){opacity:1;translate:0}
 .game-card:not(.is-selectable):has(:focus-visible) .card-tags{transition-delay:.04s}.game-card:not(.is-selectable):has(:focus-visible) .card-actions{transition-delay:.08s}
-@media(hover:hover){.game-card:not(.is-selectable):hover .card-overlay{opacity:1;visibility:visible;transition-delay:0s}.game-card:not(.is-selectable):hover .poster :is(img,.poster-fallback){filter:blur(2px)}.game-card:not(.is-selectable):hover :is(.card-heading,.card-tags,.card-actions){opacity:1;translate:0}.game-card:hover .card-tags{transition-delay:.04s}.game-card:hover .card-actions{transition-delay:.08s}}
+@media(hover:hover){.game-card:not(.is-selectable):hover .card-overlay{opacity:1;visibility:visible;transition-delay:0s}.game-card:not(.is-selectable,.with-title):hover .poster :is(img,.poster-fallback){filter:blur(2px)}.game-card:not(.is-selectable):hover :is(.card-heading,.card-tags,.card-actions){opacity:1;translate:0}.game-card:hover .card-tags{transition-delay:.04s}.game-card:hover .card-actions{transition-delay:.08s}}
 .card-overlay .path-warning{position:static;flex-shrink:0;color:#FF7387;width:22px;height:22px}.path-warning>.icon{width:19px;height:19px}
 .game-card.is-selected .poster{outline:3px solid var(--pink);outline-offset:2px}.selection-check{position:absolute;top:12px;right:12px;display:grid;place-items:center;width:24px;height:24px;border:2px solid var(--palette-dba1bd);border-radius:7px;background:var(--palette-fffafc);box-shadow:0 2px 8px var(--palette-592d4510)}.is-selected .selection-check{background:var(--pink-dark);border-color:var(--pink-dark);color:white}.selection-check>.icon{width:18px;height:18px}
 .drag-preview{position:fixed!important;z-index:140;pointer-events:none!important;width:92px!important;aspect-ratio:360/518;opacity:.82;border-radius:8px;box-shadow:0 8px 24px var(--palette-59405425);background:var(--palette-fffafc)!important}.drag-preview .poster{border:2px solid var(--pink)}.drag-preview .card-overlay{display:none}.drag-preview .poster :is(img,.poster-fallback){filter:none!important}
@@ -150,7 +150,7 @@
 
 .game-finished-badge{position:absolute;top:10px;right:10px;z-index:2;color:#e7b52e;pointer-events:none;filter:drop-shadow(0 1px 2px #0008)}
 .game-finished-badge .icon{width:20px;height:20px;fill:currentColor;stroke:none}
-.game-card:is(:hover,:focus-within) .game-finished-badge{visibility:hidden}
+.game-card:not(.with-title):is(:hover,:focus-within) .game-finished-badge{visibility:hidden}
 
 /* 路径状态始终显示，独立于悬停操作区域。 */
 .game-card .poster > .path-warning,.home-game .poster > .path-warning{position:absolute;top:10px;right:10px;z-index:2;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:transparent;color:#d93040}.game-card .poster > .path-warning .icon,.home-game .poster > .path-warning .icon{width:24px;height:24px}
@@ -185,7 +185,6 @@
 .game-grid>.reorder-landing{visibility:hidden}
 .reorder-flight{position:fixed;z-index:140;pointer-events:none;transform-origin:top left;margin:0}
 .game-grid>.game-card[hidden]{display:none}
-.reorder-gap{border:2px dashed var(--pink);border-radius:14px;background:var(--pink-soft)}
 @media(prefers-reduced-motion:reduce){.sort-direction{transition:none}}
 
 .setup-pagination{display:flex;justify-content:center;align-items:center;gap:16px;padding:6px}
@@ -193,3 +192,53 @@
 .setup-entry-field .setup-launcher-check{border:1px solid var(--button-line);border-radius:50%}
 .setup-entry-field .setup-launcher-check[aria-pressed=true]{color:var(--pink-dark);background:var(--pink-soft);border-color:var(--pink)}
 .library-folder-failures{overflow-wrap:anywhere}
+
+/* 在海报墙完成 object-fit 后裁去上下各 4%，横竖封面共用同一画面窗口。 */
+.library-page[data-display-mode=caption] .game-grid {
+  row-gap: 12px;
+}
+.library-page .game-card.with-title {
+  aspect-ratio: auto;
+  max-height: none;
+}
+.game-card.with-title .game-face {
+  position: relative;
+  height: auto;
+}
+.game-card.with-title .poster {
+  height: auto;
+  aspect-ratio: 360 / 476.56;
+}
+.game-card.with-title .poster > img {
+  position: absolute;
+  /* 两侧 1px 边框不参与裁剪，保持海报墙中的图片缩放尺寸。 */
+  inset: calc((100% + 2px) * -.04 / .92) 0 auto;
+  width: 100%;
+  height: calc((100% + 2px) / .92 - 2px);
+  object-fit: cover;
+  object-position: center;
+}
+.game-caption {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  font-size: calc(var(--ui-font) * .9);
+  font-weight: 500;
+  line-height: 1.45;
+  height: 2.9em;
+  margin: 7px 2px 0;
+}
+/* 预览保留标题占位以匹配落位几何，拿起、飞行和等待保存期间仅显示封面。 */
+.reorder-stack .game-caption,
+.reorder-flight .game-caption,
+.drag-preview .game-caption { visibility: hidden; }
+.reorder-stack > .game-card.with-title { box-shadow: none; }
+.game-card.with-title.drag-preview {
+  background: transparent !important;
+  box-shadow: none;
+  aspect-ratio: auto;
+}

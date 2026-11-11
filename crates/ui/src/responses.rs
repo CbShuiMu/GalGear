@@ -404,6 +404,13 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         // 已在途的读取可能仍携带保存前的设置。
                         app.library.size_request = app.requests.next_id();
                     }
+                    Pending::LibraryDisplay => {
+                        let settings: Settings =
+                            serde_json::from_str(payload).map_err(|e| e.to_string())?;
+                        app.settings.library_display_mode = settings.library_display_mode;
+                        // 隔离保存期间发出的旧设置读取，避免后台响应切回旧模式。
+                        app.library.display_request = app.requests.next_id();
+                    }
                     Pending::Display => {
                         if !app.requests.has_newer_display(id) {
                             apply_settings(

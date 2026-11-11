@@ -543,8 +543,9 @@ pub(crate) fn choice_placeholder(app: &App, field: &str) -> Option<&'static str>
 }
 
 fn source_options(app: &App) -> Vec<choices::OptionItem> {
-    preferences::SOURCES.iter().filter(|(source, _)| preferences::source_available(app, source))
-        .map(|(source, name)| choices::item(source, name)).collect()
+    preferences::available_sources(app)
+        .map(|(source, name)| choices::item(source, name))
+        .collect()
 }
 
 pub(crate) fn choice_options(app: &App, field: &str) -> Vec<choices::OptionItem> {
@@ -688,7 +689,7 @@ mod tests {
                 .iter()
                 .map(|o| o.value.as_str())
                 .collect::<Vec<_>>(),
-            vec!["nextmoe", "2dfan", "vndb", "erogamescape", "bangumi"]
+            vec!["nextmoe", "2dfan", "bangumi", "vndb", "erogamescape"]
         );
         let before = app.setup.rows[0].source.clone();
         dispatch(&mut app, "setup-batch-source", "ymgal");

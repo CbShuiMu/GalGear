@@ -124,6 +124,11 @@ impl App {
 thread_local! { pub(crate) static APP: RefCell<App> = RefCell::new(App::default()); }
 
 pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: u32) {
+    if request_id < app.library.display_request {
+        settings
+            .library_display_mode
+            .clone_from(&app.settings.library_display_mode);
+    }
     if request_id < app.library.size_request {
         settings
             .library_card_size

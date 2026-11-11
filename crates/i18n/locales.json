@@ -34,20 +34,40 @@
     "ja-JP": "ライブラリのカードサイズ",
     "en-US": "Library card size"
   },
+  "display.library_mode": {
+    "zh-CN": "游戏库显示模式",
+    "ja-JP": "ライブラリの表示モード",
+    "en-US": "Library display mode"
+  },
+  "display.mode_poster": {
+    "zh-CN": "海报墙",
+    "ja-JP": "ポスターウォール",
+    "en-US": "Poster wall"
+  },
+  "display.mode_caption": {
+    "zh-CN": "封面与标题",
+    "ja-JP": "カバーとタイトル",
+    "en-US": "Cover and title"
+  },
+  "display.cards_help_label": {
+    "zh-CN": "卡面尺寸快捷键",
+    "ja-JP": "カードサイズのショートカット",
+    "en-US": "Card size shortcuts"
+  },
   "display.cards_normal": {
-    "zh-CN": "标准",
-    "ja-JP": "標準",
-    "en-US": "Standard"
+    "zh-CN": "大",
+    "ja-JP": "大",
+    "en-US": "Large"
   },
   "display.cards_small": {
+    "zh-CN": "中",
+    "ja-JP": "中",
+    "en-US": "Medium"
+  },
+  "display.cards_tiny": {
     "zh-CN": "小",
     "ja-JP": "小",
     "en-US": "Small"
-  },
-  "display.cards_tiny": {
-    "zh-CN": "特小",
-    "ja-JP": "極小",
-    "en-US": "Extra small"
   },
   "display.cards_help": {
     "zh-CN": "在游戏库中按 Alt＋滚轮或 Alt＋↑/↓ 调节；向上放大，向下缩小。",
@@ -3369,6 +3389,11 @@
     "ja-JP": "公開データ",
     "en-US": "Public data"
   },
+  "sources.nextmoe": {"zh-CN": "鲲Gal", "ja-JP": "鲲Gal", "en-US": "鲲Gal"},
+  "sources.2dfan": {"zh-CN": "2DFan", "ja-JP": "2DFan", "en-US": "2DFan"},
+  "sources.bangumi": {"zh-CN": "Bangumi", "ja-JP": "Bangumi", "en-US": "Bangumi"},
+  "sources.vndb": {"zh-CN": "VNDB", "ja-JP": "VNDB", "en-US": "VNDB"},
+  "sources.ymgal": {"zh-CN": "月幕Gal", "ja-JP": "月幕Gal", "en-US": "月幕Gal"},
   "sources.ymgal_help": {
     "zh-CN": "留空即可使用月幕的公共客户端；也可填写自己的客户端凭据。",
     "ja-JP": "空欄で月幕の公開クライアントを使用できます。独自の認証情報も設定できます。",
@@ -4856,6 +4881,11 @@
     "zh-CN": "日本 Galgame 资料平台。无需登录即可查询游戏名称、品牌、发售日期及类型。",
     "ja-JP": "日本のゲーム情報データベースです。ログインせずに作品名・ブランド・発売日・ジャンルを検索できます。",
     "en-US": "Japanese game database. Search titles, brands, release dates and genres without signing in."
+  },
+  "sources.erogamescape_error": {
+    "zh-CN": "数据源请求失败：批评空间：{detail}",
+    "ja-JP": "データソースのリクエストに失敗：批評空間：{detail}",
+    "en-US": "Data source request failed: ErogameScape: {detail}"
   },
   "startup.title": {
     "zh-CN": "选择语言 / Language / 言語",

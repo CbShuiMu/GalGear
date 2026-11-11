@@ -18,14 +18,14 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.4.5 (November 11, 2026)** adds multi-folder library import, three card sizes, tag reordering in game details, and backup and restore for selected save files.
+> **v0.4.6 (November 11, 2026)** adds poster wall and cover-and-title views for the library and collections, plus localized metadata source names.
 
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.4.5_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.4.5-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.4.6_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.4.6-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -39,8 +39,8 @@ Choose an interface language on the first run. GalGear sets the default metadata
 
 | Feature | Description |
 | --- | --- |
-| Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. |
-| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕 Galgame, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. Press and hold a local tag in game details to drag it into order. After a title edit, each source refreshes its metadata or tags when it finds one different match. |
+| Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. Under **Settings → Display & interaction**, choose Poster wall or Cover and title, and set the card size to Small, Medium, or Large. |
+| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕Gal, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. Press and hold a local tag in game details to drag it into order. After a title edit, each source refreshes its metadata or tags when it finds one different match. |
 | Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
 | Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
@@ -70,7 +70,7 @@ Filter by tags covering everything from game attributes to voice actors listed i
 
 ### 🔎 Automatic metadata from multiple sources
 
-Choose metadata from **2DFan, VNDB, Bangumi, 月幕 Galgame, 未萌 NextMoe, and KunGal**, with a different source available for each game. Synopses, developers, staff, and tags are stored locally and can also be edited manually. **Thanks to all these platforms.**
+Choose metadata from **2DFan, VNDB, Bangumi, 月幕Gal, 未萌 NextMoe, and KunGal**, with a different source available for each game. Synopses, developers, staff, and tags are stored locally and can also be edited manually. **Thanks to all these platforms.**
 
 Search for covers separately by name, choose a different cover source, or use a local image without changing the linked game metadata. Click a tag, developer, or staff member in the details to find related games in your library. Cached metadata and your local library remain available offline.
 
@@ -185,6 +185,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## 📝 Release history
+
+### v0.4.6
+
+- Added poster wall and cover-and-title views, updated the three card size labels, and standardized metadata source names and ordering. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.6)
 
 ### v0.4.5
 

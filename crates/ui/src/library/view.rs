@@ -459,8 +459,9 @@ fn page_content(html: &mut String, app: &App) {
     );
     let _ = write!(
         html,
-        r#"<section class="collection library-page" data-card-size="{}" aria-label="{}">"#,
+        r#"<section class="collection library-page" data-card-size="{}" data-display-mode="{}" aria-label="{}">"#,
         super::size::current(&app.settings.library_card_size),
+        super::display::current(&app.settings.library_display_mode),
         esc(title)
     );
     if app.page == "collections"
@@ -533,11 +534,13 @@ fn page_content(html: &mut String, app: &App) {
         );
     } else {
         write!(html, r#"<div class="game-grid" data-custom-sort="{}">"#, app.settings.sort_by == "custom" && app.page == "games").unwrap();
+        let show_title = super::display::current(&app.settings.library_display_mode) == "caption";
         for (index, game) in games.iter().take(app.library.visible_count).enumerate() {
             let selected = app.library.checked.contains(&game.id);
             let _ = write!(
                 html,
-                r#"<article class="game-card {} {}" data-game-id="{}" draggable="false"><button id="game-{}" class="game-face" data-action="{}" data-value="{}" aria-label="{}" {}><div class="poster poster-{}">"#,
+                r#"<article class="game-card {} {} {}" data-game-id="{}" draggable="false"><button id="game-{}" class="game-face" data-action="{}" data-value="{}" aria-label="{}" {}><div class="poster poster-{}">"#,
+                if show_title { "with-title" } else { "" },
                 if selected { "is-selected" } else { "" },
                 if app.library.batch {
                     "is-selectable"
@@ -591,8 +594,18 @@ fn page_content(html: &mut String, app: &App) {
                     }
                 );
             }
-            html.push_str("</div></button>");
-            if !app.library.batch {
+            html.push_str("</div>");
+            if show_title {
+                write!(
+                    html,
+                    r#"<span class="game-caption" title="{}">{}</span>"#,
+                    esc(&game.title),
+                    esc(&game.title)
+                )
+                .unwrap();
+            }
+            html.push_str("</button>");
+            if !app.library.batch && !show_title {
                 card_overlay(html, app, game);
             }
             html.push_str("</article>");

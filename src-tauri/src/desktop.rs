@@ -293,6 +293,7 @@ pub(crate) fn run() {
             preferences::set_color_theme,
             preferences::set_display,
             preferences::set_library_card_size,
+            preferences::set_library_display_mode,
             background::choose_background_image,
             background::clear_background_image,
             game_details::edit_title,

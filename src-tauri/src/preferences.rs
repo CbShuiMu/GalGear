@@ -113,6 +113,20 @@ pub(crate) fn set_display(
 }
 
 #[tauri::command]
+pub(crate) fn set_library_display_mode(
+    mode: String,
+    state: State<'_, AppState>,
+) -> Result<Settings, Message> {
+    if !matches!(mode.as_str(), "poster" | "caption") {
+        return Err(Message::new("error.operation"));
+    }
+    update(&state, |settings| {
+        settings.library_display_mode = mode;
+        Ok(())
+    })
+}
+
+#[tauri::command]
 pub(crate) fn save_preferences(
     card_size: u32,
     sort_by: String,

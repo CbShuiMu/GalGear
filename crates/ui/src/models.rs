@@ -36,6 +36,8 @@ pub(crate) struct Settings {
     pub(crate) card_size: u32,
     #[serde(default)]
     pub(crate) library_card_size: String,
+    #[serde(default)]
+    pub(crate) library_display_mode: String,
     pub(crate) sort_by: String,
     #[serde(default)]
     pub(crate) custom_order: Vec<String>,

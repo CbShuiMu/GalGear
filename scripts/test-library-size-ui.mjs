@@ -10,14 +10,14 @@ async function fixture() {
  const ui=await import(`../dist/pkg/galgear_ui.js?library-size=${++instance}`);
  globalThis.GalGearBridge={render(value){html=value;},reset_scroll(){},local_date(){return '';},local_date_time(){return '';},schedule_toast_expiry(){},schedule_download_notice_expiry(){},
  request(id,command,payload){
-  if(['set_library_card_size','set_display'].includes(command)){pending.push({id,command,payload:JSON.parse(payload)});return;}
+  if(['set_library_card_size','set_library_display_mode','set_display'].includes(command)){pending.push({id,command,payload:JSON.parse(payload)});return;}
   const replies={bootstrap:{settings,catalog,config_path:'fixture',version:'0.4.4'},get_preferences:settings,scan_library:catalog,get_ai_runtime:{available:false},get_data_sources:[],get_fan_status_cache:{status:'idle'},load_game_icons:{}};
   queueMicrotask(()=>ui.resolve(id,true,JSON.stringify(replies[command]??null)));
  }};
  ui.initSync({module});await new Promise(resolve=>setImmediate(resolve));ui.dispatch('page','games');
  return {ui,pending,settings,get html(){return html;},finish(request,success=true,value=settings){ui.resolve(request.id,success,JSON.stringify(success?value:{key:'error.config_write',args:{}}));}};
 }
-test('old settings default to standard; steps wait for persistence and stop at boundaries',async()=>{
+test('old settings default to large; steps wait for persistence and stop at boundaries',async()=>{
  const app=await fixture();assert.match(app.html,/data-card-size="normal"/);
  app.ui.dispatch('library-size-step','larger');assert.equal(app.pending.length,0);
  for(const size of ['small','tiny']){
@@ -28,6 +28,11 @@ test('old settings default to standard; steps wait for persistence and stop at b
  }
  app.ui.dispatch('library-size-step','smaller');assert.equal(app.pending.length,0);
  app.ui.dispatch('page','settings');app.ui.dispatch('settings-section','display');
+ assert.deepEqual(
+  [...app.html.matchAll(/data-action="library-size" data-value="([^"]+)"[^>]*>([^<]+)<\/button>/g)]
+   .map(([,size,label])=>[size,label]),
+  [['tiny','小'],['small','中'],['normal','大']],
+ );
  assert.match(app.html,/data-action="library-size" data-value="tiny" aria-pressed="true"/);
  app.ui.dispatch('library-size-step','larger');assert.equal(app.pending.length,0);
 });
@@ -45,4 +50,60 @@ test('a display response already in flight cannot undo a saved card size',async(
  app.settings.library_card_size='small';app.finish(size);
  app.finish(font,true,{...app.settings,library_card_size:'normal',font_size:18});
  assert.match(app.html,/data-card-size="small"/);assert.match(app.html,/data-font-size="18"/);
+});
+
+test('display mode defaults to poster and waits for a successful save', async () => {
+ const app = await fixture();
+ assert.match(app.html, /data-display-mode="poster"/);
+ assert.doesNotMatch(app.html, /class="game-caption"/);
+ assert.match(app.html, /class="card-overlay"/);
+ app.ui.dispatch('library-display', 'invalid');
+ assert.equal(app.pending.length, 0);
+ app.ui.dispatch('library-display', 'caption');
+ app.ui.dispatch('library-display', 'caption');
+ assert.equal(app.pending.length, 1);
+ assert.deepEqual(app.pending[0].payload, {mode: 'caption'});
+ assert.match(app.html, /data-display-mode="poster"/);
+ app.finish(app.pending.shift(), false);
+ assert.match(app.html, /data-display-mode="poster"/);
+ app.ui.dispatch('library-display', 'caption');
+ app.settings.library_display_mode = 'caption';
+ app.finish(app.pending.shift());
+ assert.match(app.html, /data-display-mode="caption"/);
+ assert.match(app.html, /class="game-caption" title="Fixture">Fixture<\/span>/);
+ assert.doesNotMatch(app.html, /class="card-overlay"/);
+ app.ui.dispatch('library-display', 'poster');
+ app.settings.library_display_mode = 'poster';
+ app.finish(app.pending.shift());
+ assert.match(app.html, /class="card-overlay"/);
+ app.ui.dispatch('library-display', 'caption');
+ app.settings.library_display_mode = 'caption';
+ app.finish(app.pending.shift());
+ app.ui.dispatch('page', 'settings');
+ app.ui.dispatch('settings-section', 'display');
+ assert.match(app.html, /data-action="library-display" data-value="caption" aria-pressed="true"/);
+ assert.match(app.html, /aria-describedby="library-size-help"/);
+ assert.match(app.html, /id="library-size-help" role="tooltip"/);
+ assert.doesNotMatch(app.html, /<p>在游戏库中按|封面使用宽松尺寸/);
+});
+
+test('an in-flight display response cannot undo mode or clear selection', async () => {
+ const app = await fixture();
+ app.ui.dispatch('batch-toggle', '');
+ app.ui.dispatch('batch-select', 'fixture');
+ app.ui.dispatch('library-display', 'caption');
+ const mode = app.pending.shift();
+ app.ui.dispatch('font-size', '18');
+ const font = app.pending.shift();
+ app.settings.library_display_mode = 'caption';
+ app.finish(mode);
+ app.finish(font, true, {...app.settings, library_display_mode: 'poster', font_size: 18});
+ assert.match(app.html, /data-display-mode="caption"/);
+ assert.match(app.html, /game-card with-title is-selected is-selectable/);
+ app.ui.dispatch('library-display', 'poster');
+ app.settings.library_display_mode = 'poster';
+ app.finish(app.pending.shift());
+ assert.match(app.html, /data-display-mode="poster"/);
+ assert.doesNotMatch(app.html, /class="game-caption"/);
+ assert.match(app.html, /is-selected is-selectable/);
 });

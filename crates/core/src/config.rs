@@ -124,6 +124,7 @@ mod tests {
         .unwrap();
         let mut settings = store.load().unwrap();
         assert_eq!(settings.library_card_size, "normal");
+        assert_eq!(settings.library_display_mode, "poster");
         for size in ["small", "tiny", "normal"] {
             settings.library_card_size = size.into();
             store.save(&settings).unwrap();
@@ -131,6 +132,9 @@ mod tests {
             assert_eq!(loaded.library_card_size, size);
             assert_eq!((loaded.card_size, loaded.cover_scale), (240, 150));
         }
+        settings.library_display_mode = "caption".into();
+        store.save(&settings).unwrap();
+        assert_eq!(store.load().unwrap().library_display_mode, "caption");
     }
 
     #[test]

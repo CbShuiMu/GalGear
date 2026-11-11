@@ -382,12 +382,12 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
 fn reading(html: &mut String, app: &App, game: &Game) {
     html.push_str("<div class=\"detail-grid\"><section class=\"reading-card\" data-render-key=\"reading-card\"><div class=\"reading-heading\"><div class=\"metadata-source\">");
     if let Some(meta) = &game.metadata {
-        let (source, name) = preferences::source_for_url(&meta.url);
+        let (source, name_key) = preferences::source_for_url(&meta.url);
         write!(
             html,
             r#"<img src="{}" alt=""/><span>{}</span>"#,
             preferences::source_icon(source),
-            name
+            t(app, name_key)
         )
         .unwrap();
     } else {

@@ -287,13 +287,15 @@
   background: var(--button-hover-bg);
 }
 
-:root .app-shell[data-theme] .setup-launcher-check[aria-pressed="true"] {
+:root .app-shell[data-theme] :is(.setup-launcher-check[aria-pressed="true"],
+  .preference-switch[aria-checked="true"]) {
   background: var(--confirmed-bg);
   border: 1px solid var(--confirmed-line);
   color: var(--confirmed-color);
 }
 
-:root .app-shell[data-theme] .setup-launcher-check[aria-pressed="true"]:hover:not(:disabled) {
+:root .app-shell[data-theme] :is(.setup-launcher-check[aria-pressed="true"],
+  .preference-switch[aria-checked="true"]):hover:not(:disabled) {
   background: var(--confirmed-hover-bg);
   border-color: var(--confirmed-line);
   color: var(--confirmed-color);
@@ -365,6 +367,68 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+
+.preference-with-help { display: flex; align-items: center; gap: 7px; }
+.settings-help { position: relative; display: inline-flex; font-weight: 400; }
+.settings-help-trigger {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--button-bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+}
+.settings-help-popup {
+  position: absolute;
+  z-index: 20;
+  top: 100%;
+  left: 0;
+  width: min(340px, calc(100vw - 90px));
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--button-color);
+  box-shadow: 0 6px 20px #0002;
+  font-size: calc(var(--ui-font) * .8);
+  line-height: 1.6;
+  visibility: hidden;
+  opacity: 0;
+}
+.settings-help:hover .settings-help-popup,
+.settings-help:focus-within .settings-help-popup { visibility: visible; opacity: 1; }
+.display-mode-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 62px;
+  height: 34px;
+  color: inherit;
+}
+.display-mode-preview i {
+  display: block;
+  width: 14px;
+  height: 24px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+.display-mode-preview.mode-caption { flex-direction: column; gap: 3px; }
+.display-mode-preview.mode-caption i:first-child { width: 16px; height: 22px; }
+.display-mode-preview.mode-caption i:nth-child(2) {
+  width: 24px;
+  height: 2px;
+  background: currentColor;
+  border: 0;
+  border-radius: 1px;
+}
+.display-mode-preview.mode-caption i:last-child { display: none; }
 
 #settings-source-default > .segment,
 .metadata-provider-picker .segment,

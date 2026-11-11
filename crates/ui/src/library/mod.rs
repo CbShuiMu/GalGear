@@ -1,6 +1,7 @@
 //! Collection hierarchy and library queries, independent of DOM and transport.
 mod actions;
 mod dialogs;
+pub(crate) mod display;
 pub(crate) mod folders;
 pub(crate) mod size;
 mod state;

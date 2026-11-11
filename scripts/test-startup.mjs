@@ -25,7 +25,11 @@ async function fixture(settings) {
   return {ui, requests, reply, get html() { return html; }};
 }
 
-for (const [language, source] of [['zh-CN', 'nextmoe'], ['en-US', 'vndb'], ['ja-JP', 'erogamescape']]) {
+for (const [language, source, erogamescapeLabel] of [
+  ['zh-CN', 'nextmoe', '批评空间'],
+  ['en-US', 'vndb', 'ErogameScape'],
+  ['ja-JP', 'erogamescape', '批評空間'],
+]) {
   test(`first launch saves ${language} before starting background tasks`, async () => {
     const settings = {library_folders: [], card_size: 200, sort_by: 'title', initial_setup_pending: true};
     const f = await fixture(settings);
@@ -48,11 +52,18 @@ for (const [language, source] of [['zh-CN', 'nextmoe'], ['en-US', 'vndb'], ['ja-
     }
     f.reply('get_data_sources', []);
     f.ui.dispatch('page', 'settings'); f.ui.dispatch('settings-section', 'account');
+    const options = [...f.html.matchAll(/data-action="source-default" data-value="([^"]+)"[^>]*><img[^>]*\/>([^<]+)<\/button>/g)]
+      .map(([, id, label]) => [id, label]);
+    assert.deepEqual(options, [
+      ['nextmoe', '鲲Gal'], ['2dfan', '2DFan'], ['bangumi', 'Bangumi'],
+      ['vndb', 'VNDB'], ['erogamescape', erogamescapeLabel], ['ymgal', '月幕Gal'],
+    ]);
     assert.match(f.html, /source-erogamescape/);
+    assert(f.html.indexOf('data-render-key="source-bangumi"') < f.html.indexOf('data-render-key="source-vndb"'));
     assert(f.html.indexOf('data-render-key="source-vndb"') < f.html.indexOf('data-render-key="source-erogamescape"'));
-    assert(f.html.indexOf('data-render-key="source-erogamescape"') < f.html.indexOf('data-render-key="source-bangumi"'));
     assert.match(f.html, /assets\/erogamescape\.png/);
     assert.doesNotMatch(f.html, /source-erogamescape-token/);
+    if (language === 'zh-CN') assert.doesNotMatch(f.html, /ErogameScape|月幕\s*Galgame/);
   });
 }
 
