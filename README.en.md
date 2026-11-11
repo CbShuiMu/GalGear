@@ -18,7 +18,7 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.4.6 (November 11, 2026)** adds poster wall and cover-and-title views for the library and collections, plus localized metadata source names.
+> **v0.4.6 (November 11, 2026)** adds poster wall and cover-and-title views for the library and collections. The card sizes are labeled Small, Medium, and Large, and metadata source names follow the interface language.
 
 ## 🚀 Quick start
 
@@ -39,7 +39,7 @@ Choose an interface language on the first run. GalGear sets the default metadata
 
 | Feature | Description |
 | --- | --- |
-| Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. Under **Settings → Display & interaction**, choose Poster wall or Cover and title, and set the card size to Small, Medium, or Large. |
+| Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. Under **Settings → Display & interaction**, choose Poster wall or Cover and title, and set the card size to Small, Medium, or Large. Cover and title shows up to two centered lines of text below each cover. |
 | Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕Gal, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. Press and hold a local tag in game details to drag it into order. After a title edit, each source refreshes its metadata or tags when it finds one different match. |
 | Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
