@@ -18,14 +18,14 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.4.8 (November 12, 2026)** improves AI save discovery for dedicated folders and individual files, adds a Studio search to tag filters, and lets you review multiple matches during batch scraping.
+> **v0.5.0 (November 12, 2026)** uses the nearest meaningful parent folder name when importing from a generic subfolder. You can open game folders from the metadata review table. AI recaps and route maps improve dialogue analysis and retry invalid route segments.
 
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.4.8_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.4.8-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.5.0_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.5.0-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -185,6 +185,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## 📝 Release history
+
+### v0.5.0
+
+- Improved imported titles, metadata matching, AI recaps, and route maps. Open game folders directly from the metadata review table. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.5.0)
 
 ### v0.4.8
 
