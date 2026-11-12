@@ -18,14 +18,12 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.5.1 (November 12, 2026)** adds continuous scrolling to the batch import review table and renders long lists on demand. AI recaps improve save preflight time limits and diagnostics for Cotopha save versions.
-
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.5.1_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.5.1-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download the file ending in `_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download the file ending in `-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -40,7 +38,7 @@ Choose an interface language on the first run. GalGear sets the default metadata
 | Feature | Description |
 | --- | --- |
 | Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. Under **Settings → Display & interaction**, choose Poster wall or Cover and title, and set the card size to Small, Medium, or Large. Cover and title shows up to two centered lines of text below each cover. |
-| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕Gal, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. Use Studio search to find a brand directly. Press and hold a local tag in game details to drag it into order. Use **Rematch** while editing game details to select an entry and update the cover, tags, and metadata. Renaming a game can also sync those fields when a source finds a single new match. |
+| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕Gal, and 2DFan. Search covers independently or use local images. Thanks to these platforms. [ErogameScape metadata](docs/erogamescape.md) is also available. Tags can also filter by brand, developer, publisher, and staff. Use Studio search to find a brand directly. Press and hold a local tag in game details to drag it into order. Use **Rematch** while editing game details to select an entry and update the cover, tags, and metadata. Renaming a game can also sync those fields when a source finds a single new match. |
 | Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
 | Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
@@ -183,98 +181,5 @@ GalGear uses the following open-source tools for several of its features. Thanks
 - [7-Zip](https://github.com/ip7z/7zip): extracting RAR, 7z, and other patch archives.
 
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
-
-## 📝 Release history
-
-### v0.5.1
-
-- Improved scrolling in the batch import review table, AI save preflight time limits, and diagnostics for Cotopha save versions. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.5.1)
-
-### v0.5.0
-
-- Improved imported titles, metadata matching, AI recaps, and route maps. Open game folders directly from the metadata review table. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.5.0)
-
-### v0.4.8
-
-- Improved AI save discovery, the save card, and the game details tool indicators. Added Studio search and improved match selection during batch scraping. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.8)
-
-### v0.4.7
-
-- Added rematching in game details and cover syncing after a title change. Improved home background loading and list updates, and added WebView2 failure diagnostics. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.7)
-
-### v0.4.6
-
-- Added poster wall and cover-and-title views, updated the three card size labels, and standardized metadata source names and ordering. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.6)
-
-### v0.4.5
-
-- Added multi-folder library import, card size controls, tag reordering, and backup and restore for selected files. Improved save discovery and metadata matching after renaming a game. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.5).
-
-### v0.4.4
-
-- Added progress, a stop control, and a results summary to batch auto scraping. Lookups that time out no longer hold up the rest of the batch, and later runs skip confirmed games. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.4).
-
-### v0.4.3
-
-- Added ErogameScape metadata, first-run language selection, and custom library ordering. Improved batch metadata setup, executable selection, rescans, and update prompts. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.3).
-
-### v0.4.2
-
-- Added four quick controls, a cloud upload button, and folder buttons with tooltips to game details. GalGear checks the WebDAV connection before creating and uploading a snapshot. [Release notes](docs/releases/v0.4.2.md).
-
-### v0.4.1
-
-- Added shared save backup storage with migration, kept offline games in the library, and added rescans on drive changes. Improved title and alias search, launcher handoff detection, home sorting, metadata and tag editing, and playtime display. [Release notes](docs/releases/v0.4.1.md).
-
-### v0.4.0
-
-- Added an in-game font Hook, Shift+T floating panel, and runtime logs; bundled the original SimpleFontHook and Detours MIT notices. [Release notes](docs/releases/v0.4.0.md).
-
-### v0.3.4
-
-- Added NextMoe downloads and built-in OAuth login; improved saves, home backgrounds, and update notices. [Release notes](docs/releases/v0.3.4.md).
-
-### v0.3.3
-
-- Screenshots, manual Skill updates, and GPL-3.0-only licensing. See [release notes](docs/releases/v0.3.3.md).
-
-### v0.3.2
-
-- Added imports of PotatoVN, ReinaManager, and LunaBox library backups, plus PotatoVN-format exports.
-- Improved verified data source selection, batch settings, save resource installation, and Magpie scaling profile configuration.
-- Refined the home page, cover picker, and library layout. See the [release notes](docs/releases/v0.3.2.md) (in Chinese).
-
-### v0.3.1
-
-- Fixed the metadata and launcher confirmation window failing to reopen when games were re-added after removing a game or library.
-- Fixed 2DFan patch downloads failing because of forced direct connections; downloads now follow system proxy settings.
-- Hidden unconfirmed save candidates after a save location is confirmed, for both automatic detection and manual confirmation.
-- Updated the application icon.
-
-### v0.3.0
-
-- Added in-app update checks and installation, with file size and SHA-256 verification, user data preservation, and rollback on failure.
-- Added AI-assisted save location discovery and improved save detection, backup, restoration, and migration.
-- Improved patch search, downloads, and local patch folder management; bundled a 7-Zip decoder.
-- Refined library drag-and-drop, multi-selection, favorites, and toolbar layout, as well as game configuration and bundled tool management.
-- Improved AI model capability detection and Skills checks. Skills continue to download at runtime as needed.
-
-### v0.2.1
-
-- Added a home page and gamepad navigation, with improvements to the library and configuration editor.
-- Expanded metadata sources and AI providers, including Qwen and Kimi.
-- Added cover enhancement and custom backgrounds, and improved play records.
-- Added checks for the host and Skills in the application folder before enabling AI. Available features are enabled automatically after background updates finish. Download or verification failures preserve the previous version, show a notification, and retry on the next launch. New versions replace the whole directory, removing files deleted upstream. The first download requires network access and write access to the application folder; Git is not required.
-
-### v0.2.0
-
-- Added experimental AI story recaps and route maps. Route maps contain spoilers. Initial AI preparation typically took tens of minutes and cost around CNY 2 through the DeepSeek API; subsequent uses of the route map or recap cost around CNY 0.1 each. These are historical estimates from this release.
-- Added WebDAV cloud backups.
-- Added VNDB, Bangumi, and 月幕 Galgame as metadata sources, configured under **Settings → Data sources**.
-
-### v0.1.0
-
-- Added dark mode.
-- Added patch search on 2DFan and KunGal using games selected from the library. The patches tab can be disabled under **Settings → System**.
 
 GalGear is available under the [GPL-3.0-only License](LICENSE). Third-party tools, icons, and metadata are subject to their respective licenses and terms of use.
