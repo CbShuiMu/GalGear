@@ -113,7 +113,7 @@ export function startGamepad() {
     const axis = pad.axes[3] || 0;
     if (Math.abs(axis) > .2) {
       const layer=topLayer();
-      const scroll=active?.closest('.editor-body,.library-dialog-body,.detail-scroll,.page-scroll,.setup-table-scroll,.choice-list') || layer?.querySelector('.editor-body,.library-dialog-body,.detail-scroll,.page-scroll,.setup-table-scroll,.choice-list') || layer;
+      const scroll=active?.closest('.editor-body,.library-dialog-body,.detail-scroll,.page-scroll,.setup-table-scroll,.choice-list,.tag-search-results') || layer?.querySelector('.editor-body,.library-dialog-body,.detail-scroll,.page-scroll,.setup-table-scroll,.choice-list') || layer;
       if (scroll) scroll.scrollTop += axis * elapsed * 1.1;
     }
     previous=pad.buttons.map(button => button.pressed);

@@ -5,9 +5,9 @@ import {test} from 'node:test';
 
 const module = readFileSync(new URL('../dist/pkg/galgear_ui_bg.wasm', import.meta.url));
 let instance = 0;
-async function fixture({locations, aiAvailable = true} = {}) {
+async function fixture({locations, aiAvailable = true, tools = {}} = {}) {
   const game = {id:'fixture', title:'Fixture', folder:'F:/Fixture', executable:'F:/Fixture/game.exe', engine:'unknown', modified:0};
-  const settings = {library_folders:['F:/Fixture'], card_size:200, sort_by:'title', game_edits:{fixture:{setup_confirmed:true}}};
+  const settings = {library_folders:['F:/Fixture'], card_size:200, sort_by:'title', game_edits:{fixture:{setup_confirmed:true, ...tools}}};
   const catalog = {games:[game], warnings:[]};
   const pending = [];
   const openRequests = [];
@@ -41,6 +41,10 @@ async function fixture({locations, aiAvailable = true} = {}) {
   return {
     ui, settings, pending, openRequests,
     get html() { return html; },
+    segments() {
+      return [...html.matchAll(/<svg class="game-tool-segment tool-([^"]+)" data-active="(true|false)"/g)]
+        .map(([, tool, active]) => ({tool, active:active === 'true'}));
+    },
     buttons(action) { return [...html.matchAll(/<button\b[^>]*>/g)].map(match => match[0]).filter(tag => tag.includes(`data-action="${action}"`)); },
     async finish(success = true) {
       assert.equal(pending.length, 1);
@@ -59,18 +63,22 @@ async function fixture({locations, aiAvailable = true} = {}) {
 
 test('all four shortcuts save through existing commands and stay synchronized in both directions', async () => {
   const app = await fixture();
+  const activeSegments = () => app.segments().filter(segment => segment.active).map(segment => segment.tool);
   for (const action of ['toggle-locale','toggle-upscale','toggle-auto-backup','toggle-ai-summary']) {
     app.ui.dispatch(action, '');
     assert.match(app.buttons(action)[0], /aria-pressed="false"/);
+    assert.deepEqual(activeSegments(), []);
     const request = await app.finish();
     assert.equal(request.command, action === 'toggle-ai-summary' ? 'set_ai_summary' : 'set_game_tools');
     assert.match(app.buttons(action)[0], /aria-pressed="true"/);
+    assert.deepEqual(activeSegments(), [{ 'toggle-locale':'locale', 'toggle-upscale':'upscale', 'toggle-auto-backup':'backup', 'toggle-ai-summary':'ai' }[action]]);
     app.ui.dispatch('game-settings', '');
     assert.match(app.buttons(action)[1], /aria-checked="true"/);
     app.ui.dispatch(action, '');
     await app.finish();
     assert.match(app.buttons(action)[0], /aria-pressed="false"/);
     assert.match(app.buttons(action)[1], /aria-checked="false"/);
+    assert.deepEqual(activeSegments(), []);
     app.ui.dispatch('editor-close', '');
   }
 });
@@ -86,6 +94,18 @@ test('a rejected save keeps both controls off and preserves other tool preferenc
   assert.match(app.buttons('toggle-locale')[0], /aria-pressed="false"/);
   assert.match(app.buttons('toggle-locale')[1], /aria-checked="false"/);
   assert.match(app.buttons('toggle-upscale')[0], /aria-pressed="true"/);
+  assert.deepEqual(app.segments().filter(segment => segment.active).map(segment => segment.tool), ['upscale']);
+});
+
+test('saved tool combinations light only their fixed clockwise segments on opening details', async () => {
+  for (let mask = 0; mask < 16; mask++) {
+    const active = [1, 2, 4, 8].map(bit => Boolean(mask & bit));
+    const app = await fixture({tools:{
+      launch_mode:active[0] ? 'locale' : 'direct', upscale:active[1], auto_backup:active[2], ai_summary:active[3],
+    }});
+    assert.deepEqual(app.segments(), ['locale','upscale','backup','ai'].map((tool, index) => ({tool, active:active[index]})));
+    assert.match(app.html, /class="game-tools-status" aria-hidden="true"/);
+  }
 });
 
 test('missing save locations and AI tools disable the same options in both views', async () => {

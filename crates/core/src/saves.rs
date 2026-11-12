@@ -229,6 +229,7 @@ fn save_file(e: &fs::DirEntry) -> bool {
         && !metadata.is_symlink()
         && (name == "persistent"
             || name.starts_with("save")
+            || loose::nson_save(&name)
             || [
                 ".dat",
                 ".sav",
@@ -264,7 +265,12 @@ fn add(report: &mut SaveReport, path: PathBuf, source: &str, confidence: &str) {
         report.locations.push(SaveLocation {
             files: Vec::new(),
             exists: Path::new(&path).is_dir(),
-            readable: save_files(Path::new(&path)),
+            // 已由 AI 或用户确定的目录只检查可访问性，不能再用格式规则否定选择。
+            readable: if matches!(source, "ai" | "manual") {
+                fs::read_dir(&path).is_ok()
+            } else {
+                save_files(Path::new(&path))
+            },
             path,
             source: source.into(),
             confidence: confidence.into(),

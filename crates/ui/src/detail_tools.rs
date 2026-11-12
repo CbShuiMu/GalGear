@@ -66,10 +66,19 @@ fn options(app: &App, game: &Game, edit: &GameEdit) -> [ToolOption; 4] {
 }
 
 pub(crate) fn shortcuts(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
-    write!(html, r#"<div class="game-tools-shortcuts" data-render-key="game-tools-shortcuts" role="group" aria-label="{}"><button type="button" class="icon-button game-settings-button" data-action="game-settings" aria-label="{}" title="{}" {}>{}</button><div class="game-tools-reveal"><div class="game-tools-buttons">"#,
+    let options = options(app, game, edit);
+    write!(html, r#"<div class="game-tools-shortcuts" data-render-key="game-tools-shortcuts" role="group" aria-label="{}"><button type="button" class="icon-button game-settings-button" data-action="game-settings" aria-label="{}" title="{}" {}>{}<span class="game-tools-status" aria-hidden="true">"#,
         t(app, "detail.configure"), t(app, "detail.configure"), t(app, "detail.configure"),
         if game.available { "" } else { "disabled" }, icon("settings")).unwrap();
-    for option in options(app, game, edit) {
+    // 色段与快捷开关使用同一份已保存状态；保留节点，让重绘和快速移入移出能连续过渡。
+    for (index, option) in options.iter().enumerate() {
+        write!(html, r#"<svg class="game-tool-segment tool-{}" data-active="{}" style="--tool-index:{index}" viewBox="0 0 44 44" focusable="false"><path d="M 2.11 19.91 A 20 20 0 0 1 19.91 2.11"/></svg>"#,
+            option.class, option.checked).unwrap();
+    }
+    html.push_str(
+        "</span></button><div class=\"game-tools-reveal\"><div class=\"game-tools-buttons\">",
+    );
+    for option in options {
         write!(html, r#"<button type="button" class="game-tool-shortcut tool-{}" data-action="{}" aria-pressed="{}" aria-label="{}" title="{}" {}>{}</button>"#,
             option.class, option.action, option.checked, esc(t(app, option.key)), esc(t(app, option.key)),
             if option.disabled { "disabled" } else { "" },

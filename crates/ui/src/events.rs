@@ -450,7 +450,7 @@ pub fn input_changed(field: &str, value: &str) {
                 app.form.insert(field.into(), value.into());
                 return;
             }
-            "folder-query" | "tag-query" | "game-query" => {
+            "folder-query" | "tag-query" | "brand-query" | "game-query" => {
                 app.form.insert(field.into(), value.into());
             }
             "library-path" => app.library.path_input = value.into(),

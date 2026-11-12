@@ -674,6 +674,15 @@ fn saves_card(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
                 ));
                 crate::cloud::detail_upload_button(html, app, &game.id);
                 html.push_str("</span>");
+            } else if location.exists {
+                html.push_str(&button(
+                    "confirm-save",
+                    &location.path,
+                    t(app, "common.confirm"),
+                    "check",
+                    "secondary",
+                    features::save_busy(app),
+                ));
             }
             html.push_str("</div></div>");
         }
@@ -731,7 +740,7 @@ mod tests {
     use galgear_i18n::Language;
     use serde_json::json;
     #[test]
-    fn loose_save_card_shows_file_paths_and_only_three_location_actions() {
+    fn loose_save_card_shows_file_paths_and_a_group_confirmation() {
         let mut app = App::default();
         let game: Game = serde_json::from_value(json!({"id":"air","title":"AIR","folder":"D:/Games/AIR","engine":"unknown","modified":0})).unwrap();
         app.detail.saves.insert(game.id.clone(), serde_json::from_value(json!({"locations":[
@@ -742,13 +751,14 @@ mod tests {
         assert!(html.contains("游戏目录\\SAVE.SAV"));
         assert!(html.contains("游戏目录\\READ.SAV"));
         assert!(!html.contains("<p class=\"path-value\">D:/Games/AIR</p>"));
-        assert_eq!(html.matches("<button").count(), 3);
+        assert_eq!(html.matches("<button").count(), 4);
         for action in ["ai-find-save", "choose-save", "open-save"] {
             assert_eq!(
                 html.matches(&format!("data-action=\"{action}\"")).count(),
                 1
             );
         }
+        assert!(html.contains("data-action=\"confirm-save\" data-value=\"D:/Games/AIR\""));
         assert_eq!(
             save_file_label(&app, "D:/Games/AIR", "D:/Games/AIR2/SAVE.SAV"),
             "D:\\Games\\AIR2\\SAVE.SAV"
@@ -822,7 +832,8 @@ mod tests {
         app.detail.saves.insert(game.id.clone(), serde_json::from_value(json!({
             "locations":[
                 {"path":"C:/Goldberg SteamEmu Saves/1230140/remote", "source":"config", "confidence":"confirmed", "exists":true, "readable":true},
-                {"path":"C:/Aniplex/ATRI-MyDearMoments-", "source":"roaming", "confidence":"matched", "exists":true, "readable":true}
+                {"path":"C:/Aniplex/ATRI-MyDearMoments-", "source":"roaming", "confidence":"matched", "exists":true, "readable":true},
+                {"path":"C:/Uncreated", "source":"game", "confidence":"matched", "exists":false, "readable":false}
             ],
             "limited":true
         })).unwrap());
@@ -840,7 +851,8 @@ mod tests {
         assert!(html.contains("C:/Goldberg SteamEmu Saves/1230140/remote"));
         assert!(html.contains("C:/Aniplex/ATRI-MyDearMoments-"));
         assert!(html.contains(t(&app, "save.limited")));
-        assert!(!html.contains("data-action=\"confirm-save\""));
+        assert!(html.contains("C:/Uncreated"));
+        assert_eq!(html.matches("data-action=\"confirm-save\"").count(), 2);
         assert_eq!(html.matches("data-action=\"open-save\"").count(), 1);
     }
     #[test]

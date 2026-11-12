@@ -14,7 +14,7 @@ pub(crate) use state::State;
 pub(crate) use state::StatusFilter;
 pub(crate) use view::page;
 
-use crate::{features::meta_value, models::Catalog, models::Game, models::Settings};
+use crate::{features::meta_value, models::Catalog, models::Game, models::Metadata, models::Settings};
 use galgear_i18n::Message;
 use serde::Deserialize;
 use std::collections::BTreeSet;
@@ -29,7 +29,11 @@ pub(crate) enum Dialog {
     Failures,
     FolderFailures { failed: Vec<crate::models::LibraryFolderFailure>, page: usize },
     Restore,
-    Tags { selected: Vec<String>, status: StatusFilter },
+    Tags {
+        selected: Vec<String>,
+        brands: Vec<String>,
+        status: StatusFilter,
+    },
     AddGames,
     DeleteFolders { ids: Vec<String> },
 }
@@ -85,18 +89,28 @@ fn release_date_key(value: &str) -> Option<i32> {
     time::Date::from_calendar_date(year, month, day).ok().map(time::Date::to_julian_day)
 }
 
+fn credit_field_names(meta: &Metadata, field: &str) -> Vec<String> {
+    galgear_tags::credit_names(
+        meta_value(meta, field),
+        meta.links
+            .iter()
+            .filter(|link| link.field == field)
+            .map(|link| link.name.as_str()),
+    )
+}
+
+fn filter_brands(game: &Game) -> impl Iterator<Item = String> + '_ {
+    game.metadata
+        .iter()
+        .flat_map(|meta| credit_field_names(meta, "brand"))
+}
+
 // 资料来源与本地标签可独立更换，筛选须包含当前可点击的制作资料，但不回写本地标签。
 fn filter_tags(game: &Game) -> impl Iterator<Item = String> + '_ {
     let credits = game.metadata.iter().flat_map(|meta| {
-        galgear_tags::CREDIT_FIELDS.iter().flat_map(move |field| {
-            galgear_tags::credit_names(
-                meta_value(meta, field),
-                meta.links
-                    .iter()
-                    .filter(|link| link.field == *field)
-                    .map(|link| link.name.as_str()),
-            )
-        })
+        galgear_tags::CREDIT_FIELDS
+            .iter()
+            .flat_map(move |field| credit_field_names(meta, field))
     });
     game.tags.iter().cloned().chain(credits)
 }
@@ -116,6 +130,11 @@ pub(crate) fn matching<'a>(
         .iter()
         .map(|tag| galgear_tags::key(tag))
         .collect();
+    let selected_brands: BTreeSet<_> = state
+        .brand_filter
+        .iter()
+        .map(|brand| galgear_tags::key(brand))
+        .collect();
     let folder = state
         .collection
         .as_ref()
@@ -134,6 +153,12 @@ pub(crate) fn matching<'a>(
                     || g.aliases
                         .iter()
                         .any(|alias| alias.to_lowercase().contains(&query)))
+                && (selected_brands.is_empty()
+                    || selected_brands.is_subset(
+                        &filter_brands(g)
+                            .map(|brand| galgear_tags::key(&brand))
+                            .collect(),
+                    ))
                 && (selected_tags.is_empty()
                     || selected_tags.is_subset(
                         &filter_tags(g)
@@ -426,12 +451,12 @@ mod tests {
         dispatch(&mut app, "tag-filter-open", "");
         let mut html = String::new();
         dialog(&mut html, &app);
-        assert!(!html.contains("class=\"tag-search-results\""));
+        assert!(!html.contains("id=\"tag-query-results\""));
         assert!(!html.contains("tag-filter-selected"));
         app.form.insert("tag-query".into(), "alice".into());
         html.clear();
         dialog(&mut html, &app);
-        assert!(html.contains("Alice Smith"));
+        assert!(html.contains(r#"data-value="Alice Smith" ><span>Alice Smith</span></button>"#));
         assert!(!html.contains("data-value=\"Other\""));
         dispatch(&mut app, "tag-filter", "alice smith");
         dispatch(&mut app, "tag-filter", "ADV");
@@ -562,7 +587,11 @@ mod tests {
             app.form.insert("tag-query".into(), query.into());
             let mut html = String::new();
             dialog(&mut html, &app);
-            assert_eq!(html.matches(&format!("data-value=\"{name}\"")).count(), 1);
+            assert_eq!(
+                html.matches(&format!(r#"data-action="tag-filter" data-value="{name}""#))
+                    .count(),
+                1
+            );
             dispatch(&mut app, "tag-filter", &name.to_ascii_lowercase());
         }
         dispatch(&mut app, "tag-filter", "ADV");
@@ -573,6 +602,54 @@ mod tests {
             .map(|game| game.id.as_str())
             .collect();
         assert_eq!(ids, ["0"]);
+    }
+
+    #[test]
+    fn brand_search_browses_current_brands_and_matches_only_brand_fields() {
+        let mut app = App::default();
+        app.catalog.games = vec![game(0), game(1), game(2)];
+        for (game, brand) in app
+            .catalog
+            .games
+            .iter_mut()
+            .zip(["AliceSoft、枕", "alicesoft", ""])
+        {
+            game.metadata = Some(
+                serde_json::from_value(json!({"brand": brand, "developer": "Other Studio"}))
+                    .unwrap(),
+            );
+            app.settings
+                .game_edits
+                .entry(game.id.clone())
+                .or_default()
+                .setup_confirmed = true;
+        }
+        app.catalog.games[2].tags.push("AliceSoft".into());
+        dispatch(&mut app, "tag-filter-open", "");
+        let mut html = String::new();
+        dialog(&mut html, &app);
+        assert!(html.find("id=\"brand-query\"").unwrap() < html.find("id=\"tag-query\"").unwrap());
+        assert_eq!(html.matches("data-value=\"AliceSoft\"").count(), 1);
+        assert!(html.contains("data-value=\"枕\""));
+        assert!(!html.contains("data-value=\"Other Studio\""));
+
+        app.form.insert("brand-query".into(), " aLi ".into());
+        html.clear();
+        dialog(&mut html, &app);
+        assert!(html.contains("data-value=\"AliceSoft\""));
+        assert!(!html.contains("data-value=\"枕\""));
+        dispatch(&mut app, "brand-filter", "Other Studio");
+        dispatch(&mut app, "brand-filter", "alicesoft");
+        dispatch(&mut app, "tag-filter-apply", "");
+
+        assert_eq!(app.library.brand_filter, ["AliceSoft"]);
+        let ids: Vec<_> = matching(&app.catalog, &app.settings, &app.library, &app.page)
+            .iter()
+            .map(|game| game.id.as_str())
+            .collect();
+        assert_eq!(ids, ["0", "1"]);
+        dispatch(&mut app, "tag-clear", "");
+        assert!(!app.library.has_filters());
     }
 
     #[test]

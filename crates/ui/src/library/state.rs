@@ -62,6 +62,7 @@ pub(crate) struct State {
     pub(crate) search: String,
     pub(crate) path_input: String,
     pub(crate) tag_filter: Vec<String>,
+    pub(crate) brand_filter: Vec<String>,
     pub(crate) status_filter: StatusFilter,
     pub(crate) scanning: bool,
     pub(crate) rescan_pending: bool,
@@ -90,6 +91,7 @@ impl Default for State {
             search: String::new(),
             path_input: String::new(),
             tag_filter: Vec::new(),
+            brand_filter: Vec::new(),
             status_filter: StatusFilter::default(),
             scanning: false,
             rescan_pending: false,
@@ -104,11 +106,12 @@ impl Default for State {
 
 impl State {
     pub(crate) fn has_filters(&self) -> bool {
-        !self.tag_filter.is_empty() || !self.status_filter.is_empty()
+        !self.tag_filter.is_empty() || !self.brand_filter.is_empty() || !self.status_filter.is_empty()
     }
 
     pub(crate) fn clear_filters(&mut self) {
         self.tag_filter.clear();
+        self.brand_filter.clear();
         self.status_filter = StatusFilter::default();
     }
 }

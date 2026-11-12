@@ -5,7 +5,7 @@ import {detailTagClickTarget, installDetailTagReorder} from './detail-tag-reorde
 // Only the DOM / WebAssembly / Tauri transport bridge lives in JavaScript.
 // Rendering, app state, event decisions and all application logic live in Rust.
 import init, * as ui from './pkg/galgear_ui.js';
-import {syncModalBoundary, syncUpdateDialogFocus, topLayer, focusable} from './navigation.js';
+import {syncModalBoundary, syncUpdateDialogFocus, topLayer, focusable, focusNode} from './navigation.js';
 import {startGamepad} from './gamepad.js';
 import {installCoverResolutions, syncCoverResolutions} from './cover-picker.js';
 import {installHomeNavigation, syncHomePresentation, captureHomeDetailCover, syncHomeDetailTransition, returnHomeDetail, cancelHomeDetailTransition} from './home.js';
@@ -214,6 +214,25 @@ function placeChoice() {
   menu.style.left = `${Math.max(8, Math.min(box.left, innerWidth - width - 8))}px`;
   menu.style.top = `${bottomSide ? box.bottom + 6 : Math.max(8, box.top - menu.getBoundingClientRect().height - 6)}px`;
 }
+function placeTagSearch() {
+  const search = document.activeElement?.closest('.tag-search');
+  const input = search?.querySelector('input');
+  const results = search?.querySelector('.tag-search-results');
+  if (!input || !results) return;
+  // 固定定位使候选列表脱离弹窗排版，并避免被正文滚动容器裁切。
+  const box = input.getBoundingClientRect();
+  const width = Math.min(box.width, Math.max(0, innerWidth - 16));
+  results.style.width = `${width}px`;
+  results.style.left = `${Math.max(8, Math.min(box.left, innerWidth - width - 8))}px`;
+  results.style.maxHeight = `${Math.min(240, innerHeight * .35)}px`;
+  const height = results.getBoundingClientRect().height;
+  const below = innerHeight - box.bottom - 12;
+  const above = box.top - 12;
+  const bottomSide = below >= height || below >= above;
+  results.style.maxHeight = `${Math.max(0, Math.min(height, bottomSide ? below : above))}px`;
+  results.style.top = `${bottomSide ? box.bottom + 6 : box.top - results.getBoundingClientRect().height - 6}px`;
+}
+
 let detailReturnAnimation = null;
 function closeDetail() {
   if (detailReturnAnimation) return;
@@ -372,6 +391,7 @@ function renderFrame(html) {
       target?.focus({ preventScroll: true });
     }
     previousLibraryDialog = hasLibraryDialog;
+    placeTagSearch();
     document.querySelectorAll('.sidebar,.page-scroll,.detail-overlay').forEach(node => {
       node.inert = hasEditor || (node.matches('.detail-overlay') && !!detailReturnAnimation);
     });
@@ -599,8 +619,14 @@ document.addEventListener('click', event => {
     return;
   }
   ui.dispatch(element.dataset.action, element.dataset.value || '');
-  if (['tag-filter', 'tag-filter-remove'].includes(element.dataset.action)) {
-    document.getElementById('tag-query')?.focus({ preventScroll: true });
+  const filterField = {
+    'tag-filter': 'tag-query',
+    'tag-filter-remove': 'tag-query',
+    'brand-filter': 'brand-query',
+    'brand-filter-remove': 'brand-query'
+  }[element.dataset.action];
+  if (filterField) {
+    focusNode(document.getElementById(filterField));
   }
 });
 function setAddMenuExpanded(menu, expanded) {
@@ -687,14 +713,14 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!wasmReady || event.isComposing || event.keyCode === 229) return;
-  const tagResults = document.getElementById('tag-search-results');
-  if ((event.target.id === 'tag-query' || event.target.closest('.tag-search-results')) &&
-      ['ArrowDown', 'ArrowUp'].includes(event.key) && tagResults) {
+  const tagResults = event.target.closest('.tag-search')?.querySelector('.tag-search-results');
+  if (tagResults && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
     const options = [...tagResults.querySelectorAll('button')];
+    if (options.length === 0) return;
     const current = options.indexOf(document.activeElement);
     const index = current < 0 ? (event.key === 'ArrowDown' ? 0 : options.length - 1)
       : (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
-    options[index]?.focus({ preventScroll: true });
+    focusNode(options[index]);
     event.preventDefault();
     return;
   }
@@ -737,6 +763,11 @@ document.addEventListener('keydown', event => {
 });
 
 window.addEventListener('resize', placeChoice);
+window.addEventListener('resize', placeTagSearch);
+document.addEventListener('focusin', placeTagSearch);
+document.addEventListener('scroll', event => {
+  if (event.target.matches?.('.library-dialog-body')) placeTagSearch();
+}, true);
 window.addEventListener('resize', measureLibraryBounds);
 window.addEventListener('resize', () => syncSegmentedControls(false));
 document.fonts.ready.then(measureLibraryBounds);

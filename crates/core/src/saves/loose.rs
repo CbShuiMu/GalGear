@@ -1,4 +1,4 @@
-//! 混合目录中的存档集合。只收录有明确名称或原生格式证据的文件。
+//! 混合目录中的存档集合：组织已选文件，本地自动发现仅使用明确名称或原生格式证据。
 use super::{SaveLocation, SaveReport, kirikiri};
 use crate::{Game, config::display_path};
 use std::{
@@ -44,23 +44,8 @@ fn slot(name: &str, prefix: &str, suffix: &str) -> bool {
         .is_some_and(|number| !number.is_empty() && number.bytes().all(|c| c.is_ascii_digit()))
 }
 
-pub(super) fn possible_save(path: &Path) -> bool {
-    let name = path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_lowercase();
-    let extension = path
-        .extension()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_lowercase();
-    matches!(
-        extension.as_str(),
-        "sav" | "save" | "dat" | "ksd" | "asd" | "rpgsave" | "rmmzsave" | "bin" | "json" | "ini"
-    ) || extension.ends_with("save-willplus")
-        || matches!(name.as_str(), "persistent" | "envdata")
-        || kirikiri::recognizable(path)
+pub(super) fn nson_save(name: &str) -> bool {
+    name == "globalsave.nson" || slot(name, "gamesave", ".nson")
 }
 
 pub(super) fn discover(game: &Game, report: &mut SaveReport) {

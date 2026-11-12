@@ -1,7 +1,8 @@
 //! Library actions.
 use crate::{
     bridge::reset_scroll, features, library::Dialog, library::clear_selection,
-    library::filter_tags, library::matching, requests::Pending, requests::issue, state::App,
+    library::filter_brands, library::filter_tags, library::matching, requests::Pending,
+    requests::issue, state::App,
 };
 use serde_json::json;
 
@@ -52,31 +53,47 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         "tag-filter-open" => {
             app.library.dialog = Some(Dialog::Tags {
                 selected: app.library.tag_filter.clone(),
+                brands: app.library.brand_filter.clone(),
                 status: app.library.status_filter,
             });
             app.form.insert("tag-query".into(), String::new());
+            app.form.insert("brand-query".into(), String::new());
             app.choices.open = None;
         }
-        "tag-filter" => {
-            let tag = app
-                .catalog
-                .games
-                .iter()
-                .flat_map(filter_tags)
-                .find(|tag| galgear_tags::key(tag) == galgear_tags::key(value));
-            if let (Some(Dialog::Tags { selected, .. }), Some(tag)) = (&mut app.library.dialog, tag) {
-                if !selected
-                    .iter()
-                    .any(|name| galgear_tags::key(name) == galgear_tags::key(&tag))
-                {
-                    selected.push(tag);
+        "tag-filter" | "brand-filter" => {
+            let Some(Dialog::Tags {
+                selected, brands, ..
+            }) = &mut app.library.dialog
+            else {
+                return true;
+            };
+            let key = galgear_tags::key(value);
+            let games = app.catalog.games.iter();
+            let same_name = |name: &String| galgear_tags::key(name) == key;
+            let (names, candidate, field) = if action == "brand-filter" {
+                (brands, games.flat_map(filter_brands).find(same_name), "brand-query")
+            } else {
+                (selected, games.flat_map(filter_tags).find(same_name), "tag-query")
+            };
+            if let Some(name) = candidate {
+                if !names.iter().any(same_name) {
+                    names.push(name);
                 }
-                app.form.insert("tag-query".into(), String::new());
+                app.form.insert(field.into(), String::new());
             }
         }
-        "tag-filter-remove" => {
-            if let Some(Dialog::Tags { selected, .. }) = &mut app.library.dialog {
-                selected.retain(|tag| galgear_tags::key(tag) != galgear_tags::key(value));
+        "tag-filter-remove" | "brand-filter-remove" => {
+            if let Some(Dialog::Tags {
+                selected, brands, ..
+            }) = &mut app.library.dialog
+            {
+                let names = if action == "brand-filter-remove" {
+                    brands
+                } else {
+                    selected
+                };
+                let key = galgear_tags::key(value);
+                names.retain(|name| galgear_tags::key(name) != key);
             }
         }
         "tag-status" => {
@@ -85,8 +102,14 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "tag-filter-apply" => {
-            if let Some(Dialog::Tags { selected, status }) = app.library.dialog.take() {
+            if let Some(Dialog::Tags {
+                selected,
+                brands,
+                status,
+            }) = app.library.dialog.take()
+            {
                 app.library.tag_filter = selected;
+                app.library.brand_filter = brands;
                 app.library.status_filter = status;
                 clear_selection(&mut app.library);
                 #[cfg(target_arch = "wasm32")]
@@ -103,8 +126,8 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.detail.editor = None;
             app.library.dialog = None;
             app.choices.open = None;
+            app.library.clear_filters();
             app.library.tag_filter = vec![value.into()];
-            app.library.status_filter = Default::default();
             app.library.search.clear();
             #[cfg(target_arch = "wasm32")]
             reset_scroll();

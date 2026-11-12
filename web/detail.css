@@ -289,6 +289,7 @@
     box-shadow: inset 0 0 0 1px var(--button-line);
 }
 :root .app-shell[data-theme] .reference-detail .game-tools-shortcuts .game-settings-button {
+    position: relative;
     width: 40px;
     height: 40px;
     flex: 0 0 40px;
@@ -296,21 +297,48 @@
     border: 0;
     background: transparent;
 }
-.game-tools-shortcuts .game-settings-button .icon { transition: transform 320ms cubic-bezier(.2,.7,.2,1); }
+.game-tools-shortcuts .game-settings-button .icon,.game-tools-status { transition: transform 320ms cubic-bezier(.2,.7,.2,1); }
+.game-tools-status {
+    position: absolute;
+    inset: -2px;
+    pointer-events: none;
+}
+.game-tool-segment {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    fill: none;
+    stroke: var(--tool-color);
+    stroke-width: 2;
+    stroke-linecap: round;
+    opacity: 0;
+    transform: rotate(calc(var(--tool-index) * 90deg)) translate(0, 0) scale(1);
+    /* 收起按 AI、备份、超分、转区聚回；展开沿快捷按钮顺序扩散。 */
+    transition: transform 200ms cubic-bezier(.2,.7,.2,1), opacity 200ms ease;
+    transition-delay: calc((3 - var(--tool-index)) * 40ms);
+}
+.game-tool-segment[data-active="true"] { opacity: 1; }
 .game-tools-reveal { width: 0; overflow: hidden; visibility: hidden; transition: width 320ms cubic-bezier(.2,.7,.2,1), visibility 320ms; }
 .game-tools-buttons { display: flex; align-items: center; gap: 4px; width: max-content; padding: 4px 6px 4px 2px; opacity: 0; transition: opacity 160ms ease; }
 /* 关闭弹窗会把焦点还给齿轮。鼠标聚焦齿轮时，由悬停决定是否展开。 */
 .game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) .game-tools-reveal { width: calc(var(--quick-tool-size) * 4 + 20px); visibility: visible; }
 .game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) .game-tools-buttons { opacity: 1; }
-.game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) .game-settings-button .icon { transform: rotate(90deg); }
-.game-tool-shortcut.tool-locale { --tool-color: #087e8b; }
-.game-tool-shortcut.tool-upscale { --tool-color: #27834e; }
-.game-tool-shortcut.tool-backup { --tool-color: #bd477f; }
-.game-tool-shortcut.tool-ai { --tool-color: #356fc7; }
-[data-theme="dark"] .game-tool-shortcut.tool-locale { --tool-color: #6dd9e2; }
-[data-theme="dark"] .game-tool-shortcut.tool-upscale { --tool-color: #7cdaa0; }
-[data-theme="dark"] .game-tool-shortcut.tool-backup { --tool-color: #f49bc3; }
-[data-theme="dark"] .game-tool-shortcut.tool-ai { --tool-color: #91baff; }
+.game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) :is(.game-settings-button .icon,.game-tools-status) { transform: rotate(90deg); }
+.game-tools-shortcuts:is(:hover,:has(:focus-visible,.game-tool-shortcut:focus),.controller-active :focus-within) .game-tool-segment {
+    opacity: 0;
+    transform: rotate(calc(var(--tool-index) * 90deg)) translate(-6px, -6px) scale(1.14);
+    transition-delay: calc(var(--tool-index) * 40ms);
+}
+.game-tools-shortcuts .tool-locale { --tool-color: #087e8b; }
+.game-tools-shortcuts .tool-upscale { --tool-color: #27834e; }
+.game-tools-shortcuts .tool-backup { --tool-color: #bd477f; }
+.game-tools-shortcuts .tool-ai { --tool-color: #356fc7; }
+[data-theme="dark"] .game-tools-shortcuts .tool-locale { --tool-color: #6dd9e2; }
+[data-theme="dark"] .game-tools-shortcuts .tool-upscale { --tool-color: #7cdaa0; }
+[data-theme="dark"] .game-tools-shortcuts .tool-backup { --tool-color: #f49bc3; }
+[data-theme="dark"] .game-tools-shortcuts .tool-ai { --tool-color: #91baff; }
 :root .app-shell[data-theme] .reference-detail .game-tool-shortcut {
     display: grid;
     place-items: center;
@@ -352,7 +380,8 @@
 @media (hover: none) {
     .game-tools-shortcuts .game-tools-reveal { width: calc(var(--quick-tool-size) * 4 + 20px); visibility: visible; }
     .game-tools-shortcuts .game-tools-buttons { opacity: 1; }
+    .game-tools-status { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-    .game-tools-shortcuts .game-settings-button .icon,.game-tools-reveal,.game-tools-buttons { transition: none; }
+    .game-tools-shortcuts .game-settings-button .icon,.game-tools-status,.game-tool-segment,.game-tools-reveal,.game-tools-buttons { transition: none; }
 }

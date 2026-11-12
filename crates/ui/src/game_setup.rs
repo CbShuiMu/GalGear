@@ -485,9 +485,13 @@ pub(crate) fn resolve(
                             .map_err(|error| error.to_string())?;
                         row.query = result.query;
                         row.candidates = result.candidates;
-                        if let Some(url) = result.matched_url.filter(|url| {
-                            !url.is_empty() && row.candidates.iter().any(|candidate| candidate.url == *url)
-                        }) {
+                        if let [first, _, ..] = row.candidates.as_slice() {
+                            row.url.clone_from(&first.url);
+                        } else if let ([candidate], Some(url)) =
+                            (row.candidates.as_slice(), result.matched_url)
+                            && !url.is_empty()
+                            && candidate.url == url
+                        {
                             row.url = url;
                             row.confirmed = true;
                         }
@@ -952,7 +956,13 @@ mod tests {
             assert_eq!(command, "search_game_metadata");
             assert!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["id"].is_string());
             let kind = app.requests.complete(*request_id).unwrap();
-            resolve(&mut app, &kind, *request_id, true, r#"{"query":"Second","candidates":[{"title":"First","url":"https://vndb.org/v1"},{"title":"Second","url":"https://vndb.org/v2"}],"matched_url":"https://vndb.org/v2"}"#);
+            resolve(
+                &mut app,
+                &kind,
+                *request_id,
+                true,
+                r#"{"query":"Second","candidates":[{"title":"Second","url":"https://vndb.org/v2"}],"matched_url":"https://vndb.org/v2"}"#,
+            );
         }
         assert!(crate::bridge::take_requests().is_empty());
         assert!(app.setup.open);

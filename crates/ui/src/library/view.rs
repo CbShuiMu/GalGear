@@ -148,6 +148,7 @@ fn toolbar(html: &mut String, app: &App, games: &[&Game]) {
             app.library.status_filter.options().iter()
                 .filter(|(_, _, active)| *active)
                 .map(|(_, key, _)| t(app, key))
+                .chain(app.library.brand_filter.iter().map(String::as_str))
                 .chain(app.library.tag_filter.iter().map(String::as_str))
                 .collect::<Vec<_>>().join("、")
         };

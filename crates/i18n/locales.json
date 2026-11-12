@@ -3019,6 +3019,16 @@
     "ja-JP": "詳細操作",
     "en-US": "Advanced"
   },
+  "tags.brand_search": {
+    "zh-CN": "制作组",
+    "ja-JP": "制作ブランド",
+    "en-US": "Studio"
+  },
+  "tags.brand_search_placeholder": {
+    "zh-CN": "搜索制作组",
+    "ja-JP": "制作ブランドを検索",
+    "en-US": "Search studios"
+  },
   "tags.search_placeholder": {
     "zh-CN": "搜索并添加标签、制作人员或制作组",
     "ja-JP": "タグ・スタッフ・制作会社を検索して追加",

@@ -242,6 +242,33 @@ test('unmatched automatic candidates remain available and require manual confirm
   assert.equal(app.requests.filter(request => request.command === 'complete_game_setup').length, 1);
 });
 
+test('multiple automatic candidates preselect the first and require confirmation before saving', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.dispatch('setup-auto', '');
+  const first = {title: 'First candidate', url: 'https://vndb.org/v1'};
+  const exact = {title: 'Exact match', url: 'https://vndb.org/v2'};
+  app.reply('search_game_metadata', {
+    query: exact.title, candidates: [first, exact], matched_url: exact.url,
+  });
+  assert.match(app.html, /First candidate/);
+  assert.match(app.html, /data-action="setup-confirm-launcher" data-value="new" aria-pressed="false"/);
+  assert.match(app.html, /未匹配或失败 1/);
+  app.ui.dispatch('setup-save', '');
+  assert.equal(app.requests.some(request => request.command === 'complete_game_setup'), false);
+
+  app.ui.dispatch('choice-toggle', 'setup-candidate:new');
+  assert.match(app.html, /Exact match/);
+  app.ui.dispatch('choice-toggle', 'setup-candidate:new');
+  app.ui.dispatch('setup-confirm-launcher', 'new');
+  app.ui.dispatch('setup-save', '');
+  const save = app.requests.find(request => request.command === 'complete_game_setup');
+  assert.equal(save?.payload.url, first.url);
+  assert.equal(save?.payload.confirmed, true);
+});
+
 test('candidate dropdown renders separate escaped title, brand and release rows', async () => {
   const app = await emptyHome();
   app.addFolder();

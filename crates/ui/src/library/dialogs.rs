@@ -1,10 +1,83 @@
 //! Library dialogs.
 use crate::{
-    choices, features, library::Dialog, library::filter_tags, library::folder_path,
-    library::ordered, library::subtree, state::App, view::f, view::form_field, view::t,
-    widgets::button, widgets::esc, widgets::icon,
+    choices, features, library::Dialog, library::filter_brands, library::filter_tags,
+    library::folder_path, library::ordered, library::subtree, state::App, view::f, view::form_field,
+    view::t, widgets::button, widgets::esc, widgets::icon,
 };
 use std::{collections::BTreeSet, fmt::Write};
+
+struct TagSearch {
+    field: &'static str,
+    label: &'static str,
+    placeholder: &'static str,
+    action: &'static str,
+    show_all: bool,
+}
+
+const BRAND_SEARCH: TagSearch = TagSearch {
+    field: "brand-query",
+    label: "tags.brand_search",
+    placeholder: "tags.brand_search_placeholder",
+    action: "brand-filter",
+    show_all: true,
+};
+
+const TAG_SEARCH: TagSearch = TagSearch {
+    field: "tag-query",
+    label: "common.search",
+    placeholder: "tags.search_placeholder",
+    action: "tag-filter",
+    show_all: false,
+};
+
+fn tag_search(
+    html: &mut String,
+    app: &App,
+    search: &TagSearch,
+    selected: &[String],
+    names: impl Iterator<Item = String>,
+) {
+    let TagSearch {
+        field,
+        label,
+        placeholder,
+        action,
+        show_all,
+    } = *search;
+    let query = features::form(app, field);
+    let show_results = show_all || !query.trim().is_empty();
+    let controls = if show_results {
+        format!(r#" aria-controls="{field}-results""#)
+    } else {
+        String::new()
+    };
+    write!(html, r#"<div class="tag-search"><label class="edit-field"><span>{}</span><input id="{field}" data-input="{field}" type="search" value="{}" placeholder="{}" autocomplete="off"{controls}/></label>"#, t(app, label), esc(&query), t(app, placeholder)).unwrap();
+    if show_results {
+        let selected: BTreeSet<_> = selected.iter().map(|name| galgear_tags::key(name)).collect();
+        let query = query.trim().to_lowercase();
+        let mut names = galgear_tags::normalize(names);
+        names.retain(|name| {
+            name.to_lowercase().contains(&query) && !selected.contains(&galgear_tags::key(name))
+        });
+        names.sort_by_cached_key(|name| name.to_lowercase());
+        write!(html, r#"<div id="{field}-results" class="tag-search-results">"#).unwrap();
+        if names.is_empty() {
+            write!(html, "<p class=\"muted\">{}</p>", t(app, "choice.empty")).unwrap();
+        }
+        for name in &names {
+            html.push_str(&button(
+                action,
+                name,
+                &esc(name),
+                "",
+                "quiet tag-search-option",
+                false,
+            ));
+        }
+        html.push_str("</div>");
+    }
+    html.push_str("</div>");
+}
 
 fn affected(app: &App, id: &str) -> (usize, usize) {
     let mut folders = BTreeSet::from([id.to_owned()]);
@@ -104,53 +177,45 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
             }
             html.push_str("</ul>");
         }
-        Dialog::Tags { selected, status } => {
+        Dialog::Tags {
+            selected,
+            brands,
+            status,
+        } => {
             write!(html, r#"<fieldset class="tag-status-filter"><legend>{}</legend><div>"#, t(app, "tags.game_status")).unwrap();
             for (value, key, active) in status.options() {
                 write!(html, r#"<button type="button" class="button secondary {}" data-action="tag-status" data-value="{}" aria-pressed="{}">{}</button>"#,
                     if active { "active" } else { "" }, value, active, t(app, key)).unwrap();
             }
             html.push_str("</div></fieldset>");
-            let query = features::form(app, "tag-query");
-            write!(html, r#"<div class="tag-search"><label class="edit-field"><span>{}</span><input id="tag-query" data-input="tag-query" type="search" value="{}" placeholder="{}" autocomplete="off" aria-controls="tag-search-results"/></label>"#, t(app, "common.search"), esc(&query), t(app, "tags.search_placeholder")).unwrap();
-            if !query.trim().is_empty() {
-                let mut tags =
-                    galgear_tags::normalize(app.catalog.games.iter().flat_map(filter_tags));
-                tags.sort_by_cached_key(|tag| tag.to_lowercase());
-                let query = query.trim().to_lowercase();
-                html.push_str("<div id=\"tag-search-results\" class=\"tag-search-results\">");
-                let mut count = 0;
-                for tag in tags.iter().filter(|tag| {
-                    tag.to_lowercase().contains(&query)
-                        && !selected
-                            .iter()
-                            .any(|name| galgear_tags::key(name) == galgear_tags::key(tag))
-                }) {
-                    count += 1;
-                    html.push_str(&button(
-                        "tag-filter",
-                        tag,
-                        &esc(tag),
-                        "plus",
-                        "quiet tag-search-option",
-                        false,
-                    ));
-                }
-                if count == 0 {
-                    write!(html, "<p class=\"muted\">{}</p>", t(app, "choice.empty")).unwrap();
-                }
-                html.push_str("</div>");
-            }
-            html.push_str("</div>");
-            if !selected.is_empty() {
+            let games = &app.catalog.games;
+            tag_search(
+                html,
+                app,
+                &BRAND_SEARCH,
+                brands,
+                games.iter().flat_map(filter_brands),
+            );
+            tag_search(
+                html,
+                app,
+                &TAG_SEARCH,
+                selected,
+                games.iter().flat_map(filter_tags),
+            );
+            if !selected.is_empty() || !brands.is_empty() {
                 write!(
                     html,
                     r#"<div class="tag-filter-selected" aria-label="{}">"#,
                     t(app, "tags.selected")
                 )
                 .unwrap();
-                for tag in selected {
-                    write!(html, r#"<span class="selected-tag"><span>{}</span><button type="button" class="icon-button" data-action="tag-filter-remove" data-value="{}" aria-label="{}">{}</button></span>"#, esc(tag), esc(tag), esc(&f(app, "tags.remove", &[("name", tag)])), icon("close")).unwrap();
+                for (names, action) in
+                    [(brands, "brand-filter-remove"), (selected, "tag-filter-remove")]
+                {
+                    for name in names {
+                        write!(html, r#"<span class="selected-tag"><span>{}</span><button type="button" class="icon-button" data-action="{action}" data-value="{}" aria-label="{}">{}</button></span>"#, esc(name), esc(name), esc(&f(app, "tags.remove", &[("name", name)])), icon("close")).unwrap();
+                    }
                 }
                 html.push_str("</div>");
             }
