@@ -23,6 +23,7 @@ pub mod playtime;
 pub mod potatovn;
 pub mod play_sessions;
 pub mod providers;
+pub mod rate_limit;
 pub mod runtime;
 pub mod saves;
 pub mod scanner;

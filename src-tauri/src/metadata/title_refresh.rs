@@ -57,6 +57,7 @@ pub(crate) async fn refresh_title_metadata(
             let result = state
                 .metadata_search
                 .search(
+                    &state.setup_service,
                     state.store.path.clone(),
                     lookup.source.clone(),
                     initial.fan_domain.clone(),

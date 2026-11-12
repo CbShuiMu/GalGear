@@ -1,5 +1,16 @@
 import {focusable, focusNode} from './navigation.js';
 
+// 桌面 CSP 禁止更新 HTML style 属性，CSSOM 属性赋值可正常生效。
+// 必须在恢复滚动位置和测量视口之前同步，保证复用的占位行立即采用新高度。
+export function syncSetupSpacers(scroller) {
+  for (const cell of scroller?.querySelectorAll('[data-setup-spacer-rows]') || []) {
+    const rows = Number(cell.dataset.setupSpacerRows);
+    if (Number.isSafeInteger(rows) && rows >= 0) {
+      cell.style.height = `calc(var(--setup-row-height) * ${rows})`;
+    }
+  }
+}
+
 // Geometry and focus only. Drafts and the full batch queue belong to Rust.
 export function installSetupScroll(update) {
   let scroller = null;

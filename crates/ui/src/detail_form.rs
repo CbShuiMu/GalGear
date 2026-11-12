@@ -5,10 +5,11 @@ use crate::{
     requests::Pending,
     requests::issue,
     state::{App, show_toast},
+    widgets::{esc, progress_toast},
 };
 use galgear_i18n::Message;
 use serde_json::json;
-use std::{collections::BTreeMap, fmt::Write};
+use std::collections::BTreeMap;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 pub(crate) fn begin(app: &mut App) {
@@ -133,7 +134,11 @@ pub(crate) fn render_refresh_progress(html: &mut String, app: &App) {
         .iter()
         .any(|id| current_refresh(app, *id))
     {
-        write!(html, r#"<div id="title-refresh-toast" class="toast save-ai-toast" role="status" aria-live="polite" aria-atomic="true"><span class="network-spinner" aria-hidden="true"></span><span>{}</span></div>"#, crate::view::t(app, "detail.title_refreshing")).unwrap();
+        progress_toast(
+            html,
+            "title-refresh-toast",
+            &esc(crate::view::t(app, "detail.title_refreshing")),
+        );
     }
 }
 

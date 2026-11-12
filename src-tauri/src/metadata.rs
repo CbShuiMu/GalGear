@@ -35,7 +35,7 @@ pub(crate) async fn search_metadata(
         let settings = state.settings.lock().map_err(|_| Message::new("error.config_state"))?;
         (source.unwrap_or_else(|| settings.metadata_provider.clone()), settings.fan_domain.clone())
     };
-    state.metadata_search.search(state.store.path.clone(), source, domain, query).await
+    state.metadata_search.search(&state.setup_service, state.store.path.clone(), source, domain, query).await
 }
 
 #[tauri::command]

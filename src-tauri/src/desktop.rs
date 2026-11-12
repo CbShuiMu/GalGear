@@ -224,6 +224,7 @@ pub(crate) fn run() {
             ai_summary::open_ai_route_map,
             game_setup::choose_setup_executable,
             game_setup::complete_game_setup,
+            game_setup::complete_game_setup_batch,
             game_setup::rematch_game_metadata,
             game_setup::list_game_executables,
             game_setup::confirm_game_executable,

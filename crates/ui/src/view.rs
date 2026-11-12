@@ -2,7 +2,10 @@
 use crate::patches::{download_notice, patches_page};
 use crate::{
     accounts, bridge::render, choices, context_menu, detail, game_setup, library, models::Game,
-    preferences, requests::Pending, state::App, widgets::brand, widgets::esc, widgets::icon,
+    preferences,
+    requests::Pending,
+    state::{App, toast_in_progress},
+    widgets::{brand, esc, icon, progress_icon, progress_toast},
 };
 use galgear_i18n::{format_text, tr};
 use std::fmt::Write;
@@ -48,7 +51,13 @@ pub(crate) fn network_popup(html: &mut String, app: &App) {
     if activities.is_empty() {
         return;
     }
-    write!(html, r#"<aside class="network-popup" role="status" aria-live="polite" aria-atomic="true" aria-label="{}"><span class="network-spinner" aria-hidden="true"></span><div class="network-copy"><strong>{}</strong><ul>"#, t(app,"network.title"),t(app,"network.title")).unwrap();
+    let title = t(app, "network.title");
+    write!(
+        html,
+        r#"<aside class="network-popup" role="status" aria-live="polite" aria-atomic="true" aria-label="{title}">{}<div class="network-copy"><strong>{title}</strong><ul>"#,
+        progress_icon()
+    )
+    .unwrap();
     for text in activities {
         write!(html, "<li>{}</li>", esc(&text)).unwrap();
     }
@@ -151,23 +160,47 @@ pub(crate) fn paint(app: &App) {
     crate::detail_form::render_refresh_progress(&mut html, app);
     if app.library.scanning {
         // 扫描提示随任务结束移除，不使用普通消息的定时消失机制。
-        let _ = write!(
-            html,
-            r#"<div id="library-import-toast" class="toast save-ai-toast" role="status" aria-atomic="true"><span>{}</span></div>"#,
-            f(
+        progress_toast(
+            &mut html,
+            "library-import-toast",
+            &f(
                 app,
                 "library.import_progress",
                 &[
                     ("done", &app.library.scan_completed.to_string()),
                     ("total", &app.library.scan_total.to_string()),
                 ]
-            )
+            ),
         );
     }
     if let Some((message, error)) = &app.toast {
-        write!(html, r#"<div class="toast {} {}" role="{}">{}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
-            if *error { "error" } else { "" }, if message.key.starts_with("save.ai_") || message.key.starts_with("local_patches.") || message.key.starts_with("update.") || message.key.starts_with("setup.auto_") || matches!(message.key.as_str(), "patches.nextmoe_download_key" | "patches.nextmoe_file_missing") { "save-ai-toast" } else { "" }, if *error { "alert" } else { "status" },
-            if matches!(message.key.as_str(), "local_patches.installing" | "local_patches.switching") { r#"<span class="network-spinner" aria-hidden="true"></span>"#.into() } else { icon(if *error { "error" } else { "check" }) }, esc(&message.render(app.settings.language)), t(app,"common.close"), icon("close")).unwrap();
+        let key = message.key.as_str();
+        let bottom_right = key.starts_with("save.ai_")
+            || key.starts_with("local_patches.")
+            || key.starts_with("update.")
+            || key.starts_with("setup.auto_")
+            || key.starts_with("setup.save_")
+            || matches!(key, "patches.nextmoe_download_key" | "patches.nextmoe_file_missing");
+        let status_icon = if *error {
+            icon("error")
+        } else if toast_in_progress(key) {
+            progress_icon()
+        } else if key == "setup.auto_stopped" {
+            icon("about")
+        } else {
+            icon("check")
+        };
+        write!(
+            html,
+            r#"<div class="toast {} {}" role="{}">{status_icon}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
+            if *error { "error" } else { "" },
+            if bottom_right { "save-ai-toast" } else { "" },
+            if *error { "alert" } else { "status" },
+            esc(&message.render(app.settings.language)),
+            t(app, "common.close"),
+            icon("close")
+        )
+        .unwrap();
     }
     network_popup(&mut html, app);
     download_notice(&mut html, app);

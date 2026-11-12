@@ -1,5 +1,6 @@
 //! Stateless HTML primitives and formatting.
 use crate::icons;
+use std::fmt::Write;
 
 pub(crate) fn esc(value: &str) -> String {
     value
@@ -79,6 +80,24 @@ pub(crate) fn icon(name: &str) -> String {
 
 pub(crate) fn brand() -> &'static str {
     r#"<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 8c-12-12-22 5-11 11C-4 20 6 37 16 31c-3 17 17 17 16 4 13 9 24-7 12-14C50 8 33 1 28 14Z" fill="currentColor" transform="translate(-2 2) scale(.92)"/><circle cx="24" cy="24" r="5" fill="white"/><path d="m20 24 3 3 6-7" stroke="white" stroke-width="2"/></svg>"#
+}
+
+/// 渲染进行中通知使用的刷新图标。
+pub(crate) fn progress_icon() -> String {
+    format!(
+        r#"<span class="notification-progress-icon">{}</span>"#,
+        icon("refresh")
+    )
+}
+
+/// 渲染随任务状态显示的通知，正文由调用方转义。
+pub(crate) fn progress_toast(html: &mut String, id: &str, message_html: &str) {
+    write!(
+        html,
+        r#"<div id="{id}" class="toast save-ai-toast" role="status" aria-atomic="true">{}<span>{message_html}</span></div>"#,
+        progress_icon()
+    )
+    .unwrap();
 }
 
 pub(crate) fn button(

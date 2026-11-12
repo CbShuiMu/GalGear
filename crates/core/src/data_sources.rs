@@ -222,6 +222,7 @@ fn api_error(detail: impl std::fmt::Display) -> Message {
     Message::detail("sources.api_error", detail)
 }
 fn response_json(response: Response) -> Result<Value, Message> {
+    crate::rate_limit::check(&response)?;
     let status = response.status();
     if status.as_u16() == 401 || status.as_u16() == 403 {
         return Err(Message::new("sources.auth_error"));
@@ -761,13 +762,22 @@ fn add_bangumi_people(meta: &mut Metadata, people: &Value) {
 }
 
 pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Metadata, Message> {
+    metadata_with_client(&providers::client()?, domain, url, credentials)
+}
+
+/// 使用调用方连接池读取完整资料，不缓存账号凭据。
+pub fn metadata_with_client(
+    client: &Client,
+    domain: &str,
+    url: &str,
+    credentials: &Credentials,
+) -> Result<Metadata, Message> {
     let (source, id) = source_for_url(url)?;
     if source == "2dfan" {
         return providers::fan_metadata(domain, url, credentials.fan.as_ref());
     }
-    let client = providers::client()?;
     match source {
-        "erogamescape" => erogamescape::metadata(&client, &id),
+        "erogamescape" => erogamescape::metadata(client, &id),
         "vndb" => {
             let value = request_json(auth(client.post("https://api.vndb.org/kana/vn"),source,credentials).json(&json!({"filters":["id","=",format!("v{id}")],"fields":"title,alttitle,description,released,image.url,developers.name,tags.name,tags.spoiler,staff.name,staff.role","results":1})))?;
             parse_vndb(&value, url)
@@ -788,10 +798,10 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
             Ok(meta)
         }
         "ymgal" => {
-            let value = ym_request(&client, credentials, "/open/archive", &[("gid", &id)])?;
+            let value = ym_request(client, credentials, "/open/archive", &[("gid", &id)])?;
             let mut meta = parse_ymgal(&value, url)?;
             if let Some(org_id) = numeric_id(&value["game"]["developerId"]).filter(|id| id != "0") {
-                let org = ym_request(&client, credentials, "/open/archive", &[("orgId", &org_id)])?;
+                let org = ym_request(client, credentials, "/open/archive", &[("orgId", &org_id)])?;
                 meta.developer = text(&org["org"], "name");
                 meta.brand.clone_from(&meta.developer);
                 if !meta.brand.is_empty() {
@@ -804,7 +814,7 @@ pub fn metadata(domain: &str, url: &str, credentials: &Credentials) -> Result<Me
             }
             Ok(meta)
         }
-        "nextmoe" => nextmoe::metadata(&client, &id, url, credentials),
+        "nextmoe" => nextmoe::metadata(client, &id, url, credentials),
         _ => Err(Message::new("error.site_url")),
     }
 }

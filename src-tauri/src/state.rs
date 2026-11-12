@@ -13,6 +13,7 @@ pub(crate) struct AppState {
     pub(crate) playtime: Mutex<playtime::Records>,
     pub(crate) scan: library::ScanState,
     pub(crate) aliases: crate::metadata::AliasState,
+    pub(crate) setup_service: crate::game_setup::Service,
     pub(crate) metadata_search: crate::metadata::search::Service,
     pub(crate) source_oauth: crate::data_sources::OAuthState,
     pub(crate) account: accounts::AccountState,
@@ -80,6 +81,14 @@ impl AppState {
             &mut cached,
         );
         for game in &mut cached.games {
+            if game.cover.is_none()
+                && let Some(path) = settings.cover_overrides.get(&game.id)
+            {
+                match galgear_core::scanner::poster_data(std::path::Path::new(path)) {
+                    Ok(cover) => game.cover = Some(cover),
+                    Err(error) => game.metadata_warning = Some(error),
+                }
+            }
             let _ = prepare_cover(game, &store.path.with_file_name("covers").join("rendered"));
             catalog::apply_edits(game, &settings);
             if let Some(record) = play_records.get(&game.id) {
@@ -105,6 +114,7 @@ impl AppState {
             scan: library::ScanState::default(),
             aliases: Default::default(),
             metadata_search: Default::default(),
+            setup_service: Default::default(),
             account,
             source_oauth: Default::default(),
             downloads: downloads::DownloadState::default(),

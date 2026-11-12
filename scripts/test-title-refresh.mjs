@@ -68,6 +68,7 @@ test('notice starts only when a new unique work is found, persists past toast ti
   const timerCount = app.timers.length;
   app.ui.title_refresh_started(id);
   assert.equal(app.notice, true);
+  assert.match(app.html, /id="title-refresh-toast"[^>]*><span class="notification-progress-icon"><svg/);
   assert.match(app.html, /正在同步封面，标签与资料/);
   assert.equal(app.timers.length, timerCount, 'sync notice must not install an expiry timer');
   for (const token of app.timers) app.ui.expire_toast(token);

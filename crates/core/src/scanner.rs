@@ -215,21 +215,7 @@ fn visit(
     files.sort();
     children.sort();
     let executable = choose_executable(&files);
-    let assets = files.iter().any(|p| {
-        matches!(
-            extension(p).as_str(),
-            "noa" | "xp3" | "arc" | "pfs" | "rpa" | "pak" | "wolf" | "rgss3a" | "dat"
-        )
-    }) || children.iter().any(|p| {
-        matches!(
-            file_name(p).to_lowercase().as_str(),
-            "www" | "renpy" | "gamedata"
-        )
-    }) || files
-        .iter()
-        .any(|p| matches!(extension(p).as_str(), "ks" | "nsa"));
-    let single_exe = executable.as_ref().is_some_and(|p| !generic_executable(p));
-    if executable.is_some() && (assets || single_exe) {
+    if executable.is_some() {
         let folder = unit.unwrap_or(dir);
         let identity = fs::canonicalize(folder).unwrap_or_else(|_| folder.to_owned());
         let id = format!(
@@ -241,7 +227,7 @@ fn visit(
             .installed
             .find(&display_path(dir), detected_executable.as_deref());
         let id = existing.map(|game| game.id.clone()).unwrap_or(id);
-        let title = crate::catalog::title::from_directory(folder);
+        let title = crate::catalog::title::from_directory(dir);
         let mut stamp = Sha256::new();
         let override_path = settings.cover_overrides.get(&id).map(PathBuf::from);
         let cover_paths: Vec<_> = [find_cover(dir), find_cover(folder)]
@@ -270,11 +256,18 @@ fn visit(
             && cache.reuse_files
             && game.scan_stamp == scan_stamp
         {
-            result.games.push(game.clone());
-            progress(result);
-            if executable.is_some() {
-                return;
+            let mut game = game.clone();
+            // 文件缓存可复用，尚未关联资料的扫描名称仍按当前命名规则生成。
+            if game.metadata.is_none()
+                && settings
+                    .game_edits
+                    .get(&id)
+                    .is_none_or(|edit| edit.title.is_none())
+            {
+                game.title = title;
             }
+            result.games.push(game);
+            progress(result);
         } else {
             let cover = settings
                 .cover_overrides
@@ -318,9 +311,7 @@ fn visit(
             });
             progress(result);
         }
-        if executable.is_some() {
-            return;
-        }
+        return;
     }
     let container = is_collection(&file_name(dir)) || looks_like_container(&children);
     for child in children {
@@ -461,15 +452,6 @@ fn tool_executable(path: &Path) -> bool {
     .any(|s| name.contains(s))
 }
 
-fn generic_executable(path: &Path) -> bool {
-    let name = file_name(path).to_lowercase();
-    name.starts_with("advhd")
-        || matches!(
-            name.as_str(),
-            "game.exe" | "launcher.exe" | "siglusengine.exe"
-        )
-}
-
 fn detect_engine(files: &[PathBuf], children: &[PathBuf]) -> String {
     if files.iter().any(|p| extension(p) == "noa") {
         "Entis GLS"
@@ -587,7 +569,88 @@ mod tests {
     }
 
     #[test]
-    fn imports_name_generic_directories_before_setup_including_a_selected_game_root() {
+    fn generic_executables_without_resources_are_imported_for_setup() {
+        let temp = tempfile::tempdir().unwrap();
+        let executables = [
+            "AdvHDDD.exe",
+            "game.exe",
+            "launcher.exe",
+            "SiglusEngine.exe",
+        ];
+        for name in executables {
+            file(&temp.path().join(name).join(name));
+        }
+        let mut settings = Settings {
+            library_folders: vec![display_path(temp.path())],
+            ..Default::default()
+        };
+        let cancel = AtomicBool::new(false);
+        let previous = ScanResult::default();
+        let full = scan(&settings);
+        let incremental = scan_incremental(&settings, &previous, &cancel, &mut |_| {});
+        let cached = scan_incremental(&settings, &incremental, &cancel, &mut |_| {});
+        for result in [&full, &incremental, &cached] {
+            assert_eq!(result.games.len(), executables.len());
+            for name in executables {
+                let path = display_path(&temp.path().join(name).join(name));
+                assert!(result.games.iter().any(|game| {
+                    game.title == name && game.executable.as_deref() == Some(path.as_str())
+                }));
+            }
+        }
+        crate::game_setup::mark_new(&mut settings, &incremental.games, &Default::default());
+        for game in &incremental.games {
+            let edit = &settings.game_edits[&game.id];
+            assert!(edit.setup_pending && !edit.setup_confirmed);
+        }
+    }
+
+    #[test]
+    fn resource_free_imports_keep_executable_priority_and_tool_filtering() {
+        let temp = tempfile::tempdir().unwrap();
+        let cases: &[(&[&str], Option<&str>)] = &[
+            (
+                &[
+                    "MyGame.exe",
+                    "story_new.exe",
+                    "story_chs.exe",
+                    "launcher.exe",
+                ],
+                Some("launcher.exe"),
+            ),
+            (
+                &["MyGame.exe", "story_new.exe", "story_chs.exe"],
+                Some("story_chs.exe"),
+            ),
+            (&["MyGame.exe", "story_new.exe"], Some("story_new.exe")),
+            (&["B.exe", "A.exe", "patch_chs.exe"], Some("A.exe")),
+            (&["setup.exe", "patch_chs.exe", "config.exe"], None),
+        ];
+        for (index, (names, expected)) in cases.iter().enumerate() {
+            let folder = temp.path().join(format!("Game {index}"));
+            for name in *names {
+                file(&folder.join(name));
+            }
+            let settings = Settings {
+                library_folders: vec![display_path(&folder)],
+                ..Default::default()
+            };
+            let result = scan(&settings);
+            let actual: Vec<_> = result
+                .games
+                .iter()
+                .map(|game| game.executable.clone())
+                .collect();
+            let expected: Vec<_> = expected
+                .iter()
+                .map(|name| Some(display_path(&folder.join(name))))
+                .collect();
+            assert_eq!(actual, expected, "case {index}");
+        }
+    }
+
+    #[test]
+    fn imports_use_executable_directory_name_regardless_of_selected_library_root() {
         let temp = tempfile::tempdir().unwrap();
         let name = "8  援女交際 ～亜梨紗の情事～";
         let title = temp.path().join(name);
@@ -602,7 +665,7 @@ mod tests {
             };
             let result = scan(&settings);
             assert_eq!(result.games.len(), 1);
-            assert_eq!(result.games[0].title, name);
+            assert_eq!(result.games[0].title, "game");
             assert_eq!(result.games[0].folder, display_path(&folder));
             assert_eq!(
                 result.games[0].executable.as_deref(),
@@ -614,12 +677,12 @@ mod tests {
             crate::catalog::title::from_directory(executable.parent().unwrap()),
         )
         .unwrap();
-        assert_eq!(manual.title, name);
+        assert_eq!(manual.title, "game");
         assert_eq!(manual.folder, manual.library);
     }
 
     #[test]
-    fn incremental_import_repairs_cached_generic_names_and_preserves_manual_titles() {
+    fn incremental_import_refreshes_directory_names_and_preserves_manual_titles() {
         let temp = tempfile::tempdir().unwrap();
         let folder = temp.path().join("人妻俱乐部/game");
         file(&folder.join("game.exe"));
@@ -629,11 +692,11 @@ mod tests {
             ..Default::default()
         };
         let mut previous = scan(&settings);
-        previous.games[0].title = "game".into();
+        previous.games[0].title = "人妻俱乐部".into();
         let cancel = AtomicBool::new(false);
         let result = scan_incremental(&settings, &previous, &cancel, &mut |_| {});
         let result = crate::catalog::merge(result, &previous, &settings);
-        assert_eq!(result.games[0].title, "人妻俱乐部");
+        assert_eq!(result.games[0].title, "game");
         assert_eq!(result.games[0].id, previous.games[0].id);
         settings.manual_games.push(previous.games[0].clone());
         let result = crate::catalog::merge(ScanResult::default(), &previous, &settings);
@@ -642,10 +705,10 @@ mod tests {
             .game_edits
             .entry(previous.games[0].id.clone())
             .or_default()
-            .title = Some("game".into());
+            .title = Some("手动标题".into());
         let result = scan_incremental(&settings, &previous, &cancel, &mut |_| {});
         let result = crate::catalog::merge(result, &previous, &settings);
-        assert_eq!(result.games[0].title, "game");
+        assert_eq!(result.games[0].title, "手动标题");
     }
 
     #[test]
@@ -696,7 +759,7 @@ mod tests {
         };
         let result = scan(&settings);
         assert_eq!(result.games.len(), 2);
-        let first = result.games.iter().find(|g| g.title == "作一").unwrap();
+        let first = result.games.iter().find(|g| g.title == "安装目录").unwrap();
         assert!(!first.executable.as_ref().unwrap().contains("补丁"));
         assert!(!result.games.iter().any(|g| g.title == "作二"));
     }

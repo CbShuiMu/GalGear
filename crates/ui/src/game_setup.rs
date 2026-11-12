@@ -1,7 +1,10 @@
 //! Batch association and executable confirmation, with independent row drafts.
 use crate::{
     choices, models::Game, models::Resource, models::Settings, preferences, requests::Pending,
-    requests::issue, state::{App, show_toast}, view::f, view::t, widgets::button, widgets::esc, widgets::icon,
+    requests::issue,
+    state::{App, show_toast},
+    view::{f, t},
+    widgets::{button, esc, icon, progress_toast},
 };
 use galgear_i18n::{Message, format_text};
 use serde::Deserialize;
@@ -16,6 +19,8 @@ pub(crate) struct State {
     rows: Vec<Draft>,
     deferred: BTreeSet<String>,
     progress: Option<ScrapeProgress>,
+    save_progress: Option<SaveProgress>,
+    batch_progress: Option<(u32, usize)>,
 }
 
 #[derive(PartialEq)]
@@ -61,6 +66,11 @@ struct ScrapeProgress {
     failed: usize,
 }
 
+struct SaveProgress {
+    total: usize,
+    saved: usize,
+}
+
 struct Draft {
     id: String,
     source: String,
@@ -102,10 +112,13 @@ impl State {
             .any(Draft::locked)
     }
     fn queue_ready(&mut self) {
+        let mut total = 0;
         for row in self.rows.iter_mut().filter(|row| row.can_save()) {
             row.queued = true;
             row.error = None;
+            total += 1;
         }
+        self.save_progress = (total > 0).then_some(SaveProgress { total, saved: 0 });
     }
 }
 
@@ -293,8 +306,26 @@ pub(crate) fn input(app: &mut App, field: &str, value: &str) -> bool {
     true
 }
 
-// Each save submits only ready drafts; bound concurrent network work to three games.
+// 批量保存交给后端调度，前端限制自动搜索和单条保存入口的在途数量。
 fn pump(app: &mut App) {
+    if app.setup.rematch.is_none() && app.setup.rows.iter().filter(|row| row.queued).count() > 1 {
+        let mut ids = Vec::new();
+        let mut inputs = Vec::new();
+        for row in app.setup.rows.iter_mut().filter(|row| row.queued) {
+            row.queued = false;
+            row.saving = true;
+            ids.push(row.id.clone());
+            inputs.push(json!({"id":row.id,"source":row.source,"url":row.url,"executable":"","confirmed":row.confirmed}));
+        }
+        let request_id = app.requests.next_id();
+        app.setup.batch_progress = Some((request_id, 0));
+        issue(
+            app,
+            Pending::SetupBatch(ids),
+            "complete_game_setup_batch",
+            json!({"inputs":inputs,"requestId":request_id}),
+        );
+    }
     // 已停止或换源的旧请求仍占用名额，收到响应后才发出下一项。
     let active = app.requests.values().filter(|request| {
         matches!(request, Pending::SetupSearch(_) | Pending::SetupSave(_))
@@ -324,6 +355,28 @@ fn pump(app: &mut App) {
     if !app.setup.scraping() {
         finish_progress(app, false);
     }
+    if !app.setup.rows.iter().any(|row| row.queued || row.saving)
+        && !app
+            .requests
+            .values()
+            .any(|request| matches!(request, Pending::SetupSave(_)))
+        && let Some(progress) = app.setup.save_progress.take()
+    {
+        let failed = progress.total - progress.saved;
+        let key = if failed == 0 {
+            "setup.save_complete"
+        } else {
+            "setup.save_failed"
+        };
+        show_toast(
+            app,
+            Message::new(key)
+                .arg("saved", progress.saved)
+                .arg("total", progress.total)
+                .arg("failed", failed),
+            failed > 0,
+        );
+    }
 }
 
 fn finish_progress(app: &mut App, stopped: bool) {
@@ -341,16 +394,67 @@ fn finish_progress(app: &mut App, stopped: bool) {
     show_toast(app, message, false);
 }
 
-pub(crate) fn render_progress(html: &mut String, app: &App) {
-    let Some(progress) = &app.setup.progress else {
+/// 进度事件按请求编号隔离，提交响应到达前不把准备完成计为保存成功。
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn setup_save_progress(payload: &str) {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Progress {
+        request_id: u32,
+        done: usize,
+        total: usize,
+    }
+    let Ok(progress) = serde_json::from_str::<Progress>(payload) else {
         return;
     };
-    write!(html, r#"<div id="setup-scrape-toast" class="toast save-ai-toast" role="status" aria-atomic="true"><span>{}</span></div>"#,
-        f(app, "setup.auto_progress", &[
-            ("done", &progress.completed.to_string()),
-            ("total", &progress.total.to_string()),
-            ("failed", &progress.failed.to_string()),
-        ])).unwrap();
+    crate::state::APP.with(|state| {
+        let mut app = state.borrow_mut();
+        let total = app.setup.save_progress.as_ref().map(|value| value.total);
+        if let Some((id, done)) = &mut app.setup.batch_progress
+            && *id == progress.request_id
+            && total == Some(progress.total)
+        {
+            *done = (*done).max(progress.done.min(progress.total));
+            crate::view::paint(&app);
+        }
+    });
+}
+
+pub(crate) fn render_progress(html: &mut String, app: &App) {
+    if let Some(progress) = &app.setup.progress {
+        progress_toast(
+            html,
+            "setup-scrape-toast",
+            &f(
+                app,
+                "setup.auto_progress",
+                &[
+                    ("done", &progress.completed.to_string()),
+                    ("total", &progress.total.to_string()),
+                    ("failed", &progress.failed.to_string()),
+                ],
+            ),
+        );
+    }
+    if let Some(progress) = &app.setup.save_progress {
+        let (key, done) = match app.setup.batch_progress {
+            Some((_, done)) => ("setup.fetch_progress", done),
+            None => ("setup.save_progress", 0),
+        };
+        progress_toast(
+            html,
+            "setup-save-toast",
+            &f(
+                app,
+                key,
+                &[
+                    ("done", &done.to_string()),
+                    ("saved", &progress.saved.to_string()),
+                    ("total", &progress.total.to_string()),
+                ],
+            ),
+        );
+    }
 }
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
@@ -380,6 +484,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             app.choices.open = None;
             app.setup.rows.clear();
             app.setup.progress = None;
+            app.setup.save_progress = None;
             app.setup.open = false;
         }
         return true;
@@ -490,6 +595,61 @@ pub(crate) fn resolve(
     success: bool,
     payload: &str,
 ) -> bool {
+    if let Pending::SetupBatch(ids) = kind {
+        app.setup.batch_progress = None;
+        #[derive(Deserialize)]
+        struct Batch {
+            items: Vec<Item>,
+            warning: Option<Message>,
+        }
+        #[derive(Deserialize)]
+        struct Item {
+            id: String,
+            result: Result<serde_json::Value, Message>,
+        }
+        let batch = if success {
+            serde_json::from_str::<Batch>(payload)
+                .map_err(|error| Message::detail("error.read_data", error))
+        } else {
+            Err(Message::from_error(payload))
+        };
+        let (mut results, warning) = match batch {
+            Ok(batch) => (
+                batch
+                    .items
+                    .into_iter()
+                    .map(|item| (item.id, item.result))
+                    .collect::<BTreeMap<_, _>>(),
+                batch.warning,
+            ),
+            Err(error) => (
+                ids.iter()
+                    .map(|id| (id.clone(), Err(error.clone())))
+                    .collect(),
+                None,
+            ),
+        };
+        for id in ids {
+            let result = results
+                .remove(id)
+                .unwrap_or_else(|| Err(Message::new("error.read_data")));
+            let (success, payload) = match result {
+                Ok(value) => (true, value.to_string()),
+                Err(error) => (false, serde_json::to_string(&error).unwrap_or_default()),
+            };
+            resolve(
+                app,
+                &Pending::SetupSave(id.clone()),
+                request_id,
+                success,
+                &payload,
+            );
+        }
+        if let Some(warning) = warning {
+            show_toast(app, warning, true);
+        }
+        return true;
+    }
     let (Pending::SetupSearch(id) | Pending::SetupExecutable(id) | Pending::SetupSave(id)) = kind
     else {
         return false;
@@ -570,6 +730,9 @@ pub(crate) fn resolve(
     match result {
         Err(error) => app.setup.rows[index].error = Some(error),
         Ok(()) if matches!(kind, Pending::SetupSave(_)) => {
+            if let Some(progress) = &mut app.setup.save_progress {
+                progress.saved += 1;
+            }
             app.setup.rows.remove(index);
             if app.setup.rematch.as_deref() == Some(id) {
                 app.setup.rematch = None;
@@ -777,10 +940,10 @@ pub(crate) fn render(html: &mut String, app: &App) {
     write!(html,r#"<footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,if app.setup.rematch.is_some() { "common.cancel" } else { "setup.later" }),"","quiet",busy),button("setup-save","",t(app,if app.setup.rows.iter().any(|row| row.saving || row.queued) {"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
 }
 
-// 占位高度与 CSS 行高共享同一变量，缩放和字体变化时保持连续滚动范围。
+// 仅传递行数，由 DOM 桥接通过 CSSOM 设置高度，避免桌面 CSP 拦截 style 属性更新。
 fn render_spacer(html: &mut String, start: usize, end: usize) {
     if start < end {
-        write!(html, r#"<tr class="setup-spacer" data-render-key="setup-spacer-{start}" aria-hidden="true"><td colspan="4" style="height:calc(var(--setup-row-height) * {})"></td></tr>"#, end - start).unwrap();
+        write!(html, r#"<tr class="setup-spacer" data-render-key="setup-spacer-{start}" aria-hidden="true"><td colspan="4" data-setup-spacer-rows="{}"></td></tr>"#, end - start).unwrap();
     }
 }
 
@@ -1014,12 +1177,14 @@ mod tests {
 
         dispatch(&mut app, "setup-save", "");
         let saves = crate::bridge::take_requests();
-        assert_eq!(saves.len(), 2);
-        for (_, command, payload) in &saves {
-            assert_eq!(command, "complete_game_setup");
-            let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
-            assert_eq!(payload["url"], "https://vndb.org/v2");
-            assert_eq!(payload["confirmed"], true);
+        assert_eq!(saves.len(), 1);
+        assert_eq!(saves[0].1, "complete_game_setup_batch");
+        let payload: serde_json::Value = serde_json::from_str(&saves[0].2).unwrap();
+        let inputs = payload["inputs"].as_array().unwrap();
+        assert_eq!(inputs.len(), 2);
+        for input in inputs {
+            assert_eq!(input["url"], "https://vndb.org/v2");
+            assert_eq!(input["confirmed"], true);
         }
     }
 
@@ -1234,30 +1399,15 @@ mod tests {
         ready(&mut app, "imported");
         dispatch(&mut app, "setup-save", "");
         let requests = crate::bridge::take_requests();
-        assert_eq!(requests.len(), 2);
-        let (first_id, _, _) = &requests[0];
-        let (second_id, _, _) = &requests[1];
-        let kind = app.requests.complete(*second_id).unwrap();
-        resolve(
-            &mut app,
-            &kind,
-            *second_id,
-            true,
-            &saved_response("imported"),
-        );
-        sync(&mut app);
-        assert!(app.setup.open);
-        assert!(app.setup.busy());
-        assert_eq!(app.setup.rows.len(), 1);
-        assert_eq!(app.setup.rows[0].id, "new");
-        let kind = app.requests.complete(*first_id).unwrap();
-        resolve(
-            &mut app,
-            &kind,
-            *first_id,
-            false,
-            r#"{"key":"error.network","args":{}}"#,
-        );
+        assert_eq!(requests.len(), 1);
+        let request_id = requests[0].0;
+        let kind = app.requests.complete(request_id).unwrap();
+        let saved: serde_json::Value = serde_json::from_str(&saved_response("imported")).unwrap();
+        let response = json!({"items":[
+            {"id":"imported", "result":{"Ok":saved}},
+            {"id":"new", "result":{"Err":{"key":"error.network","args":{}}}}
+        ], "warning":null});
+        resolve(&mut app, &kind, request_id, true, &response.to_string());
         sync(&mut app);
         assert!(app.setup.open);
         assert!(!app.setup.busy());
@@ -1311,7 +1461,7 @@ mod tests {
     }
 
     #[test]
-    fn removing_saved_rows_keeps_concurrent_saves_and_queued_games_running() {
+    fn batch_save_submits_every_row_and_accepts_out_of_order_results() {
         let mut app = app();
         for id in ["third", "fourth", "fifth"] {
             app.catalog
@@ -1323,24 +1473,24 @@ mod tests {
             ready(&mut app, id);
         }
         dispatch(&mut app, "setup-save", "");
-        let mut requests = crate::bridge::take_requests();
-        assert_eq!(requests.len(), 3);
-        let mut completed = BTreeSet::new();
-        while let Some((request_id, command, payload)) = requests.pop() {
-            assert_eq!(command, "complete_game_setup");
-            let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
-            let id = payload["id"].as_str().unwrap();
-            assert!(completed.insert(id.to_owned()));
-            let kind = app.requests.complete(request_id).unwrap();
-            resolve(&mut app, &kind, request_id, true, &saved_response(id));
-            sync(&mut app);
-            assert!(app.setup.rows.iter().all(|row| row.id != id));
-            assert_eq!(app.setup.rows.len(), 5 - completed.len());
-            assert_eq!(app.setup.open, !app.setup.rows.is_empty());
-            requests.extend(crate::bridge::take_requests());
-            assert!(requests.len() <= 3);
-        }
-        assert_eq!(completed.len(), 5);
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        let (request_id, command, payload) = &requests[0];
+        assert_eq!(command, "complete_game_setup_batch");
+        let payload: serde_json::Value = serde_json::from_str(payload).unwrap();
+        let inputs = payload["inputs"].as_array().unwrap();
+        assert_eq!(inputs.len(), 5);
+        assert!(app.setup.rows.iter().all(|row| row.saving));
+        let items: Vec<_> = inputs.iter().rev().map(|input| {
+            let id = input["id"].as_str().unwrap();
+            let saved: serde_json::Value = serde_json::from_str(&saved_response(id)).unwrap();
+            json!({"id":id,"result":{"Ok":saved}})
+        }).collect();
+        let kind = app.requests.complete(*request_id).unwrap();
+        resolve(&mut app, &kind, *request_id, true, &json!({"items":items,"warning":null}).to_string());
+        sync(&mut app);
+        assert!(app.setup.rows.is_empty());
+        assert!(crate::bridge::take_requests().is_empty());
         assert!(!app.setup.open);
         assert!(!app.setup.busy());
     }

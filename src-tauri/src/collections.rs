@@ -250,18 +250,33 @@ pub fn excluded_entries(state: State<'_, AppState>) -> Result<Vec<Game>, Message
         .collect())
 }
 
+/// 更新普通窗口的游戏库尺寸约束；特殊窗口状态返回 false，由前端在恢复后重试。
 #[tauri::command]
 pub fn set_library_bounds(
     width: f64,
     height: f64,
     window: tauri::WebviewWindow,
-) -> Result<(), Message> {
+) -> Result<bool, Message> {
     if !width.is_finite()
         || !height.is_finite()
         || !(1000.0..=6000.0).contains(&width)
         || !(640.0..=2160.0).contains(&height)
     {
         return Err(Message::new("error.operation"));
+    }
+    // Tao 0.35 在 Windows 上的 set_min_size 内部也会 set_inner_size，清除最大化。
+    // 必须在两种尺寸写入之前检查；不能先写约束再恢复最大化，否则仍会闪跳。
+    if window
+        .is_maximized()
+        .map_err(|e| Message::detail("error.operation", e))?
+        || window
+            .is_fullscreen()
+            .map_err(|e| Message::detail("error.operation", e))?
+        || window
+            .is_minimized()
+            .map_err(|e| Message::detail("error.operation", e))?
+    {
+        return Ok(false);
     }
     window
         .set_min_size(Some(tauri::LogicalSize::new(width, height)))
@@ -281,8 +296,12 @@ pub fn set_library_bounds(
             ))
             .map_err(|e| Message::detail("error.operation", e))?;
     }
-    Ok(())
+    Ok(true)
 }
+
+#[cfg(all(test, windows))]
+#[path = "collections/window_bounds_tests.rs"]
+mod window_bounds_tests;
 
 #[cfg(test)]
 mod tests {

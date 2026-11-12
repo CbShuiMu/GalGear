@@ -60,9 +60,9 @@ fn query(client: &Client, sql: &str) -> Result<Vec<Row>, Message> {
         .post(format!("{BASE}/sql_for_erogamer_form.php"))
         .form(&[("sql", sql)])
         .send()
-        .map_err(error)?
-        .error_for_status()
         .map_err(error)?;
+    crate::rate_limit::check(&response)?;
+    let response = response.error_for_status().map_err(error)?;
     let mut bytes = Vec::new();
     response
         .take(2 * 1024 * 1024 + 1)

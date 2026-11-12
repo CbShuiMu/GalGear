@@ -1,4 +1,19 @@
 {
+  "sources.rate_limited": {
+    "zh-CN": "数据源请求过于频繁，请在 {seconds} 秒后重试。",
+    "ja-JP": "リクエストが多すぎます。{seconds} 秒後に再試行してください。",
+    "en-US": "Too many requests. Retry after {seconds} seconds."
+  },
+  "setup.fetch_progress": {
+    "zh-CN": "正在准备资料与封面 {done}/{total}",
+    "ja-JP": "作品情報とカバーを準備中 {done}/{total}",
+    "en-US": "Preparing details and covers {done}/{total}"
+  },
+  "setup.stale": {
+    "zh-CN": "游戏资料或目录已变化，请重新确认后保存。",
+    "ja-JP": "作品情報またはフォルダーが変更されました。確認して保存してください。",
+    "en-US": "Game details or folder changed. Review and save again."
+  },
   "detail.rematch": {
     "zh-CN": "重新匹配",
     "ja-JP": "再照合",
@@ -2860,7 +2875,7 @@
     "en-US": "Permanently delete entries"
   },
   "bulk.exclude_confirm": {
-    "zh-CN": "将永久删除所选 {count} 个游戏条目及其资料、配置、收藏关联和游玩记录，并删除游戏目录中的 cover.jpg。此操作无法恢复，之后需要重新导入。",
+    "zh-CN": "将永久删除所选 {count} 个游戏条目及其资料、配置、收藏关联和游玩记录，并删除游戏目录中的封面图片。此操作无法恢复，之后需要重新导入。",
     "ja-JP": "選択した {count} 件の項目と情報、設定、お気に入り、プレイ記録を完全に削除し、ゲームフォルダーの cover.jpg も削除します。元に戻せません。再利用するには再インポートが必要です。",
     "en-US": "Permanently delete {count} selected entries, their details, settings, collection membership and play history, and cover.jpg in each game folder. This cannot be undone. You must import the games again to use them."
   },
@@ -3198,6 +3213,21 @@
     "zh-CN": "正在获取并保存…",
     "ja-JP": "取得・保存中…",
     "en-US": "Fetching and saving…"
+  },
+  "setup.save_progress": {
+    "zh-CN": "正在保存 {saved}/{total}",
+    "ja-JP": "保存中 {saved}/{total}",
+    "en-US": "Saving {saved}/{total}"
+  },
+  "setup.save_complete": {
+    "zh-CN": "保存完成 {saved}/{total}",
+    "ja-JP": "保存完了 {saved}/{total}",
+    "en-US": "Saved {saved}/{total}"
+  },
+  "setup.save_failed": {
+    "zh-CN": "已保存 {saved}/{total} · 失败 {failed}",
+    "ja-JP": "保存済み {saved}/{total} · 失敗 {failed}",
+    "en-US": "Saved {saved}/{total} · Failed {failed}"
   },
   "setup.confirm_required": {
       "zh-CN": "请先确认对应词条",
@@ -4173,6 +4203,16 @@
     "zh-CN": "是否立即更新？确认后将停止当前任务，下载并替换程序文件，然后自动重启。",
     "ja-JP": "今すぐ更新しますか？タスクを停止し、更新を適用して自動的に再起動します。",
     "en-US": "Update now? Current tasks will stop, application files will be downloaded and replaced, and GalGear will restart."
+  },
+  "update.notes": {
+    "zh-CN": "更新内容与修复",
+    "ja-JP": "更新内容・修正点",
+    "en-US": "What's new and fixed"
+  },
+  "update.notes_empty": {
+    "zh-CN": "此版本暂未提供更新说明。",
+    "ja-JP": "このバージョンの更新内容はまだ公開されていません。",
+    "en-US": "No release notes were provided for this version."
   },
   "update.install": {
     "zh-CN": "立即更新",

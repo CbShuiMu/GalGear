@@ -13,6 +13,7 @@ pub(crate) enum Pending {
     SetupSearch(String),
     SetupExecutable(String),
     SetupSave(String),
+    SetupBatch(Vec<String>),
     LauncherList,
     LauncherSave,
     Bootstrap,
@@ -134,6 +135,7 @@ impl Pending {
                 | Pending::Theme
                 | Pending::SetupSearch(_)
                 | Pending::SetupExecutable(_)
+                | Pending::SetupBatch(_)
                 | Pending::SetupSave(_)
         )
     }

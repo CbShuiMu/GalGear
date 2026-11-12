@@ -20,6 +20,8 @@ pub(crate) struct State {
 #[derive(Deserialize)]
 pub(crate) struct Release {
     version: String,
+    #[serde(default)]
+    notes: Option<String>,
     available: bool,
     asset: Option<serde_json::Value>,
 }
@@ -147,9 +149,35 @@ pub(crate) fn render(html: &mut String, app: &App) {
     let Some(release) = &app.update.release else {
         return;
     };
-    write!(html, r#"<div class="editor-overlay update-overlay"><section class="editor-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><header><h2 id="update-title">{}</h2>{}</header><div class="editor-body"><p>{}</p><p>{}</p></div><footer class="dialog-actions">"#,
-        t(app,"settings.update"), icon_button("update-cancel", "", t(app,"common.close"), "close", "", app.update.installing), f(app,"settings.latest",&[("version",&release.version)]),
-        t(app,if app.update.installing {"update.stopping"} else if !release.available {"update.current"} else if release.asset.is_none() {"update.unavailable"} else {"update.confirm"})).unwrap();
+    write!(html, r#"<div class="editor-overlay update-overlay"><section class="editor-dialog update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-title"><header><h2 id="update-title">{}</h2>{}</header><div class="editor-body" tabindex="0" role="region" aria-labelledby="update-title"><p>{}</p>"#,
+        t(app,"settings.update"), icon_button("update-cancel", "", t(app,"common.close"), "close", "", app.update.installing), f(app,"settings.latest",&[("version",&release.version)])).unwrap();
+    if release.available {
+        let notes = release
+            .notes
+            .as_deref()
+            .map(str::trim)
+            .filter(|notes| !notes.is_empty());
+        // 发布正文按文本展示，保留换行，避免把外部 HTML 当作界面执行。
+        write!(html, r#"<section class="update-notes" aria-labelledby="update-notes-title"><h3 id="update-notes-title">{}</h3><div class="update-notes-content">{}</div></section>"#,
+            t(app, "update.notes"), esc(notes.unwrap_or_else(|| t(app, "update.notes_empty")))).unwrap();
+    }
+    write!(
+        html,
+        r#"<p>{}</p></div><footer class="dialog-actions">"#,
+        t(
+            app,
+            if app.update.installing {
+                "update.stopping"
+            } else if !release.available {
+                "update.current"
+            } else if release.asset.is_none() {
+                "update.unavailable"
+            } else {
+                "update.confirm"
+            }
+        )
+    )
+    .unwrap();
     html.push_str(&button(
         "update-cancel",
         "",
@@ -181,6 +209,51 @@ pub(crate) fn render(html: &mut String, app: &App) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn update_dialog_shows_notes_from_background_and_manual_checks_as_text() {
+        for kind in [Pending::BackgroundUpdate, Pending::Update] {
+            let mut app = App::default();
+            let payload = json!({
+                "version": "v9.0.0", "available": true, "asset": {},
+                "notes": "## 新增\n- 新功能\n\n## 修复\n<script>alert('x')</script> & 完成"
+            });
+            resolve(&mut app, &kind, true, &payload.to_string());
+            let mut html = String::new();
+            render(&mut html, &app);
+            assert!(html.contains("## 新增\n- 新功能\n\n## 修复\n"));
+            assert!(html.contains("&lt;script&gt;"));
+            assert!(html.contains("&amp; 完成"));
+            assert!(!html.contains("<script>"));
+            assert!(html.find("update-notes-title").unwrap() < html.find("<footer").unwrap());
+        }
+    }
+
+    #[test]
+    fn missing_or_blank_notes_show_a_localized_fallback_without_blocking_updates() {
+        use galgear_i18n::Language;
+        for language in [Language::Chinese, Language::Japanese, Language::English] {
+            for notes in [
+                None,
+                Some(serde_json::Value::Null),
+                Some(json!("")),
+                Some(json!(" \r\n\t")),
+            ] {
+                let mut app = App::default();
+                app.settings.language = language;
+                let mut payload = json!({"version":"v9.0.0","available":true,"asset":{}});
+                if let Some(notes) = notes {
+                    payload["notes"] = notes;
+                }
+                resolve(&mut app, &Pending::Update, true, &payload.to_string());
+                let mut html = String::new();
+                render(&mut html, &app);
+                assert!(html.contains(t(&app, "update.notes")));
+                assert!(html.contains(t(&app, "update.notes_empty")));
+                assert!(html.contains("data-action=\"update-confirm\""));
+            }
+        }
+    }
+
     #[test]
     fn startup_prompts_for_an_update_and_deferring_keeps_the_notice() {
         let mut app = App::default();

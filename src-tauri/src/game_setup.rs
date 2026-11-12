@@ -5,9 +5,13 @@ use crate::{
 };
 use galgear_core::{Game, Settings, catalog, config::display_path, game_setup};
 use galgear_i18n::Message;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{Manager, State};
+
+mod batch;
+mod scheduler;
+pub(crate) use scheduler::Service;
 
 #[derive(Serialize)]
 pub struct ResultData {
@@ -196,13 +200,25 @@ pub(crate) async fn rematch_game_metadata(
     .await
 }
 
-struct SetupInput {
+#[derive(Deserialize)]
+pub(crate) struct SetupInput {
     id: String,
     source: String,
     url: String,
     executable: String,
     confirmed: bool,
+    #[serde(default)]
     rematch: bool,
+}
+
+/// 批量确认在后台准备所有条目，再合并写入设置与目录缓存。
+#[tauri::command]
+pub(crate) async fn complete_game_setup_batch(
+    inputs: Vec<SetupInput>,
+    request_id: u32,
+    app: tauri::AppHandle,
+) -> Result<batch::BatchResult, Message> {
+    batch::run(inputs, request_id, app).await
 }
 
 async fn complete(

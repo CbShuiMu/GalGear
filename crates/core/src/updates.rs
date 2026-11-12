@@ -9,6 +9,9 @@ fn error(e: impl std::fmt::Display) -> Message { Message::detail("update.failed"
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Release {
     pub version: String,
+    /// GitHub Release 正文；旧更新交接数据或未填写说明的版本可缺省。
+    #[serde(default)]
+    pub notes: Option<String>,
     pub available: bool,
     pub asset: Option<Asset>,
 }
@@ -44,7 +47,8 @@ pub fn parse_release(value: &serde_json::Value, current: &str) -> Result<Release
         if size == 0 || size > 4 * 1024 * 1024 * 1024 { return None; }
         Some((rank, Asset { name: name.into(), url: url.into(), size, sha256: sha256.to_ascii_lowercase() }))
     }).min_by_key(|(rank, _)| *rank).map(|(_, asset)| asset);
-    Ok(Release { version, available: latest > current, asset })
+    let notes = value["body"].as_str().map(str::to_owned);
+    Ok(Release { version, notes, available: latest > current, asset })
 }
 
 pub fn check(page: &str, current: &str) -> Result<Release, Message> {
@@ -202,6 +206,31 @@ pub fn replace(payload: &Path, executable: &Path, backup: &Path) -> Result<Trans
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn release_notes_preserve_the_published_body_through_serialization() {
+        let notes = "## 新增\n- 支持新功能\n\n## 修复\n- 修复 <窗口> & 焦点";
+        let release = parse_release(
+            &serde_json::json!({"tag_name":"v9.0.0","body":notes}),
+            "0.1.0",
+        ).unwrap();
+        assert_eq!(release.notes.as_deref(), Some(notes));
+        assert_eq!(serde_json::to_value(&release).unwrap()["notes"], notes);
+    }
+    #[test]
+    fn releases_without_notes_remain_compatible() {
+        for value in [
+            serde_json::json!({"tag_name":"v9.0.0"}),
+            serde_json::json!({"tag_name":"v9.0.0","body":null}),
+        ] {
+            let release = parse_release(&value, "0.1.0").unwrap();
+            assert!(release.available);
+            assert!(release.notes.is_none());
+        }
+        let old: Release = serde_json::from_str(
+            r#"{"version":"v9.0.0","available":true,"asset":null}"#,
+        ).unwrap();
+        assert!(old.notes.is_none());
+    }
     #[test]
     fn versions_use_semver_and_only_select_verifiable_portable_windows_assets() {
         let value = serde_json::json!({"tag_name":"v0.10.0","assets":[

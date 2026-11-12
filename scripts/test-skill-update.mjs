@@ -21,9 +21,11 @@ test('startup prompts for GalGear updates, counts components, and installs only 
   // Both background requests remain pending while local navigation is usable.
   assert.match(html,/<h2>Skill<\/h2>/);
   ui.dispatch('dismiss-toast',''); // Clear the earlier scan-completed notification.
-  reply('check_update',{version:'v9.0.0',available:true,asset:{name:'GalGear.exe'}});
+  reply('check_update',{version:'v9.0.0',available:true,asset:{name:'GalGear.exe'},notes:'新增：游戏管理功能\n\n修复：<窗口> & 焦点问题'});
   reply('check_skill_version','b'.repeat(40));
   assert.match(html,/update-overlay/);
+  assert.match(html,/更新内容与修复/);
+  assert.match(html,/新增：游戏管理功能\n\n修复：&lt;窗口&gt; &amp; 焦点问题/);
   assert.match(html,/稍后处理[\s\S]*立即更新/);
   assert(!requests.some(r=>r.command==='install_update'));
   ui.dispatch('update-cancel','');
@@ -44,6 +46,8 @@ test('startup prompts for GalGear updates, counts components, and installs only 
   ui.dispatch('check-update','');
   reply('check_update',{version:'v9.0.0',available:true,asset:{name:'GalGear.exe'}});
   assert.match(html,/update-overlay/);
+  assert.match(html,/此版本暂未提供更新说明/);
+  assert.doesNotMatch(html,/新增：游戏管理功能/);
   ui.dispatch('update-cancel','');
   assert.match(html,/class="update-count"[^>]*>1<\/span>/);
   assert(!requests.some(r=>r.command==='install_update'));

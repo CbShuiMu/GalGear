@@ -149,9 +149,9 @@ pub fn page(client: &Client, url: Url) -> Result<String, Message> {
     let response = client
         .get(url)
         .send()
-        .map_err(network)?
-        .error_for_status()
         .map_err(network)?;
+    crate::rate_limit::check(&response)?;
+    let response = response.error_for_status().map_err(network)?;
     let mut bytes = Vec::new();
     response
         .take(4 * 1024 * 1024 + 1)
@@ -528,9 +528,9 @@ pub fn cover_bytes(image_url: &str, referrer: &str) -> Result<Vec<u8>, Message> 
         .get(url)
         .header(reqwest::header::REFERER, referrer)
         .send()
-        .map_err(network)?
-        .error_for_status()
         .map_err(network)?;
+    crate::rate_limit::check(&response)?;
+    let response = response.error_for_status().map_err(network)?;
     let mut bytes = Vec::new();
     response
         .take(16 * 1024 * 1024 + 1)

@@ -147,7 +147,7 @@ test('600 automatic searches keep three slots, advance after failures and retry 
   games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
   app.finishScan(games);
   app.ui.dispatch('setup-auto', '');
-  assert.match(app.html, /id="setup-scrape-toast" class="toast save-ai-toast"/);
+  assert.match(app.html, /id="setup-scrape-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon"><svg/);
   assert.match(app.html, /正在刮削 0\/600/);
   let failed = 0;
   for (let completed = 1; completed <= 600; completed++) {
@@ -210,11 +210,61 @@ test('batch confirmation accepts a single-game edit response', async () => {
   app.ui.dispatch('setup-auto', '');
   app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
   app.ui.dispatch('setup-save', '');
+  assert.match(app.html, /id="setup-save-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon"><svg/);
+  assert.match(app.html, /正在保存 0\/1/);
   app.reply('complete_game_setup', {
     game: game(), edit: {setup_confirmed: true, setup_pending: false, launcher_pending: true},
   });
   assert.doesNotMatch(app.html, /id="setup-title"/);
   assert.match(app.html, /id="home-game-new"/);
+  assert.doesNotMatch(app.html, /id="setup-save-toast"/);
+  assert.match(app.html, /保存完成 1\/1/);
+});
+
+test('save progress counts only successful replies with a fixed batch total and resets on retry', async () => {
+  const app = await emptyHome();
+  const games = Array.from({length: 6}, (_, i) => game(`save-${i}`));
+  app.addFolder();
+  games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
+  app.finishScan(games);
+  app.ui.dispatch('setup-save', '');
+  assert.doesNotMatch(app.html, /id="setup-save-toast"/);
+  app.ui.dispatch('setup-auto', '');
+  for (let i = 0; i < games.length; i++) {
+    app.reply('search_metadata', i < 5 ? [{title: 'Matched', url: `https://vndb.org/v${i + 1}`}] : []);
+  }
+  app.ui.dispatch('setup-save', '');
+  assert.match(app.html, /正在准备资料与封面 0\/5/);
+  app.ui.dispatch('setup-save', '');
+  const batch = app.requests.find(request => request.command === 'complete_game_setup_batch');
+  assert.equal(app.requests.filter(request => request.command === 'complete_game_setup_batch').length, 1);
+  assert.equal(batch.payload.inputs.length, 5);
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id + 1, done: 5, total: 5}));
+  assert.match(app.html, /正在准备资料与封面 0\/5/);
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, done: 4, total: 5}));
+  assert.match(app.html, /正在准备资料与封面 4\/5/);
+  assert.equal((app.html.match(/data-setup-game=/g) ?? []).length, 6);
+  app.reply('complete_game_setup_batch', {items: batch.payload.inputs.map((input, index) => ({
+    id: input.id,
+    result: index === 1 || index === 3 ? {Err: {key: 'error.network'}} : {Ok: {
+      game: games.find(game => game.id === input.id),
+      edit: {setup_confirmed: true, setup_pending: false, launcher_pending: true},
+    }},
+  })).reverse(), warning: null});
+  assert.doesNotMatch(app.html, /id="setup-save-toast"/);
+  assert.match(app.html, /已保存 3\/5 · 失败 2/);
+  assert.equal((app.html.match(/data-setup-game=/g) ?? []).length, 3);
+  app.ui.dispatch('setup-save', '');
+  const retry = app.requests.find(request => request.command === 'complete_game_setup_batch');
+  assert.equal(retry.payload.inputs.length, 2);
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, done: 5, total: 5}));
+  assert.match(app.html, /正在准备资料与封面 0\/2/);
+  app.reply('complete_game_setup_batch', {items: retry.payload.inputs.map(input => ({
+    id: input.id, result: {Ok: {game: games.find(game => game.id === input.id), edit: {setup_confirmed: true}}},
+  }))});
+  assert.doesNotMatch(app.html, /id="setup-save-toast"/);
+  assert.match(app.html, /保存完成 2\/2/);
+  assert.equal((app.html.match(/data-setup-game=/g) ?? []).length, 1);
 });
 
 test('automatic search preserves current edited text and confirms a single translated result', async () => {
@@ -382,7 +432,7 @@ test('large setup renders a bounded scroll window and scan progress accepts coun
   app.addFolder();
   app.ui.scan_progress(JSON.stringify({folders_scanned: 13, completed: 12, total: 600}));
   assert.match(app.html, /12\/600/);
-  assert.match(app.html, /id="library-import-toast" class="toast save-ai-toast"/);
+  assert.match(app.html, /id="library-import-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon"><svg/);
   assert.doesNotMatch(app.html, /<progress|class="import-progress"/);
   app.ui.scan_progress(JSON.stringify({folders_scanned: 14, completed: 13, total: 600}));
   assert.match(app.html, /13\/600/);
@@ -395,6 +445,8 @@ test('large setup renders a bounded scroll window and scan progress accepts coun
   assert.match(app.html, /data-setup-game="bulk-0"/);
   assert.doesNotMatch(app.html, /setup-pagination|setup-page/);
   assert.match(app.html, /data-setup-total="600"/);
+  assert.match(app.html, /data-setup-spacer-rows="568"/);
+  assert.doesNotMatch(app.html, /style="height:calc\(var\(--setup-row-height\)/);
   app.ui.input_changed('setup-query:bulk-0', 'Edited draft');
   app.ui.setup_viewport(568, 32, 'bulk-0');
   assert.equal((app.html.match(/data-setup-game=/g) || []).length, 33);
@@ -422,20 +474,17 @@ test('saving a virtualized batch drains every row and clamps the shrinking viewp
   }
   app.ui.setup_viewport(70, 20, '');
   app.ui.dispatch('setup-save', '');
-  let completed = 0;
-  while (completed < games.length) {
-    const request = app.requests.find(request => request.command === 'complete_game_setup');
-    assert.ok(request, 'remaining drafts must keep filling save slots');
-    const saved = games.find(game => game.id === request.payload.id);
+  const request = app.requests.find(request => request.command === 'complete_game_setup_batch');
+  assert.ok(request);
+  assert.equal(request.payload.inputs.length, games.length);
+  assert.ok((app.html.match(/data-setup-game=/g) || []).length <= 20);
+  const items = request.payload.inputs.map(input => {
+    const saved = games.find(game => game.id === input.id);
     const edit = {setup_confirmed: true, launcher_pending: true};
     app.settings.game_edits[saved.id] = edit;
-    app.reply('complete_game_setup', {game: saved, edit});
-    completed++;
-    if (completed < games.length) {
-      assert.match(app.html, /data-setup-game="save-89"/);
-      assert.ok((app.html.match(/data-setup-game=/g) || []).length <= 20);
-    }
-  }
+    return {id: saved.id, result: {Ok: {game: saved, edit}}};
+  });
+  app.reply('complete_game_setup_batch', {items});
   assert.doesNotMatch(app.html, /class="setup-overlay"/);
 });
 

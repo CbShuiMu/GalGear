@@ -109,7 +109,9 @@ pub(crate) fn read(
     }
     let response = request(client, base, credentials, url)?
         .send()
-        .map_err(|_| auth_error())?
+        .map_err(|_| auth_error())?;
+    crate::rate_limit::check(&response)?;
+    let response = response
         .error_for_status()
         .map_err(|_| auth_error())?;
     if response.status().is_redirection() {

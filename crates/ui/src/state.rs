@@ -170,11 +170,21 @@ pub(crate) fn apply_settings(app: &mut App, mut settings: Settings, request_id: 
     }
 }
 
+/// 这些通知由对应的请求结果替换，等待期间持续显示。
+pub(crate) fn toast_in_progress(key: &str) -> bool {
+    matches!(
+        key,
+        "save.ai_searching" | "local_patches.installing" | "local_patches.switching"
+    )
+}
+
 pub(crate) fn show_toast(app: &mut App, message: Message, error: bool) {
     app.toast_generation = app.toast_generation.wrapping_add(1);
-    let persistent = matches!(message.key.as_str(), "save.ai_searching" | "local_patches.installing" | "local_patches.switching");
+    let in_progress = !error && toast_in_progress(&message.key);
     app.toast = Some((message, error));
-    if !persistent { schedule_toast_expiry(app.toast_generation, 4000); }
+    if !in_progress {
+        schedule_toast_expiry(app.toast_generation, 4000);
+    }
 }
 
 #[cfg(test)]

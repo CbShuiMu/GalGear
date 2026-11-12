@@ -4,7 +4,30 @@ const {test} = require('node:test');
 const vm = require('node:vm');
 
 const source = readFileSync('web/setup-scroll.js', 'utf8')
-  .replace(/^import .*\n/, '').replace('export function', 'function');
+  .replace(/^import .*\n/, '').replaceAll('export function', 'function');
+
+test('reused spacers update height without writing HTML style attributes', () => {
+  const context = vm.createContext({});
+  vm.runInContext(source, context);
+  // CSP 会拦截 setAttribute('style', ...)，复用首部占位行时尤其容易留下旧高度。
+  const leading = {
+    dataset: {setupSpacerRows: '16'}, style: {},
+    setAttribute() { assert.fail('spacer heights must use CSSOM'); },
+  };
+  const trailing = {
+    dataset: {setupSpacerRows: '117'}, style: {},
+    setAttribute() { assert.fail('spacer heights must use CSSOM'); },
+  };
+  const scroller = {querySelectorAll: () => [leading, trailing]};
+  for (const [start, end] of [[16, 117], [30, 103], [77, 56], [133, 0], [0, 133]]) {
+    leading.dataset.setupSpacerRows = String(start);
+    trailing.dataset.setupSpacerRows = String(end);
+    context.syncSetupSpacers(scroller);
+    assert.equal(leading.style.height, `calc(var(--setup-row-height) * ${start})`);
+    assert.equal(trailing.style.height, `calc(var(--setup-row-height) * ${end})`);
+  }
+  context.syncSetupSpacers(null);
+});
 
 function fixture() {
   const frames = [];

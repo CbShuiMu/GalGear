@@ -1,5 +1,5 @@
 import {syncLibrarySize, installLibrarySize} from "./library-size.js";
-import {installSetupScroll} from './setup-scroll.js';
+import {installSetupScroll, syncSetupSpacers} from './setup-scroll.js';
 import {isCardScrollbar, libraryCardClickTarget} from "./library-card.js";
 import { installLibraryReorder } from "./library-reorder.js";
 import {detailTagClickTarget, installDetailTagReorder} from './detail-tag-reorder.js';
@@ -49,6 +49,9 @@ let suppressCardClickUntil = 0;
 let dragHoverTimer = null;
 let dragHoverKey = null;
 let minimumRequest = '';
+let minimumBounds = null;
+let minimumPending = false;
+let minimumRetry = false;
 let observedLibraryGrid = null;
 const libraryGridObserver = new ResizeObserver(() => alignLibraryToolbar());
 const pagePositions = new Map();
@@ -174,25 +177,42 @@ function measureLibraryBounds() {
   const bar = page?.querySelector('.library-bar');
   const shell = document.querySelector('.app-shell');
   const pane = document.getElementById('page-scroll');
-  if (!bar || !shell || !pane) return;
-  const style = getComputedStyle(page);
-  const cardMinimum = parseFloat(style.getPropertyValue('--library-card-min-width'));
-  const gap = parseFloat(style.getPropertyValue('--library-column-gap'));
-  const inset = parseFloat(style.getPropertyValue('--library-min-content-inset'));
-  const sidebar = pane.getBoundingClientRect().left - shell.getBoundingClientRect().left;
-  const gutter = pane.offsetWidth - pane.clientWidth;
-  // Use the four-column baseline so enlarging the window never raises its minimum.
-  const width = Math.ceil(cardMinimum * 4 + gap * 3 + inset * 2 + sidebar + gutter);
-  const bounds = { width, height: 640 };
+  if (bar && shell && pane) {
+    const style = getComputedStyle(page);
+    const cardMinimum = parseFloat(style.getPropertyValue('--library-card-min-width'));
+    const gap = parseFloat(style.getPropertyValue('--library-column-gap'));
+    const inset = parseFloat(style.getPropertyValue('--library-min-content-inset'));
+    const sidebar = pane.getBoundingClientRect().left - shell.getBoundingClientRect().left;
+    const gutter = pane.offsetWidth - pane.clientWidth;
+    // Use the four-column baseline so enlarging the window never raises its minimum.
+    const width = Math.ceil(cardMinimum * 4 + gap * 3 + inset * 2 + sidebar + gutter);
+    minimumBounds = { width, height: 640 };
+    // Keep bounds available to isolated UI verification without mocking window internals.
+    shell.dataset.minimumWidth = String(width);
+  }
+  // 即使已经离开游戏库，恢复普通窗口时也要补上之前延后的约束。
+  syncLibraryBounds();
+}
+
+async function syncLibraryBounds() {
+  if (!window.__TAURI__?.core || !minimumBounds) return;
+  if (minimumPending) { minimumRetry = true; return; }
+  const bounds = minimumBounds;
   const key = JSON.stringify(bounds);
-  // Keep bounds available to isolated UI verification without mocking window internals.
-  shell.dataset.minimumWidth = String(bounds.width);
-  if (window.__TAURI__?.core && key !== minimumRequest) {
-    minimumRequest = key;
-    (window.GalGearDiagnostics?.invoke || window.__TAURI__.core.invoke)('set_library_bounds', bounds).catch(error => {
-      minimumRequest = '';
-      console.error('Unable to apply library window bounds', error);
-    });
+  if (key === minimumRequest) return;
+  minimumPending = true;
+  minimumRetry = false;
+  try {
+    const applied = await (window.GalGearDiagnostics?.invoke || window.__TAURI__.core.invoke)('set_library_bounds', bounds);
+    // false 表示仍在最大化/全屏/最小化，不能缓存成已应用；兼容旧桌面端的 null。
+    if (applied !== false) minimumRequest = key;
+  } catch (error) {
+    minimumRequest = '';
+    console.error('Unable to apply library window bounds', error);
+  } finally {
+    minimumPending = false;
+    // 合并在途布局变化，也覆盖恢复窗口发生在上一次响应到达之前的情况。
+    if (minimumRetry) syncLibraryBounds();
   }
 }
 
@@ -326,6 +346,7 @@ function renderFrame(html) {
       ? captureHomeDetailCover(nextDetail.dataset.detailGame) : null;
     if (openingDetail) dialogReturnFocus = nextDetail?.dataset.detailGame;
     reconcileChildren(document.getElementById('app'), template.content);
+    syncSetupSpacers(document.getElementById('setup-table-scroll'));
     const shell = document.querySelector('.app-shell');
     if (shell) {
       shell.style.setProperty('--cover-scale', shell.dataset.coverScale);
@@ -1044,6 +1065,7 @@ try {
   window.GalGearDiagnostics?.ready();
   if (window.__TAURI__?.event) {
     await window.__TAURI__.event.listen('library-devices-changed', () => ui.library_devices_changed());
+    await window.__TAURI__.event.listen('setup-save-progress', event => ui.setup_save_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('scan-progress', event => ui.scan_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('game-enriched', event => ui.game_enriched(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('cover-enhanced', async event => {

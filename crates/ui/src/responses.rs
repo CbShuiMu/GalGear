@@ -151,6 +151,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                     | Pending::LocalPatchApply(..)
                     | Pending::CoverOptions
                     | Pending::SetupExecutable(_)
+                    | Pending::SetupBatch(_)
                     | Pending::SetupSave(_) => {}
                     Pending::AiRuntime | Pending::SkillUpdate | Pending::SkillCheck => {}
                     Pending::CollectionSave => {
