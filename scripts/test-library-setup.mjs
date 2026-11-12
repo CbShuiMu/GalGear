@@ -377,7 +377,7 @@ test('first launch waits for executable confirmation and failed saves remain ret
   assert.equal(app.requests.some(request => request.command === 'launch_game'), true);
 });
 
-test('large setup renders a bounded page and scan progress accepts counters without game payloads', async () => {
+test('large setup renders a bounded scroll window and scan progress accepts counters without game payloads', async () => {
   const app = await emptyHome();
   app.addFolder();
   app.ui.scan_progress(JSON.stringify({folders_scanned: 13, completed: 12, total: 600}));
@@ -391,12 +391,52 @@ test('large setup renders a bounded page and scan progress accepts counters with
   games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
   app.finishScan(games);
   assert.doesNotMatch(app.html, /id="library-import-toast"/);
-  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 40);
+  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 32);
   assert.match(app.html, /data-setup-game="bulk-0"/);
-  app.ui.dispatch('setup-page', '14');
+  assert.doesNotMatch(app.html, /setup-pagination|setup-page/);
+  assert.match(app.html, /data-setup-total="600"/);
+  app.ui.input_changed('setup-query:bulk-0', 'Edited draft');
+  app.ui.setup_viewport(568, 32, 'bulk-0');
+  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 33);
+  assert.match(app.html, /value="Edited draft"/);
+  app.ui.setup_viewport(568, 32, '');
   assert.match(app.html, /data-setup-game="bulk-599"/);
-  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 40);
+  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 32);
   assert.doesNotMatch(app.html, /data-action="setup-browse"/);
+  app.ui.setup_viewport(0, 32, '');
+  assert.match(app.html, /value="Edited draft"/);
+  app.ui.setup_viewport(0xffffffff, 0xffffffff, '');
+  assert.match(app.html, /data-setup-game="bulk-599"/);
+  assert.equal((app.html.match(/data-setup-game=/g) || []).length, 80);
+});
+
+test('saving a virtualized batch drains every row and clamps the shrinking viewport', async () => {
+  const app = await emptyHome();
+  const games = Array.from({length: 90}, (_, index) => game('save-' + index));
+  app.addFolder();
+  games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
+  app.finishScan(games);
+  app.ui.dispatch('setup-auto', '');
+  for (let index = 0; index < games.length; index++) {
+    app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
+  }
+  app.ui.setup_viewport(70, 20, '');
+  app.ui.dispatch('setup-save', '');
+  let completed = 0;
+  while (completed < games.length) {
+    const request = app.requests.find(request => request.command === 'complete_game_setup');
+    assert.ok(request, 'remaining drafts must keep filling save slots');
+    const saved = games.find(game => game.id === request.payload.id);
+    const edit = {setup_confirmed: true, launcher_pending: true};
+    app.settings.game_edits[saved.id] = edit;
+    app.reply('complete_game_setup', {game: saved, edit});
+    completed++;
+    if (completed < games.length) {
+      assert.match(app.html, /data-setup-game="save-89"/);
+      assert.ok((app.html.match(/data-setup-game=/g) || []).length <= 20);
+    }
+  }
+  assert.doesNotMatch(app.html, /class="setup-overlay"/);
 });
 
 test('first library added from empty home opens setup even without progress events', async () => {

@@ -102,9 +102,13 @@ def output_token_policy(capabilities, stage):
                 source='provider_metadata' if known else 'bounded_fallback')
 
 
-def request_timeout_seconds(max_tokens, remaining_seconds=None):
+def request_timeout_seconds(max_tokens, remaining_seconds=None, *, preflight=False):
     """Allow MAX reasoning to use its output budget within a bounded deadline."""
     timeout = min(900, max(300, math.ceil(max_tokens / 32768) * 300))
+    # A large advertised output allowance must not turn save preflight into a
+    # ten-minute wait. Each retry shares this cap and the parent deadline.
+    if preflight:
+        timeout = min(timeout, 120)
     if remaining_seconds is not None:
         if remaining_seconds <= 0:
             raise RuntimeError('AI preparation runtime budget exhausted before request')
@@ -1649,8 +1653,17 @@ class Agent:
             next_action = ('Resolve the save-preflight missing_fact with focused resource/sample work, then inspect and '
                            're-record the current save before a full script batch. A header alone is not a progress candidate. '
                            'Context plans: ' + json.dumps(preflight['records'], ensure_ascii=False) + ' Subsequent stage: ' + next_action)
+        fallbacks = self.research.adapter_fallbacks()
+        if fallbacks and self.workflow.stage in ('save_program', 'save_validation'):
+            instruction = ('The bundled save adapter has an observed unsupported variant in guidance.adapter_fallbacks. '
+                           'For those inputs, stop retrying version/profile guesses. Reuse the observed raw fields and '
+                           'available byte codecs to write_program(kind="save"), then test_program on the required save. '
+                           'If one native layout fact is missing, inspect only that fact before writing/testing. '
+                           'Complete pending preflight and script verification first; an unsupported adapter is not an unsupported game. ')
+            next_action = instruction + next_action
         state['goal'] = next_action
         return dict(state, save_preflight=preflight, missing_programs=missing,
+                    adapter_fallbacks=fallbacks,
                     adapter_attempts=self.research.adapter_attempts(),
                     requests_without_milestone=state['exploratory_requests'], next_action=next_action)
 
@@ -2166,7 +2179,7 @@ class Agent:
                 if len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode('utf-8')) > 40000:
                     raise ValueError('Return a compact engine-adapter inspection under 40000 UTF-8 bytes')
                 return dict(adapter_id=adapter, adapter_version=record['version'], inspection=value,
-                            analysis_only=True, verified_current_node=False)
+                            ok=value.get('ok', True), analysis_only=True, verified_current_node=False)
             source = ADAPTER_LIBRARY['program'](adapter, args['kind'], args.get('profile'))
             saved = self.dispatch('write_program', dict(kind=args['kind'], source=source))
             return dict(saved, adapter_id=adapter, adapter_version=record['version'],
@@ -3041,7 +3054,8 @@ class Agent:
         try:
             request_config = dict(self.config, reasoning_effort=self.reasoning_effort)
             remaining = self.runtime_deadline - time.monotonic() if self.runtime_deadline is not None else None
-            timeout = request_timeout_seconds(self.output_limit, remaining)
+            timeout = request_timeout_seconds(self.output_limit, remaining,
+                preflight=self.workflow.stage == 'prerequisites' or not self.preflight_status()['ready_for_script_sample'])
             response = TRANSPORT['complete'](request_config, messages, TOOLS, max_tokens=self.output_limit, timeout=timeout)
         except TRANSPORT['CompletionError'] as error:
             self.last_failure = error.diagnostic

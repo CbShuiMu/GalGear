@@ -425,6 +425,11 @@ class ResearchStore:
         if function.get('name') in ('inspect_engine_adapter', 'reuse_engine_adapter'):
             entry['adapter'] = clipped(str(args.get('adapter', '')), 128)
             entry['kind'] = clipped(str(args.get('kind', '')), 32)
+            if (function.get('name') == 'inspect_engine_adapter' and args.get('kind') == 'save'
+                    and isinstance(preview_value, dict) and preview_value.get('status') == 'unsupported_variant'
+                    and preview_value.get('next_action') == 'write_save_parser'):
+                entry['adapter_fallback'] = dict(root=args.get('root'), path=args.get('path'),
+                    observed_title=preview_value.get('observed_title'), supported_title=preview_value.get('supported_title'))
         if isinstance(args.get('source'), str):
             entry['analysis_source_sha256'] = hashlib.sha256(args['source'].encode('utf-8')).hexdigest()
         self.records[ref] = entry
@@ -447,6 +452,17 @@ class ResearchStore:
                      read_result=entry['read_preview'],
                      read_arguments=dict(root='work', path=entry['full_record'], pointer='/function/arguments'))
                 for entry in attempts[-6:]]
+
+    def adapter_fallbacks(self):
+        """Keep unsupported input variants visible after unrelated adapter work."""
+        current = {}
+        for entry in self.records.values():
+            fallback = entry.get('adapter_fallback')
+            if fallback and not entry.get('stale'):
+                key = (entry.get('adapter'), fallback['root'], fallback['path'])
+                current[key] = dict(ref=entry['ref'], adapter=entry.get('adapter'),
+                                    read_result=entry['read_preview'], **fallback)
+        return list(current.values())[-6:]
 
     def set_inputs(self, inputs, persist=True):
         """Mark observations and notes stale when host-supplied file stamps differ."""

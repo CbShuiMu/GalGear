@@ -1,4 +1,5 @@
 import {syncLibrarySize, installLibrarySize} from "./library-size.js";
+import {installSetupScroll} from './setup-scroll.js';
 import {isCardScrollbar, libraryCardClickTarget} from "./library-card.js";
 import { installLibraryReorder } from "./library-reorder.js";
 import {detailTagClickTarget, installDetailTagReorder} from './detail-tag-reorder.js';
@@ -11,6 +12,9 @@ import {installCoverResolutions, syncCoverResolutions} from './cover-picker.js';
 import {installHomeNavigation, syncHomePresentation, captureHomeDetailCover, syncHomeDetailTransition, returnHomeDetail, cancelHomeDetailTransition} from './home.js';
 
 let wasmReady = false;
+const syncSetupScroll = installSetupScroll((start, count, pinned) => {
+  if (wasmReady) ui.setup_viewport(start, count, pinned);
+});
 window.addEventListener('focus', () => {
   if (wasmReady) ui.detail_files_changed();
 });
@@ -472,6 +476,7 @@ function renderFrame(html) {
     syncSegmentedControls();
     if (pane) { pane.scrollTop = pageTop; pane.scrollLeft = pageLeft; }
     restoreSetupScroll();
+    syncSetupScroll();
     requestAnimationFrame(() => { restoringScroll = false; });
     const more = document.querySelector('[data-action="load-more"]');
     if (more && !hasDialog) {

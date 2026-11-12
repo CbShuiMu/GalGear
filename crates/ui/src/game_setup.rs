@@ -12,10 +12,47 @@ use std::{collections::BTreeMap, collections::BTreeSet, fmt::Write};
 pub(crate) struct State {
     pub open: bool,
     rematch: Option<String>,
-    page: usize,
+    viewport: Viewport,
     rows: Vec<Draft>,
     deferred: BTreeSet<String>,
     progress: Option<ScrapeProgress>,
+}
+
+#[derive(PartialEq)]
+struct Viewport {
+    start: usize,
+    count: usize,
+    pinned: String,
+}
+
+impl Default for Viewport {
+    fn default() -> Self {
+        Self {
+            start: 0,
+            count: 32,
+            pinned: String::new(),
+        }
+    }
+}
+
+/// DOM 只上报可见范围和焦点所在行；完整草稿与刮削队列始终由 Rust 持有。
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn setup_viewport(start: usize, count: usize, pinned: &str) {
+    crate::state::APP.with(|state| {
+        let mut app = state.borrow_mut();
+        if !app.setup.open {
+            return;
+        }
+        let viewport = Viewport {
+            start: start.min(app.setup.rows.len().saturating_sub(1)),
+            count: count.clamp(16, 80),
+            pinned: pinned.to_owned(),
+        };
+        if app.setup.viewport != viewport {
+            app.setup.viewport = viewport;
+            crate::view::paint(&app);
+        }
+    });
 }
 
 struct ScrapeProgress {
@@ -171,7 +208,7 @@ pub(crate) fn open_rematch(app: &mut App) {
     row.query = crate::features::form(app, "draft-title");
     app.setup.rematch = Some(game.id.clone());
     app.setup.rows.push(row);
-    app.setup.page = 0;
+    app.setup.viewport = Viewport::default();
     app.setup.open = true;
     app.choices.open = None;
     app.context_menu = None;
@@ -214,6 +251,9 @@ pub(crate) fn sync(app: &mut App) {
         .map(|game| draft(app, game))
         .collect();
     if !additions.is_empty() {
+        if !app.setup.open {
+            app.setup.viewport = Viewport::default();
+        }
         app.setup.rows.extend(additions);
         app.setup.open = true;
         app.choices.open = None;
@@ -318,10 +358,6 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         return false;
     }
     if !app.setup.open {
-        return true;
-    }
-    if action == "setup-page" {
-        if let Ok(page) = value.parse::<usize>() { app.setup.page = page.min(app.setup.rows.len().saturating_sub(1) / 40); app.choices.open = None; }
         return true;
     }
     if action == "setup-auto-stop" {
@@ -651,9 +687,10 @@ pub(crate) fn render(html: &mut String, app: &App) {
     if !app.setup.open {
         return;
     }
+    let row_count = app.setup.rows.len() + 1;
     let busy = app.setup.busy();
     let ready = app.setup.rows.iter().filter(|row| row.can_save()).count();
-    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help">{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table">"#,t(app,if app.setup.rematch.is_some() { "detail.rematch" } else { "setup.title" }),if app.setup.rematch.is_some() { esc(t(app,"detail.rematch_hint")) } else { f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]) },t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button(if app.setup.scraping() { "setup-auto-stop" } else { "setup-auto" },"",t(app,if app.setup.scraping() { "setup.auto_stop" } else { "setup.auto" }),if app.setup.scraping() { "close" } else { "search" },"quiet",busy && !app.setup.scraping()))).unwrap();
+    write!(html,r#"<div class="setup-overlay" data-render-key="setup-overlay"><section class="library-dialog setup-dialog" role="dialog" aria-modal="true" aria-labelledby="setup-title" data-render-key="setup-batch"><header><div><h2 id="setup-title">{}</h2><p class="muted">{}</p></div><button id="setup-close" class="icon-button" data-action="setup-defer-all" aria-label="{}" {}>{}</button></header><div class="setup-help">{}</div><div class="setup-table-scroll" id="setup-table-scroll"><table class="setup-table" aria-rowcount="{row_count}">"#,t(app,if app.setup.rematch.is_some() { "detail.rematch" } else { "setup.title" }),if app.setup.rematch.is_some() { esc(t(app,"detail.rematch_hint")) } else { f(app,"setup.remaining",&[("count",&app.setup.rows.len().to_string())]) },t(app,"common.close"),if busy{"disabled"}else{""},icon("close"),format_args!("<div class=\"setup-actions\">{}{}</div>",button("choice-toggle","setup-batch-source",t(app,"setup.batch_source"),"database","quiet choice-trigger",busy).replacen("<button", "<button id=\"setup-batch-source\"", 1),button(if app.setup.scraping() { "setup-auto-stop" } else { "setup-auto" },"",t(app,if app.setup.scraping() { "setup.auto_stop" } else { "setup.auto" }),if app.setup.scraping() { "close" } else { "search" },"quiet",busy && !app.setup.scraping()))).unwrap();
     html.push_str("<thead><tr>");
     for key in [
         "setup.game",
@@ -663,15 +700,21 @@ pub(crate) fn render(html: &mut String, app: &App) {
     ] {
         write!(html, "<th scope=\"col\">{}</th>", t(app, key)).unwrap();
     }
-    html.push_str("</tr></thead><tbody>");
+    let start = app.setup.viewport.start.min(app.setup.rows.len().saturating_sub(app.setup.viewport.count));
+    write!(html, r#"</tr></thead><tbody data-setup-total="{}" data-setup-start="{start}" data-setup-count="{}" data-setup-pinned="{}">"#, app.setup.rows.len(), app.setup.viewport.count, esc(&app.setup.viewport.pinned)).unwrap();
     let games: BTreeMap<_, _> = app
         .catalog
         .games
         .iter()
         .map(|game| (game.id.as_str(), game))
         .collect();
-    let page = app.setup.page.min(app.setup.rows.len().saturating_sub(1) / 40);
-    for row in app.setup.rows.iter().skip(page * 40).take(40) {
+    let end = (start + app.setup.viewport.count).min(app.setup.rows.len());
+    let mut previous = 0;
+    for (index, row) in app.setup.rows.iter().enumerate().filter(|(index, row)| {
+        (start..end).contains(index) || row.id == app.setup.viewport.pinned
+    }) {
+        render_spacer(html, previous, index);
+        previous = index + 1;
         let Some(game) = games.get(row.id.as_str()) else {
             continue;
         };
@@ -689,7 +732,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
         } else {
             "setup.pending"
         };
-        write!(html,r#"<tr data-render-key="setup-row-{}" data-setup-game="{}"><td class="setup-game"><strong title="{}">{}</strong><span class="setup-path" role="link" tabindex="{}" aria-disabled="{}" data-action="setup-open-folder" data-value="{}" title="{}" aria-label="{}: {}">{}</span><span class="setup-row-status" role="status">{}</span></td><td>"#,esc(&row.id),esc(&row.id),esc(&game.title),esc(&game.title),if row.locked() { -1 } else { 0 },row.locked(),esc(&row.id),esc(&game.folder),t(app,"detail.open_directory"),esc(&game.folder),esc(&game.folder),t(app,status)).unwrap();
+        write!(html,r#"<tr data-render-key="setup-row-{}" data-setup-game="{}" data-setup-index="{index}" aria-rowindex="{}"><td class="setup-game"><strong title="{}">{}</strong><span class="setup-path" role="link" tabindex="{}" aria-disabled="{}" data-action="setup-open-folder" data-value="{}" title="{}" aria-label="{}: {}">{}</span><span class="setup-row-status" role="status">{}</span></td><td>"#,esc(&row.id),esc(&row.id),index + 2,esc(&game.title),esc(&game.title),if row.locked() { -1 } else { 0 },row.locked(),esc(&row.id),esc(&game.folder),t(app,"detail.open_directory"),esc(&game.folder),esc(&game.folder),t(app,status)).unwrap();
         choices::control(
             html,
             app,
@@ -701,6 +744,9 @@ pub(crate) fn render(html: &mut String, app: &App) {
             ),
             row.locked(),
         );
+        if let Some(error) = &row.error {
+            write!(html, r#"<div class="setup-notice" role="alert">{}<span>{}</span></div>"#, icon("error"), esc(&error.render(app.settings.language))).unwrap();
+        }
         write!(html,r#"</td><td><div class="setup-row-field"><input id="setup-query-{}" data-input="setup-query:{}" value="{}" aria-label="{}" autocomplete="off" {}/><button class="icon-button" data-action="setup-search" data-value="{}" aria-label="{}" title="{}" {}>{}</button></div>"#,esc(&row.id),esc(&row.id),esc(&row.query),f(app,"setup.search_for",&[("name",&game.title)]),disabled,esc(&row.id),t(app,"metadata.search"),t(app,"metadata.search"),if row.locked()||row.source.is_empty()||row.query.trim().is_empty()||row.search_request.is_some(){"disabled"}else{""},icon("search")).unwrap();
         html.push_str("</td><td><div class=\"setup-entry-field\">");
         if row.searched && row.candidates.is_empty() && row.url.is_empty() && row.error.is_none() {
@@ -725,15 +771,17 @@ pub(crate) fn render(html: &mut String, app: &App) {
             );
         }
         write!(html,r#"<button type="button" class="icon-button setup-launcher-check" data-action="setup-confirm-launcher" data-value="{}" aria-pressed="{}" aria-label="{}" title="{}" {}>{}</button></div></td></tr>"#,esc(&row.id),row.confirmed,f(app,"setup.confirm_for",&[("name",&game.title)]),t(app,"common.confirm"),if row.locked() || row.url.is_empty() {"disabled"} else {""},icon("check")).unwrap();
-        if let Some(error) = &row.error {
-            write!(html,r#"<tr data-render-key="setup-error-{}"><td colspan="4" class="setup-error"><div class="setup-notice" role="alert">{}<span>{}</span></div></td></tr>"#,esc(&row.id),icon("error"),esc(&error.render(app.settings.language))).unwrap();
-        }
     }
+    render_spacer(html, previous, app.setup.rows.len());
     html.push_str("</tbody></table></div>");
-    if app.setup.rows.len() > 40 {
-        write!(html, "<div class=\"setup-pagination\">{}<span>{}</span>{}</div>", button("setup-page", &page.saturating_sub(1).to_string(), t(app,"common.previous"), "chevron_left", "quiet icon-only", page == 0), f(app,"setup.page", &[("page", &(page+1).to_string()), ("total", &app.setup.rows.len().div_ceil(40).to_string())]), button("setup-page", &(page+1).to_string(), t(app,"common.next"), "chevron", "quiet icon-only", (page+1)*40 >= app.setup.rows.len())).unwrap();
-    }
     write!(html,r#"<footer class="library-dialog-footer setup-footer"><span class="muted">{}</span><div>{}{}</div></footer></section></div>"#,f(app,"setup.ready",&[("count",&ready.to_string())]),button("setup-defer-all","",t(app,if app.setup.rematch.is_some() { "common.cancel" } else { "setup.later" }),"","quiet",busy),button("setup-save","",t(app,if app.setup.rows.iter().any(|row| row.saving || row.queued) {"setup.saving"}else{"setup.save"}),"check","primary",busy||ready==0)).unwrap();
+}
+
+// 占位高度与 CSS 行高共享同一变量，缩放和字体变化时保持连续滚动范围。
+fn render_spacer(html: &mut String, start: usize, end: usize) {
+    if start < end {
+        write!(html, r#"<tr class="setup-spacer" data-render-key="setup-spacer-{start}" aria-hidden="true"><td colspan="4" style="height:calc(var(--setup-row-height) * {})"></td></tr>"#, end - start).unwrap();
+    }
 }
 
 #[cfg(test)]

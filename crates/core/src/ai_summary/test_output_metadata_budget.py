@@ -25,6 +25,7 @@ class OutputMetadataBudgetTests(unittest.TestCase):
         return value
 
     def test_actual_provider_metadata_expands_research_and_authoring_baselines(self):
+        self.confirm_save('two.sav')
         self.capabilities()
         opener, patcher = self.network([self.response(), self.response()])
         with patcher:
@@ -38,6 +39,7 @@ class OutputMetadataBudgetTests(unittest.TestCase):
         self.assertEqual([call.kwargs['timeout'] for call in opener.open.call_args_list], [600, 900])
 
     def test_two_length_expansions_use_remaining_advertised_capacity_without_dispatching_partial_code(self):
+        self.confirm_save('two.sav')
         self.capabilities()
         self.agent.workflow.stage = 'script_program'
         original = dict(self.agent.programs)
@@ -142,6 +144,22 @@ class OutputMetadataBudgetTests(unittest.TestCase):
         payload = json.loads(opener.open.call_args.args[0].data)
         self.assertEqual(payload['max_tokens'], 131072)
         self.assertEqual(payload['reasoning_effort'], 'max')
+
+    def test_preflight_timeout_stays_short_on_retry_and_with_large_checkpoint_budget(self):
+        self.capabilities()
+        self.agent.workflow.stage = 'resources'
+        self.agent.output_limit_stage = 'resources'
+        self.agent.output_limit = 262144
+        self.agent.request_ceiling = 6
+        opener, patcher = self.network([TimeoutError('fixture timeout'), self.response()])
+        with patcher, mock.patch.object(host.time, 'sleep'):
+            self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
+        self.assertEqual([call.kwargs['timeout'] for call in opener.open.call_args_list], [120, 120])
+        self.assertEqual(self.agent.requests_sent, 2)
+        self.assertEqual(self.requests()[0]['kind'], 'timeout')
+        self.assertEqual(host.request_timeout_seconds(262144, 35.9, preflight=True), 35)
+        with self.assertRaisesRegex(RuntimeError, 'budget exhausted'):
+            host.request_timeout_seconds(262144, 0, preflight=True)
 
     def test_expired_runtime_never_starts_an_inference_request(self):
         self.agent.runtime_deadline = 100

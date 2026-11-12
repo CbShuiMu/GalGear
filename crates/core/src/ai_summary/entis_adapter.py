@@ -17,6 +17,7 @@ PUSH_STRING = b'\x02\x00\x06\x00\x00\x00\x80'
 NEW_ARRAY = b'\x02\x00\x02'
 ADD = b'\x0c\x00'
 PUSH_INTEGER = b'\x02\x00\x04'
+SUPPORTED_TITLE_PROFILE = {'class': 'SaveDataTitle', 'version': 20140121, 'caption_field': 3}
 
 class UnsupportedVariant(ValueError):
     pass
@@ -53,8 +54,8 @@ def chunks(data, base=0):
         cursor = body + size
     return sections
 
-def saved_context(data, decode):
-    """Decode the audited length-prefixed nested-container variant only."""
+def save_sections(data):
+    """Read the complete outer container before interpreting title semantics."""
     base = 0
     if data[:2] == b'BM':
         if len(data) < 54:
@@ -65,6 +66,11 @@ def saved_context(data, decode):
     sections = chunks(data, base)
     if not data[base + 16:base + 56].startswith(b'cotomi context file'):
         raise UnsupportedVariant('unsupported outer container description')
+    return sections
+
+def saved_context(data, decode):
+    """Decode the audited length-prefixed nested-container variant only."""
+    sections = save_sections(data)
     encoded = sections.get('context')
     if encoded is None or encoded['length'] <= 4:
         raise UnsupportedVariant('no length-prefixed encoded context section')
@@ -226,7 +232,8 @@ def title_value(data, cursor, end, depth=0):
     if tag == 4:
         if cursor + 16 > end or data[cursor + 8:cursor + 16] != b'\xff' * 8:
             raise ValueError('invalid title Integer trailer')
-        return (dict(kind='integer', value=uint(data, cursor, 8)), cursor + 16)
+        return (dict(kind='integer', value=uint(data, cursor, 8),
+                     proof=dict(offset=cursor, width=8, endian='little')), cursor + 16)
     if tag == 6:
         text, cursor, proof = wide(data, cursor, end)
         if cursor + 8 > end or data[cursor:cursor + 8] != b'\x00' * 4 + b'\xff' * 4:
@@ -488,7 +495,7 @@ def bisect_right(values, value):
 
 def checked_title_profile(profile):
     """Only the audited title API may assign a current-caption field role."""
-    supported = {'class': 'SaveDataTitle', 'version': 20140121, 'caption_field': 3}
+    supported = SUPPORTED_TITLE_PROFILE
     if (not isinstance(profile, dict) or profile != supported
             or type(profile.get('version')) is not int
             or type(profile.get('caption_field')) is not int):
@@ -569,7 +576,7 @@ def describe():
             scope_transform=dict(kind='last_component', separator='@')),
             save=dict(message_callees=['<same audited native callee>'], text_argument='<native local index>',
                 vm_profile='cotopha-frame-vector-v1',
-                title_profile=dict(**{'class':'SaveDataTitle'},version=20140121,caption_field=3))),
+                title_profile=dict(SUPPORTED_TITLE_PROFILE))),
         guarantees=['Complete conststr and funcinfo table walk', 'Actual native call sequence and return coordinate',
             'Complete current-title object and version check', 'Unique complete frame-vector suffix and typed value prefix',
             'Caller short name and return Integer proofs; caption only crosschecks the uniquely selected native node'],
@@ -620,8 +627,24 @@ def extract_script(data, metadata, profile):
 def inspect_save(data, metadata, profile):
     # Inspection may precede callee/argument discovery, but it must not let a
     # caller label an unsupported title class/version as the current caption.
-    title_profile=checked_title_profile(profile.get('title_profile',
-        {'class':'SaveDataTitle','version':20140121,'caption_field':3}))
+    section = save_sections(data).get('title')
+    if section is None:
+        raise UnsupportedVariant('missing title section')
+    end = section['offset'] + section['length']
+    title, after = title_value(data, section['offset'], end)
+    if after != end or title.get('kind') != 'object' or not title['fields'] or title['fields'][0]['kind'] != 'integer':
+        raise UnsupportedVariant('unsupported complete title object or version field')
+    version = title['fields'][0]
+    if title['name'] != SUPPORTED_TITLE_PROFILE['class'] or version['value'] != SUPPORTED_TITLE_PROFILE['version']:
+        return dict(ok=False, analysis_only=True, status='unsupported_variant',
+            reason='unsupported_title_profile', next_action='write_save_parser',
+            observed_title=dict(class_name=title['name'], version=version['value'], version_proof=version['proof']),
+            supported_title=dict(SUPPORTED_TITLE_PROFILE),
+            instruction='The actual title class/version is outside this bundled adapter. Stop retrying profile values. '
+                        'Reuse raw version evidence and byte codecs, inspect the missing native state layout, '
+                        'then write_program(kind="save") and test_program on this save. '
+                        'These observations do not establish a current caption or verified node.')
+    title_profile=checked_title_profile(profile.get('title_profile', SUPPORTED_TITLE_PROFILE))
     state = saved_context(data, codec_decode)
     vector = stack_frame_suffixes(state['data'], state['sections']['stack'])
     caption=current_title(data,state['raw_sections']['title'],title_profile)

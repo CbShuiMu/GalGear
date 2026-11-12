@@ -5,6 +5,7 @@ from pathlib import Path
 import runpy
 import struct
 import unittest
+from unittest import mock
 
 
 HERE = Path(__file__).resolve().parent
@@ -224,8 +225,11 @@ class EntisAdapterTests(unittest.TestCase):
         for fixture_profile,title_profile in variants:
             with self.subTest(title_profile=title_profile):
                 data,unused = fixture(**fixture_profile)
-                with self.assertRaisesRegex(ValueError, 'unsupported current-title class/version/API profile'):
-                    self.inspect_save(data, dict(title_profile=title_profile))
+                result = self.inspect_save(data, dict(title_profile=title_profile))
+                self.assertFalse(result['ok'])
+                self.assertEqual(result['status'], 'unsupported_variant')
+                self.assertNotIn('current_call', result)
+                self.assertNotIn('observations', result)
                 with self.assertRaisesRegex(ValueError, 'unsupported current-title class/version/API profile'):
                     ADAPTER['program']('save',dict(SAVE_PROFILE,title_profile=title_profile))
 
@@ -233,8 +237,25 @@ class EntisAdapterTests(unittest.TestCase):
         for fixture_profile in (dict(version=7),dict(title_class='UnknownTitle')):
             with self.subTest(fixture_profile=fixture_profile):
                 data,unused=fixture(**fixture_profile)
-                with self.assertRaises(ValueError):
-                    self.inspect_save(data,{})
+                result = self.inspect_save(data,{})
+                self.assertFalse(result['ok'])
+                self.assertEqual(result['next_action'], 'write_save_parser')
+                observed = result['observed_title']
+                proof = observed['version_proof']
+                self.assertEqual(int.from_bytes(data[proof['offset']:proof['offset'] + proof['width']], 'little'), observed['version'])
+                self.assertEqual(observed['version'], fixture_profile.get('version', TITLE['version']))
+                self.assertEqual(observed['class_name'], fixture_profile.get('title_class', TITLE['class']))
+
+    def test_unknown_title_does_not_decode_or_accept_a_forged_profile(self):
+        data, unused = fixture(version=7)
+        with mock.patch.dict(ADAPTER['inspect_save'].__globals__,
+                codec_decode=lambda *args, **kwargs: self.fail('Unknown title must be diagnosed before decoding')):
+            for profile in ({}, dict(title_profile=TITLE), dict(save=dict(title_profile=dict(TITLE, version=7)))):
+                result = ADAPTER['inspect_save'](data, {}, profile)
+                self.assertFalse(result['ok'])
+                self.assertEqual(result['observed_title']['version'], 7)
+        with self.assertRaises(ValueError):
+            self.inspect_save(data[:-1], {})
 
     def test_inspection_and_generation_share_strict_title_profile_types(self):
         for title_profile in (dict(TITLE,version=20140121.0),dict(TITLE,caption_field=3.0),

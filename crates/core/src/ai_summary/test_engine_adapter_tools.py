@@ -118,6 +118,36 @@ class EngineAdapterToolTests(unittest.TestCase):
         self.assertEqual(record['preview_target_pointer'], '/result/inspection')
         self.assertIn('inspect_engine_adapter', host.RESEARCH['STRUCTURAL_TOOLS'])
 
+    def test_unsupported_save_guidance_survives_reads_and_restart_until_input_changes(self):
+        import test_entis_adapter as fixtures
+        data, unused = fixtures.fixture(version=7)
+        path = self.root / 'save/current.sav'
+        path.write_bytes(data)
+        self.implementation['inspect_save'] = fixtures.ADAPTER['inspect_save']
+        arguments = dict(adapter='entis_cotopha', kind='save', root='save', path='current.sav')
+        result = self.agent.dispatch('inspect_engine_adapter', arguments)
+        self.assertFalse(result['ok'])
+        self.assertFalse(host.RESEARCH['successful'](result))
+        self.agent.research.observe('unsupported-save', dict(name='inspect_engine_adapter', arguments=arguments),
+            result, inputs=self.agent.input_description('inspect_engine_adapter', arguments))
+        for index in range(8):
+            self.agent.research.observe('script-' + str(index),
+                dict(name='inspect_engine_adapter', arguments=dict(adapter='entis_cotopha', kind='script')),
+                dict(inspection=dict(function_count=2)))
+        restored = host.Agent(self.agent.config)
+        guidance = restored.work_guidance()
+        self.assertEqual(len(guidance['adapter_fallbacks']), 1)
+        self.assertEqual(guidance['adapter_fallbacks'][0]['observed_title']['version'], 7)
+        self.assertIn('First inspect the current required save', guidance['next_action'])
+        restored.workflow.stage = 'save_program'
+        with mock.patch.object(restored.workflow, 'describe', return_value=dict(goal='Write the save parser.', exploratory_requests=0)):
+            self.assertIn('write_program(kind="save")', restored.work_guidance()['next_action'])
+        self.assertFalse(restored.preparation_status()['ready_for_finish'])
+        self.assertEqual(restored.programs, {})
+        path.write_bytes(fixtures.fixture()[0])
+        restored.research.set_inputs(restored.input_description('inspect_engine_adapter', arguments))
+        self.assertEqual(restored.work_guidance()['adapter_fallbacks'], [])
+
     def test_stamped_adapter_inspection_can_support_speaker_review_with_real_inventory(self):
         self.agent.parts['fixture-script'] = [dict(source='member.bin', position=0, text='Current', speaker=None)]
         refs = []
