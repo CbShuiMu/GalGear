@@ -3,11 +3,11 @@ use crate::{
     data_sources, dialogs, preferences, state::AppState, state::find_game, state::persist_game,
     state::snapshot,
 };
-use galgear_core::{Game, Settings, catalog, config::display_path, game_setup, providers};
+use galgear_core::{Game, Settings, catalog, config::display_path, game_setup};
 use galgear_i18n::Message;
 use serde::Serialize;
 use std::path::PathBuf;
-use tauri::State;
+use tauri::{Manager, State};
 
 #[derive(Serialize)]
 pub struct ResultData {
@@ -19,33 +19,6 @@ pub struct ResultData {
 pub struct SetupResult {
     game: Game,
     edit: galgear_core::GameEdit,
-}
-
-#[tauri::command]
-pub(crate) async fn search_game_metadata(
-    id: String,
-    source: String,
-    state: State<'_, AppState>,
-) -> Result<game_setup::matching::SearchResult, Message> {
-    let game = find_game(&state, &id)?;
-    let query = game_setup::matching::query(
-        &game.title,
-        std::path::Path::new(&game.folder),
-        std::path::Path::new(&game.library),
-    );
-    if query.is_empty() {
-        return Ok(game_setup::matching::resolve(query, Vec::new()));
-    }
-    let candidates = state
-        .metadata_search
-        .search(
-            state.store.path.clone(),
-            source,
-            snapshot(&state)?.fan_domain,
-            query.clone(),
-        )
-        .await?;
-    Ok(game_setup::matching::resolve(query, candidates))
 }
 
 #[derive(Serialize)]
@@ -250,6 +223,7 @@ async fn complete(
     let domain = snapshot(&state)?.fan_domain;
     let credentials = data_sources::credentials_for(&state, &source).await?;
     let cache = state.store.path.with_file_name("covers");
+    let handle = app.clone();
     let (metadata, cover) = tauri::async_runtime::spawn_blocking(move || {
         let metadata = galgear_core::data_sources::metadata(&domain, &url, &credentials)?;
         let cover = if rematch {
@@ -262,7 +236,11 @@ async fn complete(
                 Err(error) => Some(Err(error)),
             }
         } else if game.cover.is_none() && metadata.cover_url.is_some() {
-            Some(providers::save_cover(&game, &metadata, &cache))
+            Some(crate::covers::download_game_cover(
+                &handle.state::<AppState>(),
+                &game,
+                &metadata,
+            ))
         } else {
             None
         };
@@ -272,7 +250,6 @@ async fn complete(
     .map_err(|error| Message::detail("error.network", error))??;
     // 资料配置由 preferences 序列化写入，磁盘持久化不占用异步执行器。
     tauri::async_runtime::spawn_blocking(move || {
-        use tauri::Manager;
         let state = app.state::<AppState>();
         let mut game = find_game(&state, &id)?;
         let settings = preferences::update(&state, |settings| {

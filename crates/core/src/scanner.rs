@@ -241,7 +241,7 @@ fn visit(
             .installed
             .find(&display_path(dir), detected_executable.as_deref());
         let id = existing.map(|game| game.id.clone()).unwrap_or(id);
-        let title = clean_title(&file_name(folder));
+        let title = crate::catalog::title::from_directory(folder);
         let mut stamp = Sha256::new();
         let override_path = settings.cover_overrides.get(&id).map(PathBuf::from);
         let cover_paths: Vec<_> = [find_cover(dir), find_cover(folder)]
@@ -563,22 +563,6 @@ pub fn cache_poster(source: &Path, destination: &Path) -> Result<String, Message
     Ok(data)
 }
 
-fn clean_title(name: &str) -> String {
-    let cut = [
-        " パッケージ版",
-        " (iso+",
-        " (mdf+",
-        " [+",
-        " Crack",
-        " crack",
-    ]
-    .iter()
-    .filter_map(|s| name.find(s))
-    .min()
-    .unwrap_or(name.len());
-    name[..cut].trim().to_owned()
-}
-
 fn file_name(path: &Path) -> String {
     path.file_name()
         .unwrap_or_default()
@@ -600,6 +584,68 @@ mod tests {
     fn file(path: &Path) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, []).unwrap();
+    }
+
+    #[test]
+    fn imports_name_generic_directories_before_setup_including_a_selected_game_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let name = "8  援女交際 ～亜梨紗の情事～";
+        let title = temp.path().join(name);
+        let folder = title.join("game");
+        let executable = folder.join("game.exe");
+        file(&executable);
+        file(&folder.join("data.xp3"));
+        for root in [temp.path(), title.as_path(), folder.as_path()] {
+            let settings = Settings {
+                library_folders: vec![display_path(root)],
+                ..Default::default()
+            };
+            let result = scan(&settings);
+            assert_eq!(result.games.len(), 1);
+            assert_eq!(result.games[0].title, name);
+            assert_eq!(result.games[0].folder, display_path(&folder));
+            assert_eq!(
+                result.games[0].executable.as_deref(),
+                Some(display_path(&executable).as_str())
+            );
+        }
+        let manual = crate::catalog::manual_game(
+            &executable,
+            crate::catalog::title::from_directory(executable.parent().unwrap()),
+        )
+        .unwrap();
+        assert_eq!(manual.title, name);
+        assert_eq!(manual.folder, manual.library);
+    }
+
+    #[test]
+    fn incremental_import_repairs_cached_generic_names_and_preserves_manual_titles() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("人妻俱乐部/game");
+        file(&folder.join("game.exe"));
+        file(&folder.join("data.xp3"));
+        let mut settings = Settings {
+            library_folders: vec![display_path(&folder)],
+            ..Default::default()
+        };
+        let mut previous = scan(&settings);
+        previous.games[0].title = "game".into();
+        let cancel = AtomicBool::new(false);
+        let result = scan_incremental(&settings, &previous, &cancel, &mut |_| {});
+        let result = crate::catalog::merge(result, &previous, &settings);
+        assert_eq!(result.games[0].title, "人妻俱乐部");
+        assert_eq!(result.games[0].id, previous.games[0].id);
+        settings.manual_games.push(previous.games[0].clone());
+        let result = crate::catalog::merge(ScanResult::default(), &previous, &settings);
+        assert_eq!(result.games[0].title, "人妻俱乐部");
+        settings
+            .game_edits
+            .entry(previous.games[0].id.clone())
+            .or_default()
+            .title = Some("game".into());
+        let result = scan_incremental(&settings, &previous, &cancel, &mut |_| {});
+        let result = crate::catalog::merge(result, &previous, &settings);
+        assert_eq!(result.games[0].title, "game");
     }
 
     #[test]

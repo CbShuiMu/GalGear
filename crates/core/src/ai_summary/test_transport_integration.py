@@ -158,7 +158,7 @@ class TransportIntegrationTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
         self.assertEqual([item['max_tokens'] for item in payloads], [12000, 24000])
-        self.assertEqual([item['reasoning_effort'] for item in payloads], ['max', 'max'])
+        self.assertEqual([item['reasoning_effort'] for item in payloads], ['high', 'high'])
         self.assertEqual(payloads[0]['messages'], payloads[1]['messages'][:len(payloads[0]['messages'])])
         retry = json.loads(payloads[1]['messages'][-1]['content'].split('\n')[0].removeprefix('Host progress: '))
         self.assertEqual(retry['remaining_work_requests'], 4)
@@ -186,10 +186,10 @@ class TransportIntegrationTests(unittest.TestCase):
         self.assertEqual(self.agent.requests_sent, 2)
         self.assertEqual(opener.open.call_count, 2)
         self.assertEqual([item['max_tokens'] for item in self.requests()], [12000, 24000])
-        self.assertTrue(all(item['reasoning_effort'] == 'max' for item in self.requests()))
+        self.assertTrue(all(item['reasoning_effort'] == 'low' for item in self.requests()))
         dispatch.assert_not_called()
 
-    def test_non_authoring_reasoning_only_length_keeps_max_on_retry_and_following_turn(self):
+    def test_non_authoring_reasoning_only_length_keeps_selected_effort_on_retry_and_following_turn(self):
         self.agent.workflow.stage = 'resources'
         exhausted = dict(completion_tokens=12000, completion_tokens_details=dict(reasoning_tokens=12000))
         opener, patcher = self.network([self.response(reason='length', usage=exhausted), self.response(), self.response()])
@@ -197,7 +197,7 @@ class TransportIntegrationTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
             self.agent.run_turn(self.messages, host.TOOLS, 1, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
-        self.assertEqual([item['reasoning_effort'] for item in payloads], ['max', 'max', 'max'])
+        self.assertEqual([item['reasoning_effort'] for item in payloads], ['high', 'high', 'high'])
         self.assertEqual([item['max_tokens'] for item in payloads], [12000, 24000, 24000])
 
     def test_authoring_stages_start_at_32000_and_never_retry_truncated_program_arguments(self):
@@ -226,7 +226,7 @@ class TransportIntegrationTests(unittest.TestCase):
         self.assertEqual(self.agent.events, [])
         self.assertTrue(all('tool_calls' not in message for message in self.messages))
 
-    def test_all_preparation_stages_keep_max_after_repeated_inspection(self):
+    def test_preparation_selects_effort_by_stage_despite_legacy_config(self):
         self.agent.request_limit = self.agent.request_ceiling = 150
         self.agent.config['reasoning_effort'] = 'low'
         stages = ('prerequisites', 'resources', 'script_program', 'script_validation',
@@ -241,8 +241,10 @@ class TransportIntegrationTests(unittest.TestCase):
                                         'finish' if stage == 'finish' else 'prepare')
                 payload = json.loads(opener.open.call_args.args[0].data)
                 self.assertEqual(payload['thinking'], dict(type='enabled'))
-                self.assertEqual(payload['reasoning_effort'], 'max')
-                self.assertEqual(self.requests()[-1]['reasoning_effort'], 'max')
+                expected_effort = ('low' if stage in ('prerequisites', 'finish')
+                                   else 'high' if stage == 'resources' else 'max')
+                self.assertEqual(payload['reasoning_effort'], expected_effort)
+                self.assertEqual(self.requests()[-1]['reasoning_effort'], expected_effort)
                 expected_cap = 32000 if stage in ('script_program', 'script_validation', 'speaker_review',
                                                   'save_program', 'save_validation') else 12000
                 self.assertEqual(payload['max_tokens'], expected_cap)
@@ -437,7 +439,7 @@ class TransportIntegrationTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 3, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
         self.assertEqual([payload['max_tokens'] for payload in payloads], [12000, 24000, 24000, 32000, 12000])
-        self.assertTrue(all(payload['reasoning_effort'] == 'max' for payload in payloads))
+        self.assertEqual([payload['reasoning_effort'] for payload in payloads], ['high', 'high', 'high', 'max', 'high'])
         self.assertEqual(self.agent.requests_sent, 5)
 
     def test_expanded_output_state_survives_compatible_checkpoint_only_with_allowed_caps(self):
@@ -485,7 +487,7 @@ class TransportIntegrationTests(unittest.TestCase):
                 self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
         opener.open.assert_called_once()
         payload = json.loads(opener.open.call_args.args[0].data)
-        self.assertEqual((payload['max_tokens'], payload['reasoning_effort']), (32000, 'max'))
+        self.assertEqual((payload['max_tokens'], payload['reasoning_effort']), (32000, 'high'))
         self.assertEqual(self.agent.events, [])
 
 

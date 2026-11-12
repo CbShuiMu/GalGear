@@ -422,6 +422,9 @@ class ResearchStore:
                      successful=successful(result), stale=False,
                      preview=structural_preview(preview_value), preview_target_pointer=preview_pointer,
                      read_preview=dict(root='work', path=full_record, pointer=preview_pointer))
+        if function.get('name') in ('inspect_engine_adapter', 'reuse_engine_adapter'):
+            entry['adapter'] = clipped(str(args.get('adapter', '')), 128)
+            entry['kind'] = clipped(str(args.get('kind', '')), 32)
         if isinstance(args.get('source'), str):
             entry['analysis_source_sha256'] = hashlib.sha256(args['source'].encode('utf-8')).hexdigest()
         self.records[ref] = entry
@@ -433,6 +436,17 @@ class ResearchStore:
     @staticmethod
     def _handle(entry):
         return {key: entry[key] for key in ('ref', 'tool_call_id', 'full_record', 'successful', 'stale')}
+
+    def adapter_attempts(self):
+        """Keep bounded, current adapter results visible across unrelated reads."""
+        attempts = [entry for entry in self.records.values()
+                    if entry['tool'] in ('inspect_engine_adapter', 'reuse_engine_adapter')
+                    and not entry.get('stale')]
+        return [dict(ref=entry['ref'], adapter=entry.get('adapter'), kind=entry.get('kind'),
+                     successful=entry['successful'], preview=structural_preview(entry['preview'], budget=1200),
+                     read_result=entry['read_preview'],
+                     read_arguments=dict(root='work', path=entry['full_record'], pointer='/function/arguments'))
+                for entry in attempts[-6:]]
 
     def set_inputs(self, inputs, persist=True):
         """Mark observations and notes stale when host-supplied file stamps differ."""

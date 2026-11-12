@@ -30,6 +30,13 @@ class SavePreflightHostTests(unittest.TestCase):
             max_turns=0, required_saves=[str(self.save.resolve())])
         self.agent = host.Agent(self.config)
 
+    def test_preflight_is_the_current_goal_before_script_work(self):
+        guidance = self.agent.work_guidance()
+        self.assertEqual(guidance['goal'], guidance['next_action'])
+        self.assertIn('current.bin', guidance['goal'])
+        self.assertNotIn('Subsequent stage', guidance['goal'])
+        self.assertIn('before selecting or implementing the script adapter', guidance['goal'])
+
     def candidate(self):
         return dict(path='current.bin', classification='progress_candidate',
             explanation='A native state coordinate exists; the final node join is still required.',

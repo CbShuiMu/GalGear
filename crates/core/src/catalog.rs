@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use std::{fs, io::Write, path::Path};
 
 pub(crate) mod identity;
+pub mod title;
 pub use identity::empty_scan_duplicates;
 
 pub fn manual_game(path: &Path, title: String) -> Result<Game, Message> {
@@ -264,6 +265,16 @@ pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> Sc
             }
         }
         apply_edits(game, settings);
+        // 重新导入时也修正旧缓存和手动条目的通用名，保留资料标题及手动改名。
+        if game.metadata.is_none()
+            && title::is_generic(&game.title)
+            && settings
+                .game_edits
+                .get(&game.id)
+                .is_none_or(|edit| edit.title.is_none())
+        {
+            game.title = title::from_directory(Path::new(&game.folder));
+        }
     }
     fresh.games.retain(|g| {
         g.executable.as_ref().is_some_and(|path| {

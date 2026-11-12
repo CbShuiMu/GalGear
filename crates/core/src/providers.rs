@@ -4,6 +4,7 @@ use reqwest::{Url, blocking::Client};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// Version of the complete credits and local-tag cache format.
@@ -554,59 +555,112 @@ pub fn cover_bytes(image_url: &str, referrer: &str) -> Result<Vec<u8>, Message> 
     Ok(output.into_inner())
 }
 
-pub fn save_cover(
-    game: &crate::Game,
-    metadata: &Metadata,
-    cache: &std::path::Path,
-) -> Result<(String, String, Option<Message>), Message> {
-    use std::io::Write;
-    let bytes = cover_bytes(
+const LOCAL_COVER_NAME: &str = "cover.jpg";
+
+/// 下载并校验资料中的封面，返回可保存的 JPEG 内容。
+pub fn download_cover(metadata: &Metadata) -> Result<Vec<u8>, Message> {
+    cover_bytes(
         metadata
             .cover_url
             .as_deref()
             .ok_or_else(|| Message::new("error.metadata"))?,
         &metadata.url,
-    )?;
-    let local = std::path::PathBuf::from(&game.folder).join("cover.jpg");
-    let write = |path: &std::path::Path| -> Result<(), Message> {
+    )
+}
+
+/// 保存已校验的 JPEG，返回实际路径与可选的缓存回退提示。已有同名封面优先。
+pub fn store_downloaded_cover(
+    game: &crate::Game,
+    bytes: &[u8],
+    cache: &Path,
+) -> Result<(PathBuf, Option<Message>), Message> {
+    use std::io::Write;
+    let local = Path::new(&game.folder).join(LOCAL_COVER_NAME);
+    let write = |path: &Path| -> Result<(), Message> {
         let parent = path
             .parent()
             .ok_or_else(|| Message::new("error.cover_path"))?;
         std::fs::create_dir_all(parent).map_err(network)?;
         let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(network)?;
-        temp.write_all(&bytes).map_err(network)?;
+        temp.write_all(bytes).map_err(network)?;
         temp.as_file().sync_all().map_err(network)?;
         temp.persist_noclobber(path).map_err(network)?;
         Ok(())
     };
     if local.is_file() {
-        return Ok((
-            crate::scanner::poster_data(&local)?,
-            crate::config::display_path(&local),
-            None,
-        ));
+        return Ok((local, None));
     }
-    let (destination, warning) = match write(&local) {
+    Ok(match write(&local) {
         Ok(()) => (local, None),
         Err(e) => {
             std::fs::create_dir_all(cache).map_err(network)?;
-            let fallback = cache.join(format!(
-                "{}-{:x}.jpg",
-                game.id,
-                sha2::Sha256::digest(&bytes)
-            ));
+            let fallback = cache.join(format!("{}-{:x}.jpg", game.id, sha2::Sha256::digest(bytes)));
             if !fallback.exists() {
                 write(&fallback)?;
             }
             (fallback, Some(Message::detail("cover.fallback", e)))
         }
-    };
+    })
+}
+
+/// 下载游戏封面并保存，返回可显示的图像、实际路径与可选的缓存回退提示。
+pub fn save_cover(
+    game: &crate::Game,
+    metadata: &Metadata,
+    cache: &Path,
+) -> Result<(String, String, Option<Message>), Message> {
+    let bytes = download_cover(metadata)?;
+    let (destination, warning) = store_downloaded_cover(game, &bytes, cache)?;
     Ok((
         crate::scanner::poster_data(&destination)?,
         crate::config::display_path(&destination),
         warning,
     ))
 }
+
+/// 删除游戏目录直属的 `cover.jpg`。目录或文件缺失时视为已清理。
+/// 目录和封面必须是普通路径，遇到链接或 Windows 重解析点返回错误。
+pub fn remove_local_cover(folder: &Path) -> std::io::Result<()> {
+    use std::{fs, io};
+
+    let invalid_path = || io::Error::new(io::ErrorKind::InvalidInput, LOCAL_COVER_NAME);
+    let metadata = |path: &Path| match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            #[cfg(windows)]
+            let linked = std::os::windows::fs::MetadataExt::file_attributes(&metadata) & 0x400 != 0;
+            #[cfg(not(windows))]
+            let linked = metadata.file_type().is_symlink();
+            if linked {
+                Err(invalid_path())
+            } else {
+                Ok(Some(metadata))
+            }
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    };
+    if !folder.is_absolute() {
+        return Err(invalid_path());
+    }
+    let Some(directory) = metadata(folder)? else {
+        return Ok(());
+    };
+    if !directory.is_dir() {
+        return Err(invalid_path());
+    }
+    let cover = folder.join(LOCAL_COVER_NAME);
+    let Some(file) = metadata(&cover)? else {
+        return Ok(());
+    };
+    if !file.is_file() {
+        return Err(invalid_path());
+    }
+    match fs::remove_file(cover) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        result => result,
+    }
+}
+
 /// 读取同源条目的补丁列表；凭据只发送给 2DFan 站点。
 pub fn fan_patches(
     domain: &str,

@@ -4,7 +4,7 @@ use crate::{
 };
 use galgear_core::{Game, catalog, providers};
 use galgear_i18n::Message;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 pub(crate) mod search;
 pub(crate) mod title_refresh;
@@ -44,8 +44,9 @@ pub(crate) async fn select_metadata(
     url: String,
     expected_url: Option<String>,
     target: Option<galgear_core::game_details::MetadataTarget>,
-    state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<Game, Message> {
+    let state = app.state::<AppState>();
     find_game(&state, &id)?;
     let domain = snapshot(&state)?.fan_domain;
     let (source, _) = galgear_core::data_sources::source_for_url(&url)?;
@@ -59,10 +60,10 @@ pub(crate) async fn select_metadata(
     let cover = if target.is_none() && game.cover.is_none() && metadata.cover_url.is_some() {
         let game = game.clone();
         let metadata = metadata.clone();
-        let cache = state.store.path.with_file_name("covers");
+        let handle = app.clone();
         Some(
             tauri::async_runtime::spawn_blocking(move || {
-                providers::save_cover(&game, &metadata, &cache)
+                crate::covers::download_game_cover(&handle.state::<AppState>(), &game, &metadata)
             })
             .await
             .map_err(|e| Message::detail("error.network", e))?,
@@ -185,7 +186,7 @@ pub(crate) async fn enrich_library(
                 metadata.url.clone(),
                 Some(metadata.url.clone()),
                 None,
-                state.clone(),
+                app.clone(),
             )
             .await
             {

@@ -337,14 +337,6 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     .unwrap();
     if app.detail.editing && !app.detail.editing_configuration {
         form_field(html, app, "draft-tags", "edit.tags", false);
-        html.push_str(&button(
-            "detail-tags-reset",
-            "",
-            t(app, "tags.restore"),
-            "refresh",
-            "quiet draft-reset",
-            app.busy(),
-        ));
     } else {
         for tag in &game.tags {
             crate::detail_tags::render_tag(html, app, tag);

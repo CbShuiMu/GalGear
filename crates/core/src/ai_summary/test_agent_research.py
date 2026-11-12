@@ -23,6 +23,25 @@ class ResearchTests(unittest.TestCase):
             root='game', path='ev.noa', source='def extract(data, metadata): return {"offset":4}'))),
             result if result is not None else dict(offset=4, count=10, encoding='utf-16-le'), inputs=inputs)
 
+    def test_adapter_attempts_survive_unrelated_reads_and_exclude_changed_inputs(self):
+        original = dict(path='input', sha256='a' * 64)
+        self.store.observe('adapter', dict(name='inspect_engine_adapter', arguments=dict(
+            adapter='fixture', kind='script', profile={'version': 1})),
+            {'error': 'unsupported version'}, inputs=original)
+        for index in range(20):
+            self.observe('read-' + str(index))
+        attempts = self.store.adapter_attempts()
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(attempts[0]['adapter'], 'fixture')
+        self.assertFalse(attempts[0]['successful'])
+        path = self.work / attempts[0]['read_arguments']['path']
+        self.assertEqual(json.loads(path.read_text())['function']['arguments']['profile'], {'version': 1})
+        restored = research.ResearchStore(self.work)
+        restored.restore()
+        self.assertEqual(restored.adapter_attempts(), attempts)
+        self.store.set_inputs([dict(path='input', sha256='b' * 64)])
+        self.assertEqual(self.store.adapter_attempts(), [])
+
     def finding(self, identity='layout', refs=None, status='observed'):
         return dict(id=identity, status=status, summary='The section payload begins after its header.',
                     evidence_refs=refs or ['O1'], coordinates={'section_header': {'base': 'file', 'offset': 16},

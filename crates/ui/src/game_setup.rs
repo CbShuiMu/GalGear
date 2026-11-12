@@ -1,6 +1,6 @@
 //! Batch association and executable confirmation, with independent row drafts.
 use crate::{
-    choices, models::Game, models::Resource, models::Settings, models::SetupSearchResult, preferences, requests::Pending,
+    choices, models::Game, models::Resource, models::Settings, preferences, requests::Pending,
     requests::issue, state::{App, show_toast}, view::f, view::t, widgets::button, widgets::esc, widgets::icon,
 };
 use galgear_i18n::{Message, format_text};
@@ -263,8 +263,8 @@ fn pump(app: &mut App) {
     for _ in 0..slots {
         if let Some(row) = app.setup.rows.iter_mut().find(|row| row.automatic && row.search_request.is_none()) {
             row.search_request = Some(app.requests.next_id());
-            let (id, source) = (row.id.clone(), row.source.clone());
-            issue(app, Pending::SetupSearch(id.clone()), "search_game_metadata", json!({"id":id,"source":source}));
+            let (id, source, query) = (row.id.clone(), row.source.clone(), row.query.clone());
+            issue(app, Pending::SetupSearch(id), "search_metadata", json!({"query":query,"source":source}));
             continue;
         }
         let Some(row) = app.setup.rows.iter_mut().find(|row| row.queued) else {
@@ -358,19 +358,19 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if action == "setup-auto" {
         if !app.setup.busy() {
             let mut total = 0;
+            let mut empty = 0;
             for row in app.setup.rows.iter_mut().filter(|row| !row.confirmed || row.url.is_empty()) {
-                let Some(game) = app.catalog.games.iter().find(|game| game.id == row.id) else { continue };
-                row.query.clone_from(&game.title);
                 row.candidates.clear();
                 row.url.clear();
-                row.searched = false;
+                row.searched = row.query.trim().is_empty();
                 row.search_request = None;
                 row.confirmed = false;
                 row.error = None;
-                row.automatic = true;
+                row.automatic = !row.searched;
+                if row.searched { empty += 1; }
                 total += 1;
             }
-            app.setup.progress = Some(ScrapeProgress { total, completed: 0, failed: 0 });
+            app.setup.progress = Some(ScrapeProgress { total, completed: empty, failed: empty });
             pump(app);
         }
         return true;
@@ -394,6 +394,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     };
     if row.locked() { return true; }
     match action {
+        "setup-open-folder" => issue(app, Pending::Open, "open_game_folder", json!({"id":id})),
         "setup-source" => {
             row.source_manual = true;
             change_source(row, selected);
@@ -480,24 +481,11 @@ pub(crate) fn resolve(
         (|| -> Result<(), String> {
             match kind {
                 Pending::SetupSearch(_) => {
-                    if automatic {
-                        let result: SetupSearchResult = serde_json::from_str(payload)
-                            .map_err(|error| error.to_string())?;
-                        row.query = result.query;
-                        row.candidates = result.candidates;
-                        if let [first, _, ..] = row.candidates.as_slice() {
-                            row.url.clone_from(&first.url);
-                        } else if let ([candidate], Some(url)) =
-                            (row.candidates.as_slice(), result.matched_url)
-                            && !url.is_empty()
-                            && candidate.url == url
-                        {
-                            row.url = url;
-                            row.confirmed = true;
-                        }
-                    } else {
-                        row.candidates = serde_json::from_str(payload)
-                            .map_err(|error| error.to_string())?;
+                    row.candidates = serde_json::from_str(payload)
+                        .map_err(|error| error.to_string())?;
+                    if automatic && let Some(first) = row.candidates.first() {
+                        row.url.clone_from(&first.url);
+                        row.confirmed = row.candidates.len() == 1 && !row.url.is_empty();
                     }
                     row.searched = true;
                 }
@@ -701,7 +689,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
         } else {
             "setup.pending"
         };
-        write!(html,r#"<tr data-render-key="setup-row-{}" data-setup-game="{}"><td class="setup-game"><strong title="{}">{}</strong><small title="{}">{}</small><span class="setup-row-status" role="status">{}</span></td><td>"#,esc(&row.id),esc(&row.id),esc(&game.title),esc(&game.title),esc(&game.folder),esc(&game.folder),t(app,status)).unwrap();
+        write!(html,r#"<tr data-render-key="setup-row-{}" data-setup-game="{}"><td class="setup-game"><strong title="{}">{}</strong><span class="setup-path" role="link" tabindex="{}" aria-disabled="{}" data-action="setup-open-folder" data-value="{}" title="{}" aria-label="{}: {}">{}</span><span class="setup-row-status" role="status">{}</span></td><td>"#,esc(&row.id),esc(&row.id),esc(&game.title),esc(&game.title),if row.locked() { -1 } else { 0 },row.locked(),esc(&row.id),esc(&game.folder),t(app,"detail.open_directory"),esc(&game.folder),esc(&game.folder),t(app,status)).unwrap();
         choices::control(
             html,
             app,
@@ -946,24 +934,27 @@ mod tests {
     }
 
     #[test]
-    fn automatic_scraping_confirms_backend_match_but_waits_for_user_to_save() {
+    fn automatic_scraping_searches_current_text_and_confirms_single_result_before_save() {
         let mut app = app();
+        let query = "8  援女交際 ～亜梨紗の情事～";
+        for row in &mut app.setup.rows { row.query = query.into(); }
         crate::bridge::take_requests();
         dispatch(&mut app, "setup-auto", "");
         let requests = crate::bridge::take_requests();
         assert_eq!(requests.len(), 2);
         for (request_id, command, payload) in &requests {
-            assert_eq!(command, "search_game_metadata");
-            assert!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["id"].is_string());
+            assert_eq!(command, "search_metadata");
+            assert_eq!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["query"], query);
             let kind = app.requests.complete(*request_id).unwrap();
             resolve(
                 &mut app,
                 &kind,
                 *request_id,
                 true,
-                r#"{"query":"Second","candidates":[{"title":"Second","url":"https://vndb.org/v2"}],"matched_url":"https://vndb.org/v2"}"#,
+                r#"[{"title":"中文译名","url":"https://vndb.org/v2"}]"#,
             );
         }
+        assert!(app.setup.rows.iter().all(|row| row.query == query));
         assert!(crate::bridge::take_requests().is_empty());
         assert!(app.setup.open);
         assert!(!app.setup.busy());
@@ -993,7 +984,7 @@ mod tests {
         let requests = crate::bridge::take_requests();
         for (index, (request_id, _, _)) in requests.iter().enumerate() {
             let kind = app.requests.complete(*request_id).unwrap();
-            resolve(&mut app, &kind, *request_id, true, if index == 0 { r#"{"query":"First","candidates":[{"title":"First","url":"https://vndb.org/v1"}],"matched_url":"https://vndb.org/v1"}"# } else { r#"{"query":"Other","candidates":[],"matched_url":null}"# });
+            resolve(&mut app, &kind, *request_id, true, if index == 0 { r#"[{"title":"First","url":"https://vndb.org/v1"}]"# } else { "[]" });
         }
         assert!(crate::bridge::take_requests().is_empty());
         assert!(app.setup.rows[0].error.is_none());
@@ -1009,6 +1000,33 @@ mod tests {
         assert!(!app.setup.busy());
         assert!(app.setup.rows[0].can_save());
         assert!(app.setup.rows[1].error.is_some());
+    }
+
+    #[test]
+    fn automatic_scraping_skips_empty_queries_and_preselects_multiple_results() {
+        let mut app = app();
+        app.setup.rows[0].query = "人妻俱乐部".into();
+        app.setup.rows[1].query.clear();
+        crate::bridge::take_requests();
+        dispatch(&mut app, "setup-auto", "");
+        let requests = crate::bridge::take_requests();
+        assert_eq!(requests.len(), 1);
+        let (request_id, _, payload) = &requests[0];
+        assert_eq!(serde_json::from_str::<serde_json::Value>(payload).unwrap()["query"], "人妻俱乐部");
+        let kind = app.requests.complete(*request_id).unwrap();
+        resolve(&mut app, &kind, *request_id, true,
+            r#"[{"title":"人妻游泳俱乐部","url":"https://vndb.org/v1"},{"title":"人妻俱乐部","url":"https://vndb.org/v2"}]"#);
+        assert_eq!(app.setup.rows[0].url, "https://vndb.org/v1");
+        assert!(!app.setup.rows[0].confirmed);
+        assert!(!app.setup.rows[0].can_save());
+        assert!(app.setup.rows[1].searched);
+        assert!(!app.setup.rows[1].confirmed);
+        assert!(!app.setup.busy());
+        dispatch(&mut app, "setup-save", "");
+        assert!(crate::bridge::take_requests().is_empty());
+        dispatch(&mut app, "setup-confirm-launcher", "new");
+        dispatch(&mut app, "setup-save", "");
+        assert_eq!(crate::bridge::take_requests().len(), 1);
     }
 
     #[test]

@@ -83,7 +83,7 @@ pub(crate) fn save(app: &mut App) {
         .filter(|(field, _)| value(&format!("draft-reset-{field}")) == "true")
         .map(|(field, _)| field)
         .collect();
-    let payload = json!({"id":id,"draft":{"title":value("draft-title"),"tags":value("draft-tags").split([',','，']).map(str::trim).collect::<Vec<_>>(),"executable":value("draft-executable"),"arguments":value("draft-arguments").lines().collect::<Vec<_>>(),"working_directory":optional("draft-workdir"),"launcher":optional("draft-launcher"),"locale_profile":value("draft-locale"),"metadata":metadata,"metadata_resets":resets,"reset_tag_rules":value("draft-reset-tags")=="true"}});
+    let payload = json!({"id":id,"draft":{"title":value("draft-title"),"tags":value("draft-tags").split([',','，']).map(str::trim).collect::<Vec<_>>(),"executable":value("draft-executable"),"arguments":value("draft-arguments").lines().collect::<Vec<_>>(),"working_directory":optional("draft-workdir"),"launcher":optional("draft-launcher"),"locale_profile":value("draft-locale"),"metadata":metadata,"metadata_resets":resets}});
     issue(app, Pending::DetailSaved, "save_game_details", payload);
 }
 

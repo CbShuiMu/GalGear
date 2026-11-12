@@ -3,8 +3,6 @@ use crate::{Game, GameEdit, Settings, config::display_path, data_sources, provid
 use galgear_i18n::Message;
 use std::{collections::BTreeSet, path::Path};
 
-pub mod matching;
-
 /// 列出游戏目录直属的普通 EXE 文件，不跟随链接或 Windows 重解析点。
 pub fn executables(folder: &Path) -> Result<Vec<std::path::PathBuf>, Message> {
     let root =

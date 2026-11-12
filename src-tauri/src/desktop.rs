@@ -261,7 +261,6 @@ pub(crate) fn run() {
             crate::updater::check_update,
             crate::updater::install_update,
             metadata::search_metadata,
-            game_setup::search_game_metadata,
             data_sources::get_data_sources,
             data_sources::save_data_source,
             data_sources::login_data_source,

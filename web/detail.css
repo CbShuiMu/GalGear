@@ -129,7 +129,7 @@
 /* 阅读行宽不应限制编辑框；窗口放大时让输入区填满资料卡片。 */
 .reference-detail.editing .story-body{max-width:none;width:100%;min-width:0}
 .reference-detail.editing .story-body textarea{width:100%;box-sizing:border-box}
-.reference-detail.editing .draft-reset{font-size:calc(var(--ui-font)*.7);min-height:26px;padding:4px 7px;margin:0 0 12px}.reference-detail.editing .credits-section .edit-field{margin-bottom:5px}
+.reference-detail.editing .credits-section .edit-field{margin-bottom:5px}
 
 .reference-detail .detail-back-row{position:static;background:var(--palette-fbf8fa);padding:8px 0}.reference-detail.editing .story-body>.edit-field>span{font-size:0;line-height:0}
 .detail-back-top{position:fixed;right:28px;bottom:28px;z-index:20;display:grid;place-items:center;width:44px;height:44px;border-radius:50%;background:var(--pink-dark);color:white;box-shadow:0 4px 18px var(--palette-59405425);border:1px solid var(--pink-dark)}.detail-back-top:hover{background:var(--pink);color:white}.detail-back-top>.icon{width:22px;height:22px}

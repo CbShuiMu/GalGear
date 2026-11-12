@@ -151,10 +151,10 @@ test('600 automatic searches keep three slots, advance after failures and retry 
   assert.match(app.html, /正在刮削 0\/600/);
   let failed = 0;
   for (let completed = 1; completed <= 600; completed++) {
-    const active = app.requests.filter(request => request.command === 'search_game_metadata');
+    const active = app.requests.filter(request => request.command === 'search_metadata');
     assert.equal(active.length, Math.min(3, 601 - completed));
     // 逆序完成模拟不同数据源和网络延迟，确保队列不依赖响应顺序。
-    const index = app.requests.findLastIndex(request => request.command === 'search_game_metadata');
+    const index = app.requests.findLastIndex(request => request.command === 'search_metadata');
     const [request] = app.requests.splice(index, 1);
     const mode = completed % 10;
     if (mode === 0) {
@@ -162,16 +162,16 @@ test('600 automatic searches keep three slots, advance after failures and retry 
       app.ui.resolve(request.id, false, JSON.stringify({key: 'setup.search_timeout'}));
     } else if (mode === 5 || mode === 7) {
       failed++;
-      app.ui.resolve(request.id, true, mode === 5 ? JSON.stringify({query: 'Missing', candidates: [], matched_url: null}) : '{broken');
+      app.ui.resolve(request.id, true, mode === 5 ? '[]' : '{broken');
     } else {
-      app.ui.resolve(request.id, true, JSON.stringify({query: request.payload.id, candidates: [{title: request.payload.id, url: `https://vndb.org/v${completed}`}], matched_url: `https://vndb.org/v${completed}`}));
+      app.ui.resolve(request.id, true, JSON.stringify([{title: request.payload.query, url: `https://vndb.org/v${completed}`}]));
     }
     if (completed < 600) assert.match(app.html, new RegExp(`正在刮削 ${completed}/600`));
   }
   assert.equal(failed, 180);
   assert.doesNotMatch(app.html, /id="setup-scrape-toast"/);
   assert.match(app.html, /刮削完成 600\/600 · 未匹配或失败 180/);
-  assert.equal(app.requests.filter(request => request.command === 'search_game_metadata').length, 0);
+  assert.equal(app.requests.filter(request => request.command === 'search_metadata').length, 0);
   app.ui.dispatch('setup-auto', '');
   assert.match(app.html, /正在刮削 0\/180/);
   app.ui.dispatch('setup-auto-stop', '');
@@ -185,19 +185,19 @@ test('stop and restart wait for old requests and ignore their late results', asy
   games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
   app.finishScan(games);
   app.ui.dispatch('setup-auto', '');
-  const oldRequests = app.requests.filter(request => request.command === 'search_game_metadata');
+  const oldRequests = app.requests.filter(request => request.command === 'search_metadata');
   assert.equal(oldRequests.length, 3);
   app.ui.dispatch('setup-auto-stop', '');
   app.ui.dispatch('setup-auto', '');
-  assert.equal(app.requests.filter(request => request.command === 'search_game_metadata').length, 3);
+  assert.equal(app.requests.filter(request => request.command === 'search_metadata').length, 3);
   for (const old of oldRequests) {
     app.requests.splice(app.requests.indexOf(old), 1);
     app.ui.resolve(old.id, true, '[{"title":"stale","url":"https://vndb.org/v999"}]');
     assert.match(app.html, /正在刮削 0\/6/);
     assert.doesNotMatch(app.html, /stale|v999/);
-    assert.equal(app.requests.filter(request => request.command === 'search_game_metadata').length, 3);
+    assert.equal(app.requests.filter(request => request.command === 'search_metadata').length, 3);
   }
-  for (let i = 0; i < 6; i++) app.reply('search_game_metadata', {query: 'Fresh', candidates: [{title: 'Fresh', url: 'https://vndb.org/v1'}], matched_url: 'https://vndb.org/v1'});
+  for (let i = 0; i < 6; i++) app.reply('search_metadata', [{title: 'Fresh', url: 'https://vndb.org/v1'}]);
   assert.match(app.html, /刮削完成 6\/6/);
   assert.doesNotMatch(app.html, /id="setup-scrape-toast"/);
 });
@@ -208,7 +208,7 @@ test('batch confirmation accepts a single-game edit response', async () => {
   app.settings.game_edits.new = {setup_pending: true};
   app.finishScan([game()]);
   app.ui.dispatch('setup-auto', '');
-  app.reply('search_game_metadata', {query: 'Matched', candidates: [{title: 'Matched', url: 'https://vndb.org/v1'}], matched_url: 'https://vndb.org/v1'});
+  app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
   app.ui.dispatch('setup-save', '');
   app.reply('complete_game_setup', {
     game: game(), edit: {setup_confirmed: true, setup_pending: false, launcher_pending: true},
@@ -217,27 +217,22 @@ test('batch confirmation accepts a single-game edit response', async () => {
   assert.match(app.html, /id="home-game-new"/);
 });
 
-test('unmatched automatic candidates remain available and require manual confirmation before saving', async () => {
+test('automatic search preserves current edited text and confirms a single translated result', async () => {
   const app = await emptyHome();
   app.addFolder();
   app.settings.game_edits.new = {setup_pending: true};
-  app.finishScan([game()]);
-  app.ui.dispatch('setup-auto', '');
-  assert.deepEqual(app.reply('search_game_metadata', {
-    query: '8  援女交際 ～亜梨紗の情事～',
-    candidates: [{title: '性治疗师', url: 'https://developer.nextmoe.dev/explore/work/226643?nsfw=1'}],
-    matched_url: null,
-  }), {id: 'new', source: 'nextmoe'});
-  assert.match(app.html, /未匹配或失败 1/);
+  const imported = {...game(), title: '8  援女交際 ～亜梨紗の情事～', folder: 'F:/Fixture/8  援女交際 ～亜梨紗の情事～/game'};
+  app.finishScan([imported]);
   assert.match(app.html, /value="8  援女交際 ～亜梨紗の情事～"/);
-  app.ui.dispatch('setup-save', '');
+  const query = '9  手动修改的名称';
+  app.ui.input_changed('setup-query:new', query);
+  app.ui.dispatch('setup-auto', '');
+  assert.deepEqual(app.reply('search_metadata', [
+    {title: '数据源译名', url: 'https://vndb.org/v1'},
+  ]), {query, source: 'nextmoe'});
+  assert.match(app.html, /value="9  手动修改的名称"/);
+  assert.match(app.html, /data-action="setup-confirm-launcher" data-value="new" aria-pressed="true"/);
   assert.equal(app.requests.some(request => request.command === 'complete_game_setup'), false);
-  app.ui.dispatch('choice-toggle', 'setup-candidate:new');
-  assert.match(app.html, /性治疗师/);
-  app.ui.dispatch('setup-candidate', JSON.stringify(['new', 'https://developer.nextmoe.dev/explore/work/226643?nsfw=1']));
-  app.ui.dispatch('setup-save', '');
-  assert.equal(app.requests.some(request => request.command === 'complete_game_setup'), false);
-  app.ui.dispatch('setup-confirm-launcher', 'new');
   app.ui.dispatch('setup-save', '');
   assert.equal(app.requests.filter(request => request.command === 'complete_game_setup').length, 1);
 });
@@ -250,9 +245,7 @@ test('multiple automatic candidates preselect the first and require confirmation
   app.ui.dispatch('setup-auto', '');
   const first = {title: 'First candidate', url: 'https://vndb.org/v1'};
   const exact = {title: 'Exact match', url: 'https://vndb.org/v2'};
-  app.reply('search_game_metadata', {
-    query: exact.title, candidates: [first, exact], matched_url: exact.url,
-  });
+  app.reply('search_metadata', [first, exact]);
   assert.match(app.html, /First candidate/);
   assert.match(app.html, /data-action="setup-confirm-launcher" data-value="new" aria-pressed="false"/);
   assert.match(app.html, /未匹配或失败 1/);

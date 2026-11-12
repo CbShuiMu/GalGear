@@ -543,18 +543,7 @@ pub(crate) async fn add_manual_game(state: State<'_, AppState>) -> Result<Option
         return Ok(None);
     };
     dialogs::remember(&state, "manual-game", &path)?;
-    let title = (if path
-        .extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case("exe"))
-    {
-        path.parent().unwrap_or(&path)
-    } else {
-        &path
-    })
-    .file_stem()
-    .unwrap_or_default()
-    .to_string_lossy()
-    .into_owned();
+    let title = catalog::title::from_directory(path.parent().unwrap_or(&path));
     let game = catalog::manual_game(&path, title)?;
     {
         let mut settings = state
@@ -632,11 +621,11 @@ pub(crate) async fn relocate_game(
 }
 
 #[tauri::command]
-pub(crate) fn exclude_game(
+pub(crate) async fn exclude_game(
     id: String,
-    state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<crate::collections::BatchResult, Message> {
-    crate::collections::change_games(&state, "exclude", vec![id], None)
+    crate::collections::batch_games("exclude".into(), vec![id], None, app).await
 }
 
 #[cfg(test)]

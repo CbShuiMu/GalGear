@@ -71,14 +71,14 @@ class CompletionTransportTests(unittest.TestCase):
         response.read.assert_called_once_with(transport.MAX_RESPONSE_BYTES + 1)
         response.close.assert_called_once()
 
-    def test_preparation_ignores_legacy_reasoning_overrides(self):
+    def test_preparation_sends_the_selected_reasoning_effort(self):
         for effort in ('low', 'high'):
             with self.subTest(effort=effort):
                 self.config['reasoning_effort'] = effort
                 opener, _ = self.response()
                 self.complete(opener)
                 payload = json.loads(opener.open.call_args.args[0].data)
-                self.assertEqual(payload['reasoning_effort'], 'max')
+                self.assertEqual(payload['reasoning_effort'], effort)
                 self.assertEqual(payload['thinking'], dict(type='enabled'))
 
     def test_openai_protocol_uses_completion_budget_and_auto_tools(self):

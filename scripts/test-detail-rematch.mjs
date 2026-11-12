@@ -26,6 +26,12 @@ async function fixture() {
   return {ui,game,pending,get html(){return html;}};
 }
 
+test('detail edit offers a tag input without a website tag restore button',async()=>{
+  const app=await fixture();
+  assert.match(app.html,/data-input="draft-tags"/);
+  assert.doesNotMatch(app.html,/data-action="detail-tags-reset"/);
+});
+
 test('rematch button precedes cancel, hides tag source and preserves edits on cancel',async()=>{
   const app=await fixture();
   assert.doesNotMatch(app.html,/data-action="tags-association"/);

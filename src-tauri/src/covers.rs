@@ -8,6 +8,38 @@ use galgear_i18n::{Message, tr};
 use std::path::PathBuf;
 use tauri::State;
 
+/// 后台下载自动封面，并在落盘前确认原条目仍指向同一个游戏目录。
+pub(crate) fn download_game_cover(
+    state: &AppState,
+    game: &Game,
+    metadata: &providers::Metadata,
+) -> Result<(String, String, Option<Message>), Message> {
+    let bytes = providers::download_cover(metadata)?;
+    let (path, warning) = store_game_cover(state, game, &bytes)?;
+    Ok((
+        scanner::poster_data(&path)?,
+        galgear_core::config::display_path(&path),
+        warning,
+    ))
+}
+
+fn store_game_cover(
+    state: &AppState,
+    game: &Game,
+    bytes: &[u8],
+) -> Result<(PathBuf, Option<Message>), Message> {
+    let list = state
+        .catalog
+        .lock()
+        .map_err(|_| Message::new("error.catalog_state"))?;
+    let current = list
+        .games
+        .iter()
+        .find(|current| current.id == game.id && current.folder == game.folder)
+        .ok_or_else(|| Message::new("error.game_missing"))?;
+    providers::store_downloaded_cover(current, bytes, &state.store.path.with_file_name("covers"))
+}
+
 /// 已下载并校验的封面缓存；内容寻址确保迟到请求不会覆盖当前封面文件。
 pub(crate) struct SourceCover {
     pub(crate) data: String,
@@ -241,7 +273,11 @@ pub(crate) async fn load_game_icons(
 }
 
 #[tauri::command]
-pub(crate) async fn reset_cover(id: String, state: State<'_, AppState>) -> Result<Game, Message> {
+pub(crate) async fn reset_cover(
+    id: String,
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> Result<Game, Message> {
     let mut game = find_game(&state, &id)?;
     update(&state, |s| {
         s.cover_overrides.remove(&id);
@@ -255,7 +291,7 @@ pub(crate) async fn reset_cover(id: String, state: State<'_, AppState>) -> Resul
         .filter(|u| !u.is_empty());
     let game = persist_game(&state, game)?;
     if let Some(url) = url {
-        crate::metadata::select_metadata(id, url, None, None, state).await
+        crate::metadata::select_metadata(id, url, None, None, app).await
     } else {
         Ok(game)
     }
@@ -264,6 +300,21 @@ pub(crate) async fn reset_cover(id: String, state: State<'_, AppState>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn late_download_cannot_recreate_cover_after_entry_deletion() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("config")).unwrap();
+        let game = galgear_core::catalog::manual_game(&temp.path().join("game.exe"), "Game".into())
+            .unwrap();
+        state.catalog.lock().unwrap().games.push(game.clone());
+        let (cover, _) = store_game_cover(&state, &game, b"fixture").unwrap();
+        crate::collections::change_games(&state, "exclude", vec![game.id.clone()], None).unwrap();
+
+        let error = store_game_cover(&state, &game, b"late fixture").unwrap_err();
+        assert_eq!(error.key, "error.game_missing");
+        assert!(!cover.exists());
+    }
     use galgear_core::catalog;
     #[test]
     fn downloaded_cover_cache_preserves_old_files_and_rejects_invalid_images() {

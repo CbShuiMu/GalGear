@@ -34,7 +34,7 @@ class OutputMetadataBudgetTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 1, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
         self.assertEqual([item['max_tokens'] for item in payloads], [65536, 131072])
-        self.assertTrue(all(item['reasoning_effort'] == 'max' for item in payloads))
+        self.assertEqual([item['reasoning_effort'] for item in payloads], ['high', 'max'])
         self.assertEqual([call.kwargs['timeout'] for call in opener.open.call_args_list], [600, 900])
 
     def test_two_length_expansions_use_remaining_advertised_capacity_without_dispatching_partial_code(self):
@@ -79,6 +79,12 @@ class OutputMetadataBudgetTests(unittest.TestCase):
         self.assertNotIn('token', json.loads(persisted))
         self.assertEqual(opener.open.call_count, 2)
 
+    def test_repairs_use_max_and_unknown_stages_keep_the_safe_default(self):
+        policy = host.TRANSPORT['preparation_reasoning_effort']
+        self.assertEqual(policy('resources', {}, repair=True), 'max')
+        self.assertEqual(policy(None, {}), 'max')
+        self.assertEqual(policy('finish', {'status': 'available', 'effort': {'supported_levels': ['max']}}), 'max')
+
     def test_zero_request_probe_does_not_query_metadata_or_inference(self):
         self.agent.config['max_turns'] = 0
         self.agent.capabilities_checked = False
@@ -89,14 +95,20 @@ class OutputMetadataBudgetTests(unittest.TestCase):
                     self.agent.run()
         self.assertEqual(self.agent.requests_sent, 0)
 
-    def test_advertised_absence_of_max_never_silently_downgrades_thinking(self):
+    def test_advertised_levels_bound_the_selected_effort(self):
         value = self.capabilities()
         value['effort'] = dict(supported_levels=['low', 'high'])
+        self.agent.workflow.stage = 'script_program'
+        opener, patcher = self.network([self.response()])
+        with patcher:
+            self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
+        self.assertEqual(json.loads(opener.open.call_args.args[0].data)['reasoning_effort'], 'high')
+        self.agent.model_capabilities['effort'] = dict(supported_levels=['unknown'])
         with mock.patch.object(self.agent, 'request_completion') as completion:
-            with self.assertRaisesRegex(RuntimeError, 'reasoning_effort=max'):
+            with self.assertRaisesRegex(RuntimeError, 'supported reasoning_effort'):
                 self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
         completion.assert_not_called()
-        self.assertEqual(self.agent.requests_sent, 0)
+        self.assertEqual(self.agent.requests_sent, 1)
 
     def test_wide_output_budget_survives_a_checkpoint_without_changing_reasoning_effort(self):
         self.capabilities()

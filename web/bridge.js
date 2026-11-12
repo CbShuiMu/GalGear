@@ -713,6 +713,14 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!wasmReady || event.isComposing || event.keyCode === 229) return;
+  if (event.target.matches('.setup-path') && ['Enter', ' '].includes(event.key)
+      && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    event.preventDefault();
+    if (!event.repeat && event.target.getAttribute('aria-disabled') !== 'true') {
+      event.target.click();
+    }
+    return;
+  }
   const tagResults = event.target.closest('.tag-search')?.querySelector('.tag-search-results');
   if (tagResults && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
     const options = [...tagResults.querySelectorAll('button')];

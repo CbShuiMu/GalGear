@@ -25,6 +25,7 @@ use std::{
 
 const SCHEMA: u32 = 5;
 const REPORT_SCHEMA: u32 = 5;
+const DIALOGUE_FILTER_RULE: &str = "Before analyzing any supplied dialogue, disregard repetitive interjections, hesitation sounds, sentence particles and filler-only lines when they add no meaning in context (e.g. '呃……', 'えっと', 'um'). Keep meaningful reactions, acknowledgments, refusals, answers to choices and any wording that affects intent, events or branch conditions. Keep evidence references tied to the original lines and preserve their wording when quoting.";
 pub const FOLDER: &str = ".galgear-ai-summary";
 
 /// Stop AI workers and their tools before the desktop runtime exits.

@@ -1,9 +1,10 @@
 //! Collection editing and batch membership/exclusion commands.
 use crate::{preferences, state::AppState, state::snapshot};
-use galgear_core::{Game, ScanResult, Settings, catalog, collections};
+use galgear_core::{Game, ScanResult, Settings, catalog, collections, providers};
 use galgear_i18n::Message;
 use serde::Serialize;
 use std::collections::BTreeSet;
+use std::path::Path;
 use tauri::State;
 
 #[tauri::command]
@@ -44,13 +45,23 @@ pub struct BatchResult {
 }
 
 #[tauri::command]
-pub fn batch_games(
+pub async fn batch_games(
     operation: String,
     ids: Vec<String>,
     collection: Option<String>,
-    state: State<'_, AppState>,
+    app: tauri::AppHandle,
 ) -> Result<BatchResult, Message> {
-    change_games(&state, &operation, ids, collection.as_deref())
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        change_games(
+            &app.state::<AppState>(),
+            &operation,
+            ids,
+            collection.as_deref(),
+        )
+    })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?
 }
 
 pub(crate) fn change_games(
@@ -97,6 +108,23 @@ pub(crate) fn change_games(
         .map(|game| game.id.clone())
         .collect();
     state.store.save(&next)?;
+    let mut cover_warning = None;
+    if operation == "exclude" {
+        let folders: BTreeSet<_> = list
+            .games
+            .iter()
+            .filter(|game| forgotten.contains(&game.id))
+            .map(|game| Path::new(&game.folder))
+            .collect();
+        // 下载完成后也要取得目录锁才能写入 cover.jpg，避免删除后被迟到结果重建。
+        for folder in folders {
+            if let Err(error) = providers::remove_local_cover(folder) {
+                let warning = Message::detail("error.cover_cleanup", error);
+                log::warn!("{warning}");
+                cover_warning.get_or_insert(warning);
+            }
+        }
+    }
     *settings = next.clone();
     *list = next_list.clone();
     let mut playtime_warning = None;
@@ -116,7 +144,8 @@ pub(crate) fn change_games(
     // Settings are authoritative; a cache failure must not misreport committed actions.
     let cache_warning = catalog::save(&state.store.path.with_file_name("catalog.json"), &next_list)
         .err()
-        .or(playtime_warning);
+        .or(playtime_warning)
+        .or(cover_warning);
     Ok(BatchResult {
         settings: next,
         catalog: next_list,
@@ -413,6 +442,63 @@ mod tests {
                 .is_empty()
         );
     }
+
+    #[test]
+    fn permanent_deletion_removes_cover_jpg_from_selected_game_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("config")).unwrap();
+        let cache = state.store.path.with_file_name("covers");
+        std::fs::create_dir_all(&cache).unwrap();
+        let mut ids = Vec::new();
+        for name in ["A", "B", "C"] {
+            let folder = temp.path().join(name);
+            std::fs::create_dir(&folder).unwrap();
+            let executable = folder.join("game.exe");
+            let game = catalog::manual_game(&executable, name.into()).unwrap();
+            for path in [
+                executable,
+                folder.join("cover.jpg"),
+                folder.join("poster.jpg"),
+                cache.join(format!("{}.jpg", game.id)),
+            ] {
+                std::fs::write(path, b"fixture").unwrap();
+            }
+            ids.push(game.id.clone());
+            state.catalog.lock().unwrap().games.push(game);
+        }
+
+        let result = change_games(&state, "exclude", ids[..2].to_vec(), None).unwrap();
+        assert_eq!(result.succeeded, ids[..2]);
+        assert!(result.cache_warning.is_none());
+        for name in ["A", "B"] {
+            let folder = temp.path().join(name);
+            assert!(!folder.join("cover.jpg").exists());
+            assert!(folder.join("game.exe").is_file());
+            assert!(folder.join("poster.jpg").is_file());
+        }
+        assert!(temp.path().join("C/cover.jpg").is_file());
+        assert!(
+            ids.iter()
+                .all(|id| cache.join(format!("{id}.jpg")).is_file())
+        );
+    }
+
+    #[test]
+    fn failed_entry_commit_keeps_game_cover() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("config")).unwrap();
+        let game = catalog::manual_game(&temp.path().join("game.exe"), "Game".into()).unwrap();
+        let id = game.id.clone();
+        state.catalog.lock().unwrap().games.push(game);
+        let cover = temp.path().join("cover.jpg");
+        std::fs::write(&cover, b"fixture").unwrap();
+        std::fs::create_dir_all(&state.store.path).unwrap();
+
+        assert!(change_games(&state, "exclude", vec![id], None).is_err());
+        assert!(cover.is_file());
+        assert_eq!(state.catalog.lock().unwrap().games.len(), 1);
+    }
+
     #[test]
     fn forgetting_missing_games_clears_persistent_playtime_and_in_flight_scan_results() {
         let temp = tempfile::tempdir().unwrap();

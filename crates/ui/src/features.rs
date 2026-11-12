@@ -211,39 +211,6 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 }
             }
         }
-        "detail-tags-reset" => {
-            if let Some(game) = app
-                .detail
-                .selected
-                .as_ref()
-                .and_then(|id| app.catalog.games.iter().find(|g| &g.id == id))
-            {
-                let source_tags = app
-                    .settings
-                    .game_edits
-                    .get(&game.id)
-                    .and_then(|edit| edit.source_tags.as_ref());
-                let mut imported = source_tags.cloned().unwrap_or_default();
-                if source_tags.is_none()
-                    && let Some(metadata) = &game.metadata
-                {
-                    imported.extend(metadata.tags.iter().cloned());
-                    for field in galgear_tags::CREDIT_FIELDS {
-                        imported.extend(galgear_tags::credit_names(
-                            meta_value(metadata, field),
-                            metadata
-                                .links
-                                .iter()
-                                .filter(|link| link.field == *field)
-                                .map(|link| link.name.as_str()),
-                        ));
-                    }
-                }
-                let tags = galgear_tags::normalize(game.tags.iter().cloned().chain(imported));
-                app.form.insert("draft-tags".into(), tags.join(", "));
-                app.form.insert("draft-reset-tags".into(), "true".into());
-            }
-        }
         "settings-section"
             if matches!(
                 value,
@@ -405,15 +372,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 );
             }
         }
-        "restore-game-tags" => {
-            app.detail.confirmation = Some(("restore-game-tags".into(), value.into()));
-        }
         "confirm-action" => {
             if let Some((action, value)) = app.detail.confirmation.clone() {
                 match action.as_str() {
-                    "restore-game-tags" => {
-                        issue(app, Pending::Edit, "reset_game_tags", json!({"id":value}))
-                    }
                     "snapshot-delete" => {
                         if let Some(id) = app.detail.selected.clone() {
                             request_history(
@@ -599,8 +560,6 @@ pub(crate) fn confirmation(html: &mut String, app: &App) {
     if let Some((action, _value)) = &app.detail.confirmation {
         let message = if action.starts_with("launch") {
             t(app, "runtime.confirm").to_owned()
-        } else if action == "restore-game-tags" {
-            t(app, "tags.restore_confirm").into()
         } else {
             t(app, "backup.delete_confirm").into()
         };

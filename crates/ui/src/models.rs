@@ -360,13 +360,6 @@ pub(crate) struct Resource {
     pub(crate) size: String,
 }
 
-#[derive(Deserialize)]
-pub(crate) struct SetupSearchResult {
-    pub(crate) query: String,
-    pub(crate) candidates: Vec<Resource>,
-    pub(crate) matched_url: Option<String>,
-}
-
 #[derive(Clone, Default, Deserialize)]
 pub(crate) struct SaveReport {
     pub(crate) locations: Vec<SaveLocation>,

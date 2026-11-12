@@ -879,6 +879,11 @@
     "ja-JP": "カバーのキャッシュパスが無効です。",
     "en-US": "Invalid cover cache path."
   },
+  "error.cover_cleanup": {
+    "zh-CN": "条目已删除，游戏目录中的 cover.jpg 删除失败：{detail}",
+    "ja-JP": "項目は削除されましたが、ゲームフォルダーの cover.jpg を削除できませんでした: {detail}",
+    "en-US": "Entries were deleted, but cover.jpg could not be removed from a game folder: {detail}"
+  },
   "error.config_state": {
     "zh-CN": "配置状态不可用。",
     "ja-JP": "設定データを利用できません。",
@@ -1415,9 +1420,9 @@
     "en-US": "Arguments (one argument per line)"
   },
   "edit.help": {
-    "zh-CN": "编辑优先保留。外部启动工具收到的首个参数为游戏程序路径。移除条目不会删除游戏文件。",
-    "ja-JP": "編集内容を優先します。外部ツールの最初の引数は実行ファイルのパスです。項目削除はゲームファイルを削除しません。",
-    "en-US": "Edits take priority. The external launcher receives the game executable as its first argument. Removing an entry preserves game files."
+    "zh-CN": "编辑优先保留。外部启动工具收到的首个参数为游戏程序路径。永久删除条目时会删除游戏目录中的 cover.jpg。",
+    "ja-JP": "編集内容を優先します。外部ツールの最初の引数は実行ファイルのパスです。項目を完全に削除すると、ゲームフォルダーの cover.jpg も削除されます。",
+    "en-US": "Edits take priority. The external launcher receives the game executable as its first argument. Permanently deleting an entry also deletes cover.jpg in its game folder."
   },
   "edit.exclude": {
     "zh-CN": "永久删除条目",
@@ -2855,9 +2860,9 @@
     "en-US": "Permanently delete entries"
   },
   "bulk.exclude_confirm": {
-    "zh-CN": "将永久删除所选 {count} 个游戏条目及其资料、配置、收藏关联和游玩记录。此操作无法恢复，之后需要重新导入。游戏文件、存档和备份会保留。",
-    "ja-JP": "選択した {count} 件の項目と情報、設定、お気に入り、プレイ記録を完全に削除します。元に戻せません。再利用するには再インポートが必要です。ゲーム、セーブ、バックアップのファイルは保持されます。",
-    "en-US": "Permanently delete {count} selected entries and their details, settings, collection membership and play history. This cannot be undone. You must import them again to use them. Game files, saves and backups are retained."
+    "zh-CN": "将永久删除所选 {count} 个游戏条目及其资料、配置、收藏关联和游玩记录，并删除游戏目录中的 cover.jpg。此操作无法恢复，之后需要重新导入。",
+    "ja-JP": "選択した {count} 件の項目と情報、設定、お気に入り、プレイ記録を完全に削除し、ゲームフォルダーの cover.jpg も削除します。元に戻せません。再利用するには再インポートが必要です。",
+    "en-US": "Permanently delete {count} selected entries, their details, settings, collection membership and play history, and cover.jpg in each game folder. This cannot be undone. You must import the games again to use them."
   },
   "bulk.failures": {
     "zh-CN": "查看失败项",
@@ -3238,16 +3243,6 @@
     "zh-CN": "确定从此游戏中删除标签“{tag}”吗？",
     "ja-JP": "このゲームからタグ「{tag}」を削除しますか？",
     "en-US": "Delete the tag “{tag}” from this game?"
-  },
-  "tags.restore": {
-    "zh-CN": "恢复网站标签",
-    "ja-JP": "サイトのタグを復元",
-    "en-US": "Restore website tags"
-  },
-  "tags.restore_confirm": {
-    "zh-CN": "恢复当前游戏的网站标签？清除本游戏的标签导入限制，重新加入缓存的网站标签，其他手动标签保留。",
-    "ja-JP": "このゲームのサイトタグを復元しますか？インポート制限を解除してキャッシュ済みタグを追加します。他の手動タグは残ります。",
-    "en-US": "Restore website tags for this game? Clear its import rules and add cached website tags. Other manual tags are kept."
   },
   "auth.busy": {
     "zh-CN": "请等待账号刷新完成。",

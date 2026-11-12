@@ -1,5 +1,5 @@
 //! Generate a cached, browser-safe route map from the complete prepared dialogue file.
-use super::{Manifest, cache, hash, io, manifest, read, write_json};
+use super::{DIALOGUE_FILTER_RULE, Manifest, cache, hash, io, manifest, read, write_json};
 use crate::{Game, Settings, ai};
 use galgear_i18n::{Language, Message};
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,6 @@ struct CachedRouteMap {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct RouteNotes {
     observations: Vec<String>,
     uncertainties: Vec<String>,
@@ -63,6 +62,7 @@ fn cache_key(manifest: &Manifest, model: &str) -> Result<String, Message> {
     let mut digest = Sha256::new();
     digest.update(data);
     digest.update(include_bytes!("route_map.rs"));
+    digest.update(DIALOGUE_FILTER_RULE.as_bytes());
     Ok(format!("{:x}", digest.finalize()))
 }
 
@@ -244,15 +244,24 @@ fn notes(
     limit: usize,
     complete: &mut impl FnMut(&str, &str, bool) -> Result<String, Message>,
 ) -> Result<RouteNotes, Message> {
-    let response = complete(system, input, true)?;
-    parse_notes(&response, limit)
+    super::report::exchange(
+        system,
+        input,
+        &mut |system, input| complete(system, input, true),
+        |value| validate_notes(value, limit),
+    )
 }
 
 fn parse_notes(response: &str, limit: usize) -> Result<RouteNotes, Message> {
     let payload = fenced_payload(response, &["json"]);
     let value: RouteNotes =
         serde_json::from_str(payload).map_err(|_| Message::new("route.invalid_analysis"))?;
-    if serde_json::to_vec(&value).map_err(io)?.len() > limit
+    validate_notes(&value, limit)?;
+    Ok(value)
+}
+
+fn validate_notes(value: &RouteNotes, limit: usize) -> Result<(), Message> {
+    if serde_json::to_vec(value).map_err(io)?.len() > limit
         || value.observations.len() > 128
         || value.uncertainties.len() > 32
         || value.observations.is_empty() && value.uncertainties.is_empty()
@@ -262,9 +271,14 @@ fn parse_notes(response: &str, limit: usize) -> Result<RouteNotes, Message> {
             .chain(&value.uncertainties)
             .any(|entry| entry.trim().is_empty() || entry.len() > 2000)
     {
-        return Err(Message::new("route.invalid_analysis"));
+        return Err(Message::detail(
+            "route.invalid_analysis",
+            format!(
+                "Keep the whole JSON under {limit} UTF-8 bytes. Return at most 128 observations and 32 uncertainties as nonempty strings, each at most 2000 UTF-8 bytes. Compress wording while preserving routes, branch conditions, endings, evidence references and uncertainty."
+            ),
+        ));
     }
-    Ok(value)
+    Ok(())
 }
 
 fn generate(
@@ -275,7 +289,8 @@ fn generate(
     mut complete: impl FnMut(&str, &str, bool) -> Result<String, Message>,
 ) -> Result<String, Message> {
     let mut input = dialogue_input(title, language, dialogue, None);
-    let svg_system = format!("{RULES}\n{SVG_RULES}");
+    let rules = format!("{RULES}\n{DIALOGUE_FILTER_RULE}");
+    let svg_system = format!("{rules}\n{SVG_RULES}");
     if input.len() > budget {
         let overhead = dialogue_input(title, language, "", Some((usize::MAX, usize::MAX))).len();
         let parts = dialogue_parts(dialogue, budget.saturating_sub(overhead))?;
@@ -287,7 +302,7 @@ fn generate(
             "Return ONLY JSON with observations and uncertainties arrays of nonempty strings: {{\"observations\":[\"supported route/choice/ending with source and position references\"],\"uncertainties\":[\"missing or inferred branch connection\"]}}. Use at most 128 observations and 32 uncertainties, at most 2000 UTF-8 bytes per string and {limit} UTF-8 bytes for the whole JSON. Preserve all supported routes, important choice conditions, endings and connections; do not assume a part boundary is a story boundary. If no route evidence is present, explain the limitation in uncertainties."
         );
         let system = format!(
-            "{RULES}\nAnalyze this numbered part of the complete dialogue file. Every part will be analyzed before drawing the map. {format}"
+            "{rules}\nAnalyze this numbered part of the complete dialogue file. Every part will be analyzed before drawing the map. {format}"
         );
         let mut analyzed = Vec::with_capacity(parts.len());
         for (index, part) in parts.iter().enumerate() {
@@ -297,7 +312,7 @@ fn generate(
         input = notes_input(title, language, &analyzed);
         while input.len() > budget {
             let system = format!(
-                "{RULES}\nConsolidate all of these route notes into one set. Preserve every supported route, branch/choice condition, ending, evidence references and uncertainty. Merge duplicate observations. {format}"
+                "{rules}\nConsolidate all of these route notes into one set. Preserve every supported route, branch/choice condition, ending, evidence references and uncertainty. Merge duplicate observations. {format}"
             );
             let mut merged = Vec::new();
             let mut start = 0;
@@ -689,8 +704,9 @@ mod tests {
             Language::Chinese,
             dialogue,
             8192,
-            |_, input, json| {
+            |system, input, json| {
                 calls += 1;
+                assert!(system.contains(DIALOGUE_FILTER_RULE));
                 assert!(!json);
                 let value: serde_json::Value = serde_json::from_str(input).unwrap();
                 assert_eq!(value["dialogue_file"], dialogue);
@@ -720,7 +736,8 @@ mod tests {
             Language::English,
             &dialogue,
             4096,
-            |_, input, json| {
+            |system, input, json| {
+                assert!(system.contains(DIALOGUE_FILTER_RULE));
                 assert!(input.len() <= 4096);
                 let value: serde_json::Value = serde_json::from_str(input).unwrap();
                 if json {
@@ -805,6 +822,56 @@ mod tests {
                 "route.invalid_analysis"
             );
         }
+    }
+
+    #[test]
+    fn notes_accept_extra_fields_and_repair_oversize_answers_with_original_evidence() {
+        let raw = r#"{"observations":["Choice A leads to ending B at script:42."],"uncertainties":[],"type":"route"}"#;
+        assert_eq!(parse_notes(raw, 256).unwrap().observations.len(), 1);
+        let oversized =
+            json!({"observations":["Route evidence ".repeat(40)],"uncertainties":[]}).to_string();
+        let mut calls = 0;
+        let result = notes(
+            "Route instructions",
+            "Original script evidence",
+            256,
+            &mut |system, input, json| {
+                calls += 1;
+                assert_eq!(input, "Original script evidence");
+                assert!(json);
+                if calls == 1 {
+                    Ok(oversized.clone())
+                } else {
+                    assert!(system.contains("256 UTF-8 bytes"));
+                    assert!(system.contains(&oversized));
+                    Ok(raw.into())
+                }
+            },
+        )
+        .unwrap();
+        assert_eq!(calls, 2);
+        assert_eq!(
+            result.observations,
+            ["Choice A leads to ending B at script:42."]
+        );
+    }
+
+    #[test]
+    fn notes_limit_repairs_and_propagate_network_failures() {
+        let mut calls = 0;
+        assert!(
+            notes("Rules", "Evidence", 256, &mut |_, _, _| {
+                calls += 1;
+                Ok(r#"{"observations":[],"uncertainties":[]}"#.into())
+            })
+            .is_err()
+        );
+        assert_eq!(calls, 3);
+        let error = notes("Rules", "Evidence", 256, &mut |_, _, _| {
+            Err(Message::new("ai.network_error"))
+        })
+        .unwrap_err();
+        assert_eq!(error.key, "ai.network_error");
     }
 
     #[test]
