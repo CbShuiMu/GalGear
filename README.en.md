@@ -18,14 +18,14 @@ QQ community and feedback group: 607755362
 
 GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
-> **v0.4.7 (November 12, 2026)** lets you rematch a game from its details. When a renamed game matches a new entry, GalGear can sync the cover, tags, and metadata. This version also improves home background loading and adds diagnostics for blank or unresponsive windows.
+> **v0.4.8 (November 12, 2026)** improves AI save discovery for dedicated folders and individual files, adds a Studio search to tag filters, and lets you review multiple matches during batch scraping.
 
 ## 🚀 Quick start
 
 Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
 
-- **Installer**: download `GalGear_0.4.7_x64-setup.exe` and follow the installation prompts.
-- **Portable**: download `GalGear-0.4.7-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Installer**: download `GalGear_0.4.8_x64-setup.exe` and follow the installation prompts.
+- **Portable**: download `GalGear-0.4.8-win64-portable.zip`, extract it, and run `GalGear.exe`.
 
 For your first launch:
 
@@ -40,12 +40,12 @@ Choose an interface language on the first run. GalGear sets the default metadata
 | Feature | Description |
 | --- | --- |
 | Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. Unavailable games stay in the library, and drive changes trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. Under **Settings → Display & interaction**, choose Poster wall or Cover and title, and set the card size to Small, Medium, or Large. Cover and title shows up to two centered lines of text below each cover. |
-| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕Gal, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. Press and hold a local tag in game details to drag it into order. Use **Rematch** while editing game details to select an entry and update the cover, tags, and metadata. Renaming a game can also sync those fields when a source finds a single new match. |
+| Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕Gal, and 2DFan. Search covers independently or use local images. Thanks to these platforms. Added [ErogameScape metadata](docs/erogamescape.md). Tags can also filter by brand, developer, publisher, and staff. Use Studio search to find a brand directly. Press and hold a local tag in game details to drag it into order. Use **Rematch** while editing game details to select an entry and update the cover, tags, and metadata. Renaming a game can also sync those fields when a source finds a single new match. |
 | Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
 | Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
 | Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, supports capture in Magpie mode, and shows the latest screenshot below the game details. |
-| Backups | Organize backups by game and save time in a configurable shared folder. Back up multiple save folders, add notes, lock backups, preview restores, and back up after a game exits. Existing backups migrate after validation. Start WebDAV transfers manually. [Backups and cloud storage](docs/cloud-storage.md). Start a WebDAV upload from the save card in game details. GalGear checks the saved connection before creating and uploading a local snapshot. Back up dedicated save folders or selected save files. [Save discovery and file backups](docs/save-discovery.md). |
+| Backups | Organize backups by game and save time in a configurable shared folder. Back up multiple save folders, add notes, lock backups, preview restores, and back up after a game exits. Existing backups migrate after validation. Start WebDAV transfers manually. [Backups and cloud storage](docs/cloud-storage.md). Start a WebDAV upload from the save card in game details. GalGear checks the saved connection before creating and uploading a local snapshot. Back up dedicated save folders or selected save files. Use AI search or choose the save location manually in game details. [Save discovery and file backups](docs/save-discovery.md). |
 | Patches | **Linked to your library**: select a library game to search and save patches directly in its patch folder. NextMoe hosted downloads require an application key with `moyu:files` permission. Search KunGal and 2DFan, import local patches, automatically extract ZIP / RAR / 7z archives, preview conflicts, and restore backups. 2DFan downloads require a proxy and account token. NextMoe is recommended for patch downloads: no points required, with direct download links. |
 | AI (experimental) | **AI-assisted save path discovery**, story recaps, and walkthrough route maps. Requires your own API token, sends necessary game text, and incurs API costs. Route maps may contain spoilers. [AI settings](docs/ai-settings.md). Recaps and route maps are still being tested; before using AI save discovery for the first time, launch the game and create a save. |
 | Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
@@ -185,6 +185,10 @@ GalGear uses the following open-source tools for several of its features. Thanks
 The MIT licenses for SimpleFontHook and Detours require their copyright and permission notices to accompany copies or substantial portions of the software. Both the installer and portable package include the complete original notices in `tools/font-hook/`. Each tool retains its original license and copyright notices. See [Bundled tools](docs/bundled-tools.txt) for usage notes and upstream source links (in Chinese).
 
 ## 📝 Release history
+
+### v0.4.8
+
+- Improved AI save discovery, the save card, and the game details tool indicators. Added Studio search and improved match selection during batch scraping. [Release notes](https://github.com/CbShuiMu/GalGear/releases/tag/v0.4.8)
 
 ### v0.4.7
 
