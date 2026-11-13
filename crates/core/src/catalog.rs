@@ -45,6 +45,16 @@ pub fn manual_game(path: &Path, title: String) -> Result<Game, Message> {
 }
 
 pub fn apply_edits(game: &mut Game, settings: &Settings) {
+    apply_saved_edits(game, settings);
+    game.available = game
+        .executable
+        .as_ref()
+        .is_some_and(|p| Path::new(p).is_file());
+}
+
+/// 仅应用已保存的资料与标签，不访问游戏目录，保留缓存中的可用状态。
+/// 用于启动首屏，路径可用性由后续后台检查更新。
+pub fn apply_saved_edits(game: &mut Game, settings: &Settings) {
     if let Some(edit) = settings.game_edits.get(&game.id) {
         if let Some(title) = &edit.title {
             game.title.clone_from(title);
@@ -85,10 +95,6 @@ pub fn apply_edits(game: &mut Game, settings: &Settings) {
         let rules = edit.map(|edit| &edit.tag_rules);
         game.tags = crate::tags::merge(&game.tags, &imported, rules.unwrap_or(&Default::default()));
     }
-    game.available = game
-        .executable
-        .as_ref()
-        .is_some_and(|p| Path::new(p).is_file());
 }
 
 pub fn is_excluded(game: &Game, settings: &Settings) -> bool {

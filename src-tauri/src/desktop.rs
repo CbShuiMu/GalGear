@@ -1,8 +1,8 @@
 //! Desktop startup, protocols, tray and command registration.
 use crate::{
-    accounts, accounts::start_fan_status_scheduler, ai, ai_summary, background, cloud_commands,
+    accounts, ai, ai_summary, background, cloud_commands,
     collections, covers, data_sources, downloads, game_details, game_setup, library, local_patches,
-    metadata, patch_commands, preferences, save_commands, state::AppState, state::snapshot, tools,
+    metadata, patch_commands, preferences, save_commands, state::AppState, tools,
 };
 use galgear_i18n::{Message, tr};
 use tauri::Manager;
@@ -32,10 +32,9 @@ pub(crate) fn run() {
                 std::fs::read(
                     context
                         .app_handle()
-                        .state::<AppState>()
-                        .store
-                        .path
-                        .with_file_name("icons")
+                        .state::<crate::startup::Startup>()
+                        .data_dir
+                        .join("icons")
                         .join(format!("{id}.png")),
                 )
                 .ok()
@@ -52,12 +51,11 @@ pub(crate) fn run() {
         .register_uri_scheme_protocol("galgear-cover", |context, request| {
             let id = request.uri().path().trim_start_matches('/');
             let bytes = if id.len() == 64 && id.bytes().all(|c| c.is_ascii_hexdigit()) {
-                let state = context.app_handle().state::<AppState>();
+                let state = context.app_handle().state::<crate::startup::Startup>();
                 std::fs::read(
                     state
-                        .store
-                        .path
-                        .with_file_name("covers")
+                        .data_dir
+                        .join("covers")
                         .join("rendered")
                         .join(format!("{id}.jpg")),
                 )
@@ -77,10 +75,9 @@ pub(crate) fn run() {
             let id = request.uri().path().trim_start_matches('/');
             let cache = context
                 .app_handle()
-                .state::<AppState>()
-                .store
-                .path
-                .with_file_name("backgrounds");
+                .state::<crate::startup::Startup>()
+                .data_dir
+                .join("backgrounds");
             let bytes = galgear_core::background::cache_path(&cache, id)
                 .and_then(|path| std::fs::read(path).ok());
             tauri::http::Response::builder()
@@ -109,34 +106,8 @@ pub(crate) fn run() {
                 app.path().app_config_dir()?
             };
             log::info!("loading_state portable={} data_dir={}", exe_dir.join("portable.flag").exists(), data_dir.display());
-            let state = AppState::load(data_dir).map_err(std::io::Error::other)?;
-            {
-                let mut settings = state.settings.lock().map_err(|_| std::io::Error::other("Settings lock"))?;
-                if crate::bundled_tools::apply_defaults(&mut settings, &exe_dir) {
-                    state.store.save(&settings).map_err(std::io::Error::other)?;
-                }
-            }
-            let settings = snapshot(&state).map_err(std::io::Error::other)?;
-            let language = settings.language;
-            app.set_theme(Some(if settings.theme == "dark" {
-                tauri::Theme::Dark
-            } else {
-                tauri::Theme::Light
-            }));
-            app.manage(state);
-            #[cfg(windows)]
-            {
-                let (input, [screenshots, fonts]) = crate::game_input::start().map_err(std::io::Error::other)?;
-                app.manage(input);
-                crate::screenshots::start(app.handle().clone(), screenshots).map_err(std::io::Error::other)?;
-                crate::font_tools::start(app.handle().clone(), fonts).map_err(std::io::Error::other)?;
-            }
-            #[cfg(not(windows))]
-            {
-                crate::screenshots::start(app.handle().clone()).map_err(std::io::Error::other)?;
-                crate::font_tools::start(app.handle().clone()).map_err(std::io::Error::other)?;
-            }
-            app.manage(crate::import::Imports::default());
+            crate::startup::start(app.handle(), data_dir, exe_dir);
+            let language = galgear_i18n::Language::default();
             let show = tauri::menu::MenuItem::with_id(
                 app,
                 "show",
@@ -144,10 +115,6 @@ pub(crate) fn run() {
                 true,
                 None::<&str>,
             )?;
-            start_fan_status_scheduler(app.handle().clone());
-            tools::scheduler(app.handle().clone());
-            crate::library_devices::start(app.handle().clone());
-            crate::cover_art::scheduler(app.handle().clone());
             let quit = tauri::menu::MenuItem::with_id(
                 app,
                 "quit",
@@ -192,16 +159,15 @@ pub(crate) fn run() {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 log::info!("window_close_requested window={}", window.label());
-                let state = window.state::<AppState>();
-                if snapshot(&state).is_ok_and(|s| s.close_behavior == "tray") {
+                if crate::startup::close_to_tray(window.app_handle()) {
                     api.prevent_close();
                     let _ = window.hide();
                 }
             }
         })
-        .invoke_handler(crate::diagnostics::trace_commands(tauri::generate_handler![
+        .invoke_handler(crate::startup::commands(crate::diagnostics::trace_commands(tauri::generate_handler![
             crate::diagnostics::record_diagnostic,
-            library::bootstrap,
+            crate::startup::bootstrap,
             crate::screenshots::latest_screenshot,
             crate::screenshots::open_screenshot_folder,
             crate::skill_package::get_ai_runtime,
@@ -332,7 +298,7 @@ pub(crate) fn run() {
             tools::set_game_tools,
             tools::game_runtime,
             tools::upscale_game,
-        ]))
+        ])))
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
             log::error!("startup_failed {error:?}");
@@ -347,16 +313,18 @@ pub(crate) fn run() {
             std::process::exit(1);
         })
         .run(|app, event| {
-            if let tauri::RunEvent::ExitRequested { code, .. } = &event {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
                 log::info!("exit_requested code={code:?}");
+                if crate::startup::defer_exit(app, *code) { api.prevent_exit(); }
             }
             if matches!(event, tauri::RunEvent::Exit) {
                 log::info!("shutdown_start");
-                app.state::<crate::screenshots::Service>().stop();
-                app.state::<crate::font_tools::Service>().stop();
+                if let Some(service) = app.try_state::<crate::screenshots::Service>() { service.stop(); }
+                if let Some(service) = app.try_state::<crate::font_tools::Service>() { service.stop(); }
                 #[cfg(windows)]
-                app.state::<crate::game_input::Service>().stop();
-                if let Err(error) = tools::shutdown_magpie(&app.state::<AppState>()) {
+                if let Some(service) = app.try_state::<crate::game_input::Service>() { service.stop(); }
+                if let Some(state) = app.try_state::<AppState>()
+                    && let Err(error) = tools::shutdown_magpie(&state) {
                     log::error!("Magpie shutdown: {error:?}");
                 }
                 galgear_core::ai_summary::shutdown();

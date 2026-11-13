@@ -28,7 +28,17 @@ pub(crate) struct AppState {
 }
 
 impl AppState {
+    #[cfg(test)]
     pub(crate) fn load(data_dir: PathBuf) -> Result<Self, Message> {
+        Self::load_with_preview(data_dir, |_| {})
+    }
+
+    /// 从同一份本地数据发布首屏快照，随后完成恢复，调用方必须在后台线程执行。
+    pub(crate) fn load_with_preview(
+        data_dir: PathBuf,
+        preview: impl FnOnce(galgear_core::Bootstrap),
+    ) -> Result<Self, Message> {
+        let mut stage = std::time::Instant::now();
         let store = ConfigStore::new(data_dir.join("settings.json"));
         let mut settings = store.load()?;
         let mut cached =
@@ -44,6 +54,29 @@ impl AppState {
             if !cached.games.iter().any(|g|g.id==game.id) { cached.games.push(game.clone()); }
             play_records.entry(game.id.clone()).or_insert_with(||playtime::Record::from_game(game));
         }
+        let mut visible = cached.clone();
+        visible
+            .games
+            .retain(|game| !catalog::is_excluded(game, &settings));
+        for game in &mut visible.games {
+            catalog::apply_saved_edits(game, &settings);
+            if let Some(record) = play_records.get(&game.id) {
+                record.apply(game);
+            }
+        }
+        let mut preview_settings = settings.clone();
+        // 旧缓存也沿用资料确认规则，首屏不短暂显示尚待确认的扫描条目。
+        galgear_core::game_setup::mark_new(&mut preview_settings, &visible.games, &Default::default());
+        preview(galgear_core::Bootstrap {
+            update_complete: std::env::args().any(|arg| arg == "--galgear-update-complete"),
+            ai_available: false,
+            settings: preview_settings,
+            catalog: visible,
+            config_path: store.path.to_string_lossy().into_owned(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            cg_engines: Vec::new(),
+        });
+        record_startup_stage("cache", &mut stage);
         catalog::refresh_availability(&settings, &mut cached);
         let pending_changed = galgear_core::game_setup::mark_new(&mut settings, &cached.games, &Default::default());
         cached.games.retain(|game| !catalog::is_excluded(game, &settings));
@@ -75,11 +108,13 @@ impl AppState {
         if summary_disabled {
             store.save(&settings)?;
         }
+        record_startup_stage("paths_and_settings", &mut stage);
         patch_commands::recover(
             &store.path.with_file_name("patches"),
             &settings,
             &mut cached,
         );
+        record_startup_stage("patch_recovery", &mut stage);
         for game in &mut cached.games {
             if game.cover.is_none()
                 && let Some(path) = settings.cover_overrides.get(&game.id)
@@ -95,13 +130,17 @@ impl AppState {
                 record.apply(game);
             }
         }
+        record_startup_stage("covers", &mut stage);
         library::repair_scan_duplicates(&store.path, &settings, &mut cached)?;
+        record_startup_stage("duplicate_repair", &mut stage);
         cached.warnings.extend(save_commands::migrate_known_backups(
             &store.path,
             &settings,
             &cached.games,
         ));
+        record_startup_stage("backup_migration", &mut stage);
         let account = accounts::AccountState::load(&store, &settings);
+        record_startup_stage("account_cache", &mut stage);
         log::info!("state_loaded games={} warnings={} language={} theme={}", cached.games.len(), cached.warnings.len(), settings.language.code(), settings.theme);
         for warning in &cached.warnings {
             log::warn!("state_warning key={} detail={warning}", warning.key);
@@ -127,6 +166,14 @@ impl AppState {
             updates: crate::updater::Updates::default(),
         })
     }
+}
+
+fn record_startup_stage(stage: &str, started: &mut std::time::Instant) {
+    log::info!(
+        "startup_stage stage={stage} elapsed_ms={}",
+        started.elapsed().as_millis()
+    );
+    *started = std::time::Instant::now();
 }
 
 pub(crate) fn snapshot(state: &AppState) -> Result<Settings, Message> {

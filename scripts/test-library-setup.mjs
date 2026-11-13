@@ -287,7 +287,29 @@ test('automatic search preserves current edited text and confirms a single trans
   assert.equal(app.requests.filter(request => request.command === 'complete_game_setup').length, 1);
 });
 
-test('multiple automatic candidates preselect the first and require confirmation before saving', async () => {
+test('multiple automatic candidates with a matching first title confirm and remain editable before saving', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.input_changed('setup-query:new', '白色相簿');
+  app.ui.dispatch('setup-auto', '');
+  const first = {title: '白色相簿', url: 'https://vndb.org/v1'};
+  const second = {title: '白色相簿2', url: 'https://vndb.org/v2'};
+  assert.equal(app.reply('search_metadata', [first, second]).query, '白色相簿');
+  assert.match(app.html, /data-action="setup-confirm-launcher" data-value="new" aria-pressed="true"/);
+  assert.match(app.html, /未匹配或失败 0/);
+  assert.equal(app.requests.some(request => request.command === 'complete_game_setup'), false);
+  app.ui.dispatch('choice-toggle', 'setup-candidate:new');
+  assert.match(app.html, /白色相簿2/);
+  app.ui.dispatch('choice-toggle', 'setup-candidate:new');
+  app.ui.dispatch('setup-save', '');
+  const save = app.requests.find(request => request.command === 'complete_game_setup');
+  assert.equal(save?.payload.url, first.url);
+  assert.equal(save?.payload.confirmed, true);
+});
+
+test('multiple automatic candidates with a different first title preselect it and require confirmation before saving', async () => {
   const app = await emptyHome();
   app.addFolder();
   app.settings.game_edits.new = {setup_pending: true};

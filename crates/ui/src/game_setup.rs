@@ -681,7 +681,8 @@ pub(crate) fn resolve(
                         .map_err(|error| error.to_string())?;
                     if automatic && let Some(first) = row.candidates.first() {
                         row.url.clone_from(&first.url);
-                        row.confirmed = row.candidates.len() == 1 && !row.url.is_empty();
+                        row.confirmed = !row.url.is_empty()
+                            && (row.candidates.len() == 1 || first.title == row.query);
                     }
                     row.searched = true;
                 }
@@ -1240,6 +1241,46 @@ mod tests {
         dispatch(&mut app, "setup-confirm-launcher", "new");
         dispatch(&mut app, "setup-save", "");
         assert_eq!(crate::bridge::take_requests().len(), 1);
+    }
+
+    #[test]
+    fn automatic_scraping_confirms_multiple_results_only_when_first_title_equals_query() {
+        for (query, first_title, url, confirmed) in [
+            ("白色相簿", "白色相簿", "https://vndb.org/v1", true),
+            ("白色相簿2", "白色相簿2", "https://vndb.org/v1", true),
+            ("白色相簿2", "白色相簿", "https://vndb.org/v1", false),
+            ("8  白色相簿", "白色相簿", "https://vndb.org/v1", false),
+            ("白色相簿 2", "白色相簿2", "https://vndb.org/v1", false),
+            ("白色相簿", "白色相簿", "", false),
+        ] {
+            let mut app = app();
+            app.setup.rows.truncate(1);
+            input(&mut app, "setup-query:new", query);
+            crate::bridge::take_requests();
+            dispatch(&mut app, "setup-auto", "");
+            let requests = crate::bridge::take_requests();
+            let request_id = requests[0].0;
+            let kind = app.requests.complete(request_id).unwrap();
+            resolve(
+                &mut app,
+                &kind,
+                request_id,
+                true,
+                &json!([
+                    {"title": first_title, "url": url},
+                    {"title": query, "url": "https://vndb.org/v2"},
+                    {"title": "Other", "url": "https://vndb.org/v3"}
+                ])
+                .to_string(),
+            );
+            let row = &app.setup.rows[0];
+            assert_eq!(row.query, query);
+            assert_eq!(row.url, url);
+            assert_eq!(row.candidates.len(), 3);
+            assert_eq!(row.confirmed, confirmed, "query={query}, first={first_title}");
+            assert_eq!(row.can_save(), confirmed);
+            assert!(crate::bridge::take_requests().is_empty());
+        }
     }
 
     #[test]

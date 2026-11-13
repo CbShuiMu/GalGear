@@ -36,6 +36,7 @@ mod save_commands;
 mod screenshots;
 mod skill_package;
 mod state;
+mod startup;
 mod tools;
 mod updater;
 #[cfg(windows)]

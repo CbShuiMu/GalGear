@@ -195,7 +195,6 @@ fn duplicate_has_backups(
     Ok(false)
 }
 
-#[tauri::command]
 pub(crate) async fn bootstrap(state: State<'_, AppState>) -> Result<Bootstrap, Message> {
     Ok(Bootstrap {
         update_complete: std::env::args().any(|arg| arg == "--galgear-update-complete"),
