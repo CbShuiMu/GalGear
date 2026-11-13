@@ -49,7 +49,7 @@ GalGear は、Windows 向けのローカル Galgame 管理ツールです。ゲ�
 | ブラウザー認証 | Bangumi・NextMoe の内蔵 OAuth ログイン。ユーザートークンは Windows 資格情報マネージャーに保存。[詳細](docs/oauth-callback.md)。 |
 | 更新通知 | 起動時に GalGear と Skill のバージョンを確認します。GalGear の新版がある場合は、今すぐ更新するか後で行うかを選べます。Skill の更新は設定に表示されます。 |
 | データのインポート | PotatoVN、ReinaManager、LunaBox などに対応。 |
-| 実行ログ | アプリ横の `logs/` に起動・コマンド・異常の診断を記録。自動送信はありません。[詳細](docs/runtime-logs.md)。 |
+| 実行ログ | アプリ横の `logs/` に起動、コマンド、エラーを記録します。画面が表示されない場合や応答しない場合は、ログの案内に沿って該当セッションと WebView2 の障害記録を確認できます。[ログとトラブルシューティング](docs/runtime-logs.md)。 |
 
 <details>
 <summary>機能紹介の詳細と制限</summary>

@@ -49,7 +49,7 @@ Choose an interface language on the first run. GalGear sets the default metadata
 | Browser authorization | Built-in OAuth login for Bangumi and NextMoe; user tokens stay in Windows Credential Manager. [Authorization details](docs/oauth-callback.md). |
 | Update notices | Checks GalGear and Skill versions in the background at startup. A new GalGear version prompts you to update now or later. Skill updates appear in Settings. |
 | Data import | Supports PotatoVN, ReinaManager, LunaBox, and more. |
-| Runtime logs | Records startup, command, and error diagnostics in `logs/` beside the executable; no automatic uploads. [Logging](docs/runtime-logs.md). |
+| Runtime logs | GalGear records startup, commands, and errors in `logs/` beside the executable. For a blank or unresponsive window, use the logging guide to find the session and any WebView2 failure records. [Logging and troubleshooting](docs/runtime-logs.md). |
 
 <details>
 <summary>Detailed feature descriptions and limitations</summary>
