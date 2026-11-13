@@ -96,7 +96,8 @@ pub(crate) fn run() {
             log::info!("desktop_setup webview_version={:?}", tauri::webview_version());
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
-                crate::diagnostics::observe_webview(&window);
+                let handle = app.handle().clone();
+                crate::diagnostics::observe_webview(&window, move || crate::webview_health::notify_exit(handle.clone()));
             }
             let exe_dir = std::env::current_exe()?
                 .parent()

@@ -1,4 +1,9 @@
 {
+  "diagnostics.webview_exited": {
+    "zh-CN": "界面引擎（Microsoft Edge WebView2）已异常退出，当前窗口无法继续使用。后台任务可能仍在运行，请等待正在进行的写入完成后，从托盘退出 GalGear 再重新打开。未保存的界面编辑可能丢失。若反复出现，请更新或修复 WebView2，并提供本次运行日志及 Windows 应用程序错误记录。",
+    "ja-JP": "画面エンジン（Microsoft Edge WebView2）が異常終了したため、このウィンドウは使用できません。バックグラウンド処理が続いている可能性があります。書き込みの完了を待ち、トレイから GalGear を終了して再起動してください。未保存の編集は失われる場合があります。繰り返す場合は WebView2 の更新または修復を行い、実行ログと Windows のアプリケーションエラー記録をお送りください。",
+    "en-US": "The interface engine (Microsoft Edge WebView2) has exited unexpectedly. This window can no longer be used. Background tasks may still be running; wait for any writes to finish, then quit GalGear from the tray and reopen it. Unsaved edits may be lost. If this recurs, update or repair WebView2 and provide this session log and the Windows Application Error record."
+  },
   "sources.rate_limited": {
     "zh-CN": "数据源请求过于频繁，请在 {seconds} 秒后重试。",
     "ja-JP": "リクエストが多すぎます。{seconds} 秒後に再試行してください。",

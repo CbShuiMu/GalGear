@@ -142,6 +142,7 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
     use webview2_com::CallDevToolsProtocolMethodCompletedHandler;
     use windows_core::w;
 
+    let browser_crash = std::env::var_os("GALGEAR_TEST_BROWSER_CRASH").is_some();
     let root = tempfile::tempdir().unwrap();
     initialize_at(&root.path().join("logs")).unwrap();
     let log_path = LOGGER.get().unwrap().path.clone();
@@ -171,7 +172,10 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
                             }
                         })
                         .build()?;
-                observe_webview(&window);
+                observe_webview(
+                    &window,
+                    || log::info!(target: "galgear::test", "webview_exit_notification"),
+                );
                 let app = app.handle().clone();
                 thread::spawn(move || {
                     let wait_for = |message| {
@@ -188,15 +192,19 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
                     let received_failure = wait_for(
                         "view_applied window=main view=1 page=Home overlay=Setup",
                     ) && window
-                        .with_webview(|webview| {
+                        .with_webview(move |webview| {
                             let complete = CallDevToolsProtocolMethodCompletedHandler::create(
                                 Box::new(|_, _| Ok(())),
                             );
-                            // SAFETY: Tauri 在隔离 WebView 的 UI 线程提供有效控制器。这里只让测试渲染进程退出。
+                            // SAFETY: Tauri 在隔离 WebView 的 UI 线程提供有效控制器。这里只让隔离配置下的测试浏览器或渲染进程退出。
                             let result = unsafe {
                                 webview.controller().CoreWebView2().and_then(|core| {
                                     core.CallDevToolsProtocolMethod(
-                                        w!("Page.crash"),
+                                        if browser_crash {
+                                            w!("Browser.crash")
+                                        } else {
+                                            w!("Page.crash")
+                                        },
                                         w!("{}"),
                                         &complete,
                                     )
@@ -207,7 +215,12 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
                             }
                         })
                         .is_ok()
-                        && wait_for("webview_process_failed window=main kind=renderer_exited");
+                        && wait_for(if browser_crash {
+                            "webview_process_failed window=main kind=browser_exited"
+                        } else {
+                            "webview_process_failed window=main kind=renderer_exited"
+                        })
+                        && wait_for("webview_exit_notification");
                     app.exit(i32::from(!received_failure));
                 });
                 Ok(())
@@ -220,6 +233,10 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
     assert_eq!(exit_code, 0, "{log}");
     assert!(
         log.contains("webview_diagnostics_ready window=main browser_pid=Some("),
+        "{log}"
+    );
+    assert!(
+        log.contains("webview_failure_report_folder window=main path="),
         "{log}"
     );
 }

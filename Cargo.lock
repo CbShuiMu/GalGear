@@ -1144,7 +1144,7 @@ dependencies = [
 
 [[package]]
 name = "galgear"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "galgear-core"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "base64 0.22.1",
  "csv",
@@ -1197,7 +1197,7 @@ dependencies = [
 
 [[package]]
 name = "galgear-i18n"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "serde",
  "serde_json",
@@ -1205,11 +1205,11 @@ dependencies = [
 
 [[package]]
 name = "galgear-tags"
-version = "0.5.2"
+version = "0.5.3"
 
 [[package]]
 name = "galgear-ui"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "galgear-i18n",
  "galgear-tags",

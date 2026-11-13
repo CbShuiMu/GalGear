@@ -368,3 +368,17 @@ test('empty collection marquee clears folders and games and exits batch mode', (
   assert.deepEqual(app.calls, [['selection', [], []], ['dispatch', 'batch-toggle']]);
   assert.equal(app.batch(), false);
 });
+
+
+test('native drag events targeting document do not require Element.closest', () => {
+  const listeners = {};
+  const start = bridge.indexOf("document.addEventListener('dragstart',");
+  const nativeDrag = bridge.slice(start, bridge.indexOf("document.addEventListener('scroll',", start));
+  const document = {addEventListener: (kind, handler) => { listeners[kind] = handler; }, querySelectorAll: () => []};
+  vm.runInNewContext(nativeDrag, {document, wasmReady: true, dragPayload: 'internal',
+    pointerDrag: null, marqueeDrag: null, dragHoverTimer: null, dragHoverKey: null,
+    deferredDragFrame: null, clearTimeout});
+  for (const kind of ['dragstart', 'dragover', 'drop']) {
+    assert.doesNotThrow(() => listeners[kind]({target: document, dataTransfer: {}}), kind);
+  }
+});

@@ -987,7 +987,7 @@ window.addEventListener('blur', () => {
 });
 
 document.addEventListener('dragstart', event => {
-  const card = event.target.closest('[data-game-id]');
+  const card = event.target?.closest?.('[data-game-id]');
   if (!wasmReady || !card || !event.dataTransfer) return;
   if (pointerDrag || marqueeDrag) { event.preventDefault(); return; }
   dragPayload = ui.library_drag_ids(card.dataset.gameId);
@@ -997,7 +997,7 @@ document.addEventListener('dragstart', event => {
 });
 document.addEventListener('dragover', event => {
   if (!dragPayload || !event.dataTransfer) return;
-  const target = event.target.closest('[data-drop-folder],[data-drop-expand]');
+  const target = event.target?.closest?.('[data-drop-folder],[data-drop-expand]');
   if (!target) return;
   event.preventDefault(); event.dataTransfer.dropEffect = 'copy';
   document.querySelectorAll('.drop-target').forEach(e => e.classList.remove('drop-target'));
@@ -1009,7 +1009,7 @@ document.addEventListener('dragover', event => {
   }
 });
 document.addEventListener('drop', event => {
-  const target = event.target.closest('[data-drop-folder]');
+  const target = event.target?.closest?.('[data-drop-folder]');
   if (wasmReady && target && dragPayload) {
     // WebView2 can expose a protected/empty custom MIME payload during native drops.
     // The active internal gesture already owns the serialized Rust selection.

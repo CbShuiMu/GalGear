@@ -97,46 +97,146 @@ fn run_job(manifest: &std::path::Path, mut status: impl FnMut(String)) -> Result
 
 pub(crate) fn run_helper() -> bool {
     let mut args = std::env::args_os().skip(1);
-    if args.next().as_deref() != Some(std::ffi::OsStr::new("--galgear-update")) { return false; }
-    let Some(manifest) = args.next().map(PathBuf::from) else { return true };
+    if args.next().as_deref() != Some(std::ffi::OsStr::new("--galgear-update")) {
+        return false;
+    }
+    let Some(manifest) = args.next().map(PathBuf::from) else {
+        return true;
+    };
+    crate::diagnostics::initialize();
+    log::info!(
+        "updater_start webview_version={:?}",
+        tauri::webview_version()
+    );
     let recovery_manifest = manifest.clone();
+    // 独立 profile 避免更新窗口与待退出的主程序共享故障浏览器进程。
+    let profile = manifest.with_extension("webview");
     let mut context = tauri::generate_context!();
     context.config_mut().app.windows.clear();
     context.config_mut().app.security.csp = None;
-    let started = AtomicBool::new(false);
-    let result = tauri::Builder::default().setup(|app| {
-        tauri::WebviewWindowBuilder::new(app, "updater", tauri::WebviewUrl::App("updater.html".into()))
-            .title("GalGear 更新").inner_size(440.0, 190.0).resizable(false).closable(false).center().build()?;
-        Ok(())
-    }).on_page_load(move |window, event| {
-        if event.event() != tauri::webview::PageLoadEvent::Finished || started.swap(true, Ordering::SeqCst) { return; }
-        let window = window.clone();
-        let manifest = manifest.clone();
-        std::thread::spawn(move || {
-            if let Err(error) = run_job(&manifest, |text| {
-                if let Ok(text) = serde_json::to_string(&text) { let _ = window.eval(format!("document.getElementById('status').textContent={text}")); }
-            }) {
-                let _ = rfd::MessageDialog::new().set_title("GalGear 更新失败")
-                    .set_description(error.render(Language::Chinese)).set_level(rfd::MessageLevel::Error).show();
-                if let Ok(bytes) = fs::read(&manifest) && let Ok(handoff) = serde_json::from_slice::<Handoff>(&bytes) {
-                    let _ = std::process::Command::new(handoff.executable).spawn();
+    let result = helper_builder(move |app| {
+        complete_job(&manifest, |text| {
+            log::info!("updater_progress {text}");
+            if let Some(window) = app.get_webview_window("updater") {
+                // 标题属于原生窗口，即使网页尚未加载或已经崩溃也能显示进度。
+                let _ = window.set_title(&format!("GalGear — {text}"));
+                if let Ok(text) = serde_json::to_string(&text) {
+                    let _ = window.eval(format!("{{const status=document.getElementById('status');if(status)status.textContent={text};}}"));
                 }
             }
-            window.app_handle().exit(0);
         });
-    }).run(context);
+        app.exit(0);
+    }, profile).run(context);
     if let Err(error) = result {
-        let _ = rfd::MessageDialog::new().set_title("GalGear 更新失败").set_description(error.to_string()).show();
-        if let Ok(bytes) = fs::read(recovery_manifest) && let Ok(handoff) = serde_json::from_slice::<Handoff>(&bytes) {
-            let _ = std::process::Command::new(handoff.executable).spawn();
-        }
+        log::error!("updater_window_failed {error}");
+        let _ = rfd::MessageDialog::new()
+            .set_title("GalGear 更新失败")
+            .set_description(error.to_string())
+            .show();
+        restart_original(&recovery_manifest);
     }
+    crate::diagnostics::finish();
     true
+}
+
+// setup 只派发一次后台任务。页面加载、重载和进程故障都不参与更新任务的启动。
+fn helper_builder(
+    job: impl FnOnce(tauri::AppHandle) + Send + 'static,
+    profile: PathBuf,
+) -> tauri::Builder<tauri::Wry> {
+    tauri::Builder::default().setup(move |app| {
+        let builder = tauri::WebviewWindowBuilder::new(
+            app,
+            "updater",
+            tauri::WebviewUrl::App("updater.html".into()),
+        )
+        .title("GalGear 更新")
+        .inner_size(440.0, 190.0)
+        .resizable(false)
+        .closable(false)
+        .center();
+        let window = builder.data_directory(profile).build()?;
+        #[cfg(windows)]
+        crate::diagnostics::observe_webview(&window, || {});
+        let handle = app.handle().clone();
+        std::thread::Builder::new()
+            .name("updater-job".into())
+            .spawn(move || job(handle))?;
+        Ok(())
+    })
+}
+
+fn complete_job(manifest: &std::path::Path, status: impl FnMut(String)) {
+    log::info!("updater_job_start");
+    if let Err(error) = run_job(manifest, status) {
+        log::error!("updater_job_failed {error:?}");
+        let _ = rfd::MessageDialog::new()
+            .set_title("GalGear 更新失败")
+            .set_description(error.render(Language::Chinese))
+            .set_level(rfd::MessageLevel::Error)
+            .show();
+        restart_original(manifest);
+    } else {
+        log::info!("updater_job_complete");
+    }
+}
+
+fn restart_original(manifest: &std::path::Path) {
+    if let Ok(bytes) = fs::read(manifest)
+        && let Ok(handoff) = serde_json::from_slice::<Handoff>(&bytes)
+        && let Err(error) = std::process::Command::new(handoff.executable).spawn()
+    {
+        log::error!("updater_restart_failed {error}");
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "需要 Windows 桌面和 WebView2，使用临时配置且不下载或替换文件"]
+    fn native_updater_starts_job_without_page_load() {
+        use std::sync::Arc;
+        let root = tempfile::tempdir().unwrap();
+        let mut context = tauri::generate_context!();
+        context.config_mut().app.windows.clear();
+        // 新窗口使用隔离 profile；不读取真实 WebView 用户数据。
+        let profile = root.path().join("webview");
+        let completed = Arc::new(AtomicBool::new(false));
+        let loaded = Arc::new(AtomicBool::new(false));
+        let app = helper_builder(
+            {
+                let completed = completed.clone();
+                let loaded = loaded.clone();
+                move |app| {
+                    std::thread::sleep(Duration::from_millis(500));
+                    completed.store(!loaded.load(Ordering::SeqCst), Ordering::SeqCst);
+                    app.exit(0);
+                }
+            },
+            profile,
+        )
+        .any_thread()
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry>::new("blocked-page")
+                .js_init_script("while (true) {}")
+                .build(),
+        )
+        .on_page_load(move |_, event| {
+            if event.event() == tauri::webview::PageLoadEvent::Finished {
+                loaded.store(true, Ordering::SeqCst);
+            }
+        })
+        .build(context)
+        .unwrap();
+        assert_eq!(app.run_return(|_, _| {}), 0);
+        assert!(
+            completed.load(Ordering::SeqCst),
+            "更新任务必须在页面无法完成加载时运行"
+        );
+    }
     #[test]
     fn update_priority_blocks_new_writes_without_interrupting_the_current_transaction() {
         let temp = tempfile::tempdir().unwrap();

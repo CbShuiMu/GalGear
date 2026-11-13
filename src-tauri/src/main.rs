@@ -38,6 +38,8 @@ mod skill_package;
 mod state;
 mod tools;
 mod updater;
+#[cfg(windows)]
+mod webview_health;
 
 fn main() {
     #[cfg(windows)]
