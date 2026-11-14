@@ -87,6 +87,30 @@ test('cancelled or empty selection makes no batch request', async () => {
   }
 });
 
+test('removing a library requires confirmation and reports a failed cover cleanup', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.finishScan([]);
+  app.ui.dispatch('remove-folder', 'F:/Fixture');
+  assert.match(app.html, /cover\.jpg/);
+  assert.match(app.html, /F:\/Fixture/);
+  assert.equal(app.requests.filter(r => r.command === 'remove_library_folder').length, 0);
+  app.ui.dispatch('library-close', '');
+  app.ui.dispatch('remove-folder-confirm', '');
+  assert.equal(app.requests.filter(r => r.command === 'remove_library_folder').length, 0);
+
+  app.ui.dispatch('remove-folder', 'F:/Fixture');
+  app.ui.dispatch('remove-folder-confirm', '');
+  app.settings.library_folders = [];
+  assert.deepEqual(app.reply('remove_library_folder', {
+    settings: app.settings,
+    catalog: {games: [], warnings: []},
+    warning: {key: 'error.library_cover_cleanup', args: {path: 'F:/Fixture/Game', detail: 'fixture failure'}},
+  }), {path: 'F:/Fixture'});
+  assert.match(app.html, /fixture failure/);
+  assert.equal(app.requests.filter(r => r.command === 'scan_library').length, 1);
+});
+
 test('adding during a scan waits and performs a single follow-up scan', async () => {
   const app = await emptyHome();
   app.ui.dispatch('refresh', '');

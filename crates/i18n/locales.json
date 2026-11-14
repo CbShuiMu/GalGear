@@ -655,9 +655,9 @@
     "en-US": "Remove this library"
   },
   "settings.remove_folder_tip": {
-    "zh-CN": "移除游戏库，不删除游戏文件",
-    "ja-JP": "ゲームファイルを削除せず、ライブラリのみを削除",
-    "en-US": "Remove library without deleting game files"
+    "zh-CN": "移除游戏库会同时删除随库移除的游戏目录中的 cover.jpg，包括原有的同名封面。",
+    "ja-JP": "ライブラリを削除すると、一緒に取り除かれるゲームのフォルダーから cover.jpg が削除されます。元からある同名の画像も対象です。",
+    "en-US": "Removing this library also deletes cover.jpg from each game folder removed with it, including any pre-existing cover.jpg."
   },
   "settings.path_placeholder": {
     "zh-CN": "输入文件夹路径，如 F:\\GALGame",
@@ -670,9 +670,9 @@
     "en-US": "Library folder path"
   },
   "settings.auto_save": {
-    "zh-CN": "设置自动保存。移除游戏库不会删除游戏文件。",
-    "ja-JP": "設定は自動保存されます。ライブラリを削除してもゲームファイルは削除されません。",
-    "en-US": "Settings are saved automatically. Removing a library does not delete game files."
+    "zh-CN": "设置自动保存。",
+    "ja-JP": "設定は自動保存されます。",
+    "en-US": "Settings are saved automatically."
   },
   "settings.card_size": {
     "zh-CN": "封面大小",
@@ -903,6 +903,11 @@
     "zh-CN": "条目已删除，游戏目录中的 cover.jpg 删除失败：{detail}",
     "ja-JP": "項目は削除されましたが、ゲームフォルダーの cover.jpg を削除できませんでした: {detail}",
     "en-US": "Entries were deleted, but cover.jpg could not be removed from a game folder: {detail}"
+  },
+  "error.library_cover_cleanup": {
+    "zh-CN": "游戏库已移除，但无法删除 {path} 中的 cover.jpg（{detail}）",
+    "ja-JP": "ライブラリを削除しましたが、{path} の cover.jpg を削除できませんでした（{detail}）",
+    "en-US": "Library removed. Could not delete cover.jpg in {path} ({detail})."
   },
   "error.config_state": {
     "zh-CN": "配置状态不可用。",
@@ -3544,6 +3549,11 @@
     "ja-JP": "台詞ファイルまたはルート分析がモデルの上限を超えています。より長いコンテキストに対応したDeepSeekモデルを選択してください。",
     "en-US": "The dialogue file or route analysis exceeds the selected model's context limit. Choose a larger-context DeepSeek model."
   },
+  "route.graph_legend": {
+    "zh-CN": "实线：证据支持 · 虚线：推测连接 · 悬停查看依据 · 含全剧情剧透",
+    "ja-JP": "実線：根拠あり · 破線：推定 · ホバーで根拠を表示 · ネタバレあり",
+    "en-US": "Solid: supported · Dashed: inferred · Hover for evidence · Full-game spoilers"
+  },
   "route.invalid_analysis": {
     "zh-CN": "DeepSeek返回的路线分析无效，请重新生成。",
     "ja-JP": "DeepSeekから無効なルート分析が返されました。再生成してください。",
@@ -4919,6 +4929,11 @@
       "ja-JP": "起動プログラムを選択",
       "en-US": "Choose a game executable"
   },
+  "launcher.loading": {
+    "zh-CN": "正在查找启动程序…",
+    "ja-JP": "起動プログラムを検索中…",
+    "en-US": "Finding executables…"
+  },
   "launcher.empty": {
       "zh-CN": "游戏目录中没有可用的 EXE 文件",
       "ja-JP": "ゲームフォルダーに EXE ファイルがありません",
@@ -4966,5 +4981,86 @@
     "zh-CN": "默认数据源：鲲Gal（NextMoe）",
     "ja-JP": "既定のデータソース：批評空間",
     "en-US": "Default data source: VNDB"
+  },
+  "route.html.hint": {
+    "zh-CN": "点击节点展开分支 · 拖动画布 · 路线图包含剧透",
+    "ja-JP": "ノードをクリックして展開・ドラッグで移動・ネタバレあり",
+    "en-US": "Click nodes to expand · Drag to pan · Contains spoilers"
+  },
+  "route.html.canvas": {
+    "zh-CN": "路线画布，方向键平移",
+    "ja-JP": "ルート図、矢印キーで移動",
+    "en-US": "Route canvas; arrow keys to pan"
+  },
+  "route.html.legend": {
+    "zh-CN": "绿色：开始　蓝色：结局　紫色虚线：解锁　蓝色点线：推断　↗：同一节点",
+    "ja-JP": "緑：開始　青：結末　紫の破線：解放　青の点線：推定　↗：同じノード",
+    "en-US": "Green: start · Blue: ending · Purple dashed: unlock · Blue dotted: inferred · ↗: shared node"
+  },
+  "route.html.review": {
+    "zh-CN": "范围与待确认项",
+    "ja-JP": "範囲と未確認事項",
+    "en-US": "Scope and unresolved items"
+  },
+  "route.html.unreachable": {
+    "zh-CN": "未确认从开始入口可达",
+    "ja-JP": "開始からの到達が未確認",
+    "en-US": "Reachability from a start is unconfirmed"
+  },
+  "route.html.expand": {
+    "zh-CN": "全部展开",
+    "ja-JP": "すべて展開",
+    "en-US": "Expand all"
+  },
+  "route.html.collapse": {
+    "zh-CN": "收起分支",
+    "ja-JP": "折りたたむ",
+    "en-US": "Collapse branches"
+  },
+  "route.html.in": {
+    "zh-CN": "放大",
+    "ja-JP": "拡大",
+    "en-US": "Zoom in"
+  },
+  "route.html.out": {
+    "zh-CN": "缩小",
+    "ja-JP": "縮小",
+    "en-US": "Zoom out"
+  },
+  "route.html.fit": {
+    "zh-CN": "适应宽度",
+    "ja-JP": "幅に合わせる",
+    "en-US": "Fit width"
+  },
+  "route.html.theme": {
+    "zh-CN": "亮色 / 暗色",
+    "ja-JP": "明 / 暗",
+    "en-US": "Light / dark"
+  },
+  "route.html.json": {
+    "zh-CN": "导出路线数据",
+    "ja-JP": "データ出力",
+    "en-US": "Export data"
+  },
+  "route.html.draft": {
+    "zh-CN": "导出攻略草稿",
+    "ja-JP": "攻略下書きを出力",
+    "en-US": "Export guide draft"
+  },
+  "route.html.draftNote": {
+    "zh-CN": "静态分析草稿；选项与前置条件需复核，尚未确认网站导入兼容性。",
+    "ja-JP": "静的解析の下書きです。選択肢・条件とサイト互換性の確認が必要です。",
+    "en-US": "Static analysis draft; review choices, prerequisites and site import compatibility."
+  },
+  "route.html.next": {
+    "zh-CN": "继续",
+    "ja-JP": "次へ",
+    "en-US": "Continue"
+  },
+  "route.html.inferred": {
+    "zh-CN": "推断",
+    "ja-JP": "推定",
+    "en-US": "Inferred"
   }
+
 }

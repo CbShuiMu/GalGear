@@ -35,7 +35,7 @@ class OutputMetadataBudgetTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 1, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
         self.assertEqual([item['max_tokens'] for item in payloads], [65536, 131072])
-        self.assertEqual([item['reasoning_effort'] for item in payloads], ['high', 'max'])
+        self.assertEqual([item['reasoning_effort'] for item in payloads], ['low', 'high'])
         self.assertEqual([call.kwargs['timeout'] for call in opener.open.call_args_list], [600, 900])
 
     def test_two_length_expansions_use_remaining_advertised_capacity_without_dispatching_partial_code(self):
@@ -50,7 +50,7 @@ class OutputMetadataBudgetTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
         self.assertEqual([item['max_tokens'] for item in payloads], [131072, 262144, 393216])
-        self.assertTrue(all(item['reasoning_effort'] == 'max' for item in payloads))
+        self.assertTrue(all(item['reasoning_effort'] == 'high' for item in payloads))
         self.assertTrue(all(call.kwargs['timeout'] == 900 for call in opener.open.call_args_list))
         self.assertEqual(self.agent.programs, original)
         self.assertEqual([event['tool'] for event in self.agent.events], ['list_files'])
@@ -85,6 +85,9 @@ class OutputMetadataBudgetTests(unittest.TestCase):
         policy = host.TRANSPORT['preparation_reasoning_effort']
         self.assertEqual(policy('resources', {}, repair=True), 'max')
         self.assertEqual(policy(None, {}), 'max')
+        self.assertEqual(policy('save_preflight', {}), 'low')
+        self.assertEqual(policy('save_program', {}), 'high')
+        self.assertEqual(policy('save_program', {}, repair=True), 'max')
         self.assertEqual(policy('finish', {'status': 'available', 'effort': {'supported_levels': ['max']}}), 'max')
 
     def test_zero_request_probe_does_not_query_metadata_or_inference(self):
@@ -143,7 +146,7 @@ class OutputMetadataBudgetTests(unittest.TestCase):
         self.assertEqual(opener.open.call_args.kwargs['timeout'], 100)
         payload = json.loads(opener.open.call_args.args[0].data)
         self.assertEqual(payload['max_tokens'], 131072)
-        self.assertEqual(payload['reasoning_effort'], 'max')
+        self.assertEqual(payload['reasoning_effort'], 'high')
 
     def test_preflight_timeout_stays_short_on_retry_and_with_large_checkpoint_budget(self):
         self.capabilities()

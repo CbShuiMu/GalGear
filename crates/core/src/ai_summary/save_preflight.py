@@ -252,7 +252,14 @@ class SavePreflight:
         observations = arguments.get('observations')
         if not isinstance(observations, list) or not 1 <= len(observations) <= MAX_OBSERVATIONS:
             raise ValueError('Preflight needs bounded independently verified observations')
-        verified = [self._observation(data, item) for item in observations]
+        verified = []
+        for index, item in enumerate(observations):
+            try:
+                verified.append(self._observation(data, item))
+            except (ValueError, KeyError, IndexError, UnicodeError) as error:
+                role = item.get('role', '?') if isinstance(item, dict) else '?'
+                raise ValueError('observations[' + str(index) + '] (' + str(role)[:48] + '): '
+                    + str(error) + '. Preserve the original proof.view for decoded offsets; repair only this field.') from error
         if classification == 'progress_candidate':
             if all(item['role'] == 'container_header' for item in verified):
                 raise ValueError('A container header alone does not establish a progress candidate')

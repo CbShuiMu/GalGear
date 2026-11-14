@@ -1,4 +1,4 @@
-//! Generic model tool host; all format-specific Python is authored by the selected AI.
+//! 工具宿主入口；复用只读随附工具，模型适配程序仍须独立验证。
 use super::{io, read};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use galgear_i18n::Message;
@@ -211,6 +211,12 @@ pub fn prepare(home: &Path, work: &Path, config: Value) -> Result<Value, Message
     let result = invoke(home, work, config, false)?;
     validate_preparation_result(&result)?;
     Ok(result)
+}
+
+/// 执行 Skill 静态分析；结果使用独立契约，不能冒充已验证的存档解析器。
+pub(super) fn analyze(home: &Path, work: &Path, config: Value) -> Result<Value, Message> {
+    fs::create_dir_all(work).map_err(io)?;
+    invoke(home, work, config, false)
 }
 
 pub fn parse(home: &Path, directory: &Path, path: &Path) -> Result<super::sandbox::Facts, Message> {

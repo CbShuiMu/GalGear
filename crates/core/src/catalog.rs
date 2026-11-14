@@ -1,7 +1,12 @@
 use crate::{Game, ScanResult, Settings, config::display_path};
 use galgear_i18n::Message;
 use sha2::{Digest, Sha256};
-use std::{fs, io::Write, path::Path};
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 pub(crate) mod identity;
 pub mod title;
@@ -165,6 +170,57 @@ pub fn add_library_folders(settings: &mut Settings, paths: Vec<String>) -> usize
     added
 }
 
+/// 移除仅属于已移除库的目录条目，返回去重后的待清理游戏目录。
+/// `settings` 必须是移除该库后的配置。手动条目及其他库覆盖的目录继续保留。
+pub fn detach_library_games(
+    list: &mut ScanResult,
+    settings: &Settings,
+    removed: &str,
+) -> BTreeSet<PathBuf> {
+    let path_key = |path: &str| {
+        #[cfg(windows)]
+        let path = path.to_lowercase();
+        PathBuf::from(path)
+    };
+    let removed = path_key(removed);
+    let roots: HashMap<_, _> = settings
+        .library_folders
+        .iter()
+        .map(|path| (path_key(path), path))
+        .collect();
+    let manual_folders: HashSet<_> = settings
+        .manual_games
+        .iter()
+        .map(|game| path_key(&game.folder))
+        .collect();
+    let manual_ids: HashSet<_> = settings
+        .manual_games
+        .iter()
+        .map(|game| game.id.as_str())
+        .collect();
+    let mut detached = BTreeSet::new();
+    list.games.retain_mut(|game| {
+        let folder = path_key(&game.folder);
+        if !folder.starts_with(&removed) {
+            return true;
+        }
+        if let Some(root) = folder.ancestors().find_map(|ancestor| roots.get(ancestor)) {
+            if path_key(&game.library) == removed {
+                game.library.clone_from(root);
+            }
+            return true;
+        }
+        if manual_ids.contains(game.id.as_str()) {
+            return true;
+        }
+        if !manual_folders.contains(&folder) {
+            detached.insert(PathBuf::from(&game.folder));
+        }
+        false
+    });
+    detached
+}
+
 /// 永久清除应用条目，并记录最小扫描排除信息；游戏文件和备份独立保留。
 pub fn remove_entry(
     settings: &mut Settings,
@@ -232,37 +288,55 @@ pub fn refresh_availability(settings: &Settings, list: &mut ScanResult) {
 
 /// Merge scanned candidates with retained records, including unavailable games.
 pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> ScanResult {
+    // 与原先 find 的语义一致，重复 ID 始终取第一次出现的条目。
+    let mut old_by_id = HashMap::new();
+    for game in &old.games {
+        old_by_id.entry(game.id.as_str()).or_insert(game);
+    }
+    let mut positions = HashMap::new();
+    for (index, game) in fresh.games.iter().enumerate() {
+        positions.entry(game.id.clone()).or_insert(index);
+    }
+    let manual_ids: HashSet<_> = settings
+        .manual_games
+        .iter()
+        .map(|game| game.id.as_str())
+        .collect();
+    let libraries: HashSet<_> = settings
+        .library_folders
+        .iter()
+        .map(|path| path.to_ascii_lowercase())
+        .collect();
     for game in old
         .games
         .iter()
         .chain(settings.manual_games.iter())
         .chain(settings.excluded_entries.values())
     {
-        if !fresh.games.iter().any(|g| g.id == game.id)
-            && (settings
-                .library_folders
-                .iter()
-                .any(|p| p.eq_ignore_ascii_case(&game.library))
-                || settings.manual_games.iter().any(|g| g.id == game.id)
+        if !positions.contains_key(&game.id)
+            && (libraries.contains(&game.library.to_ascii_lowercase())
+                || manual_ids.contains(game.id.as_str())
                 || settings.excluded_entries.contains_key(&game.id))
         {
+            positions.insert(game.id.clone(), fresh.games.len());
             fresh.games.push(game.clone());
         }
     }
     for manual in &settings.manual_games {
         let mut pinned = manual.clone();
-        if let Some(cached) = old.games.iter().find(|g| g.id == manual.id) {
+        if let Some(cached) = old_by_id.get(manual.id.as_str()) {
             pinned.cover.clone_from(&cached.cover);
             pinned.cover_artwork.clone_from(&cached.cover_artwork);
         }
-        if let Some(entry) = fresh.games.iter_mut().find(|g| g.id == manual.id) {
-            *entry = pinned;
+        if let Some(&index) = positions.get(&manual.id) {
+            fresh.games[index] = pinned;
         } else {
+            positions.insert(pinned.id.clone(), fresh.games.len());
             fresh.games.push(pinned);
         }
     }
     for game in &mut fresh.games {
-        if let Some(cached) = old.games.iter().find(|cached| cached.id == game.id) {
+        if let Some(cached) = old_by_id.get(game.id.as_str()) {
             game.aliases.clone_from(&cached.aliases);
             game.playtime_seconds = cached.playtime_seconds;
             game.last_played = cached.last_played;
@@ -322,6 +396,44 @@ pub fn save(path: &Path, catalog: &ScanResult) -> Result<(), Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn indexed_merge_preserves_first_cached_record_manual_precedence_and_saved_edits() {
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("game.exe");
+        fs::write(&exe, b"fixture").unwrap();
+        let mut cached = manual_game(&exe, "Cached".into()).unwrap();
+        cached.library = display_path(temp.path());
+        cached.playtime_seconds = 120;
+        cached.aliases = vec!["Alias".into()];
+        cached.cover = Some("cached-cover".into());
+        let mut duplicate = cached.clone();
+        duplicate.playtime_seconds = 999;
+        duplicate.cover = Some("wrong-cover".into());
+        let old = ScanResult {
+            games: vec![cached.clone(), duplicate],
+            ..Default::default()
+        };
+        let mut manual = cached.clone();
+        manual.title = "Manual".into();
+        manual.cover = None;
+        let mut settings = Settings {
+            library_folders: vec![cached.library.to_ascii_uppercase()],
+            manual_games: vec![manual],
+            ..Default::default()
+        };
+        settings
+            .game_edits
+            .entry(cached.id.clone())
+            .or_default()
+            .title = Some("Saved".into());
+        let merged = merge(ScanResult::default(), &old, &settings);
+        assert_eq!(merged.games.len(), 1);
+        assert_eq!(merged.games[0].title, "Saved");
+        assert_eq!(merged.games[0].playtime_seconds, 120);
+        assert_eq!(merged.games[0].aliases, ["Alias"]);
+        assert_eq!(merged.games[0].cover.as_deref(), Some("cached-cover"));
+    }
 
     #[test]
     fn batch_library_restore_preserves_order_boundaries_and_existing_exclusions() {

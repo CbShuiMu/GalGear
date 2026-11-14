@@ -1,4 +1,4 @@
-//! 首次启动时确认启动文件，保存成功后继续原来的启动流程。
+//! 共用启动文件选择器；首次启动确认后继续启动，配置修改仅保存。
 use crate::{
     features,
     models::{Game, Settings},
@@ -15,7 +15,7 @@ use std::fmt::Write;
 #[derive(Default)]
 pub(crate) struct State {
     id: Option<String>,
-    action: String,
+    launch_action: Option<String>,
     candidates: Vec<Candidate>,
     selected: String,
     request: Option<u32>,
@@ -27,6 +27,17 @@ struct Candidate {
     path: String,
     name: String,
     icon: Option<String>,
+}
+
+impl State {
+    fn can_save(&self) -> bool {
+        self.request.is_none()
+            && !self.selected.is_empty()
+            && self
+                .candidates
+                .iter()
+                .any(|item| item.path == self.selected)
+    }
 }
 
 pub(crate) fn open(app: &mut App, id: &str, action: &str) -> bool {
@@ -44,9 +55,21 @@ pub(crate) fn open(app: &mut App, id: &str, action: &str) -> bool {
     {
         return false;
     }
+    begin(app, id, Some(action));
+    true
+}
+
+fn begin(app: &mut App, id: &str, launch_action: Option<&str>) {
+    let Some(game) = app.catalog.games.iter().find(|game| game.id == id) else {
+        return;
+    };
+    if !game.available || app.launcher_picker.id.is_some() {
+        return;
+    }
     app.launcher_picker = State {
         id: Some(id.into()),
-        action: action.into(),
+        launch_action: launch_action.map(str::to_owned),
+        selected: game.executable.clone().unwrap_or_default(),
         request: Some(app.requests.next_id()),
         ..Default::default()
     };
@@ -56,12 +79,17 @@ pub(crate) fn open(app: &mut App, id: &str, action: &str) -> bool {
         "list_game_executables",
         json!({"id":id}),
     );
-    true
 }
 
 pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if !action.starts_with("launcher-") {
         return false;
+    }
+    if action == "launcher-edit" {
+        if !app.detail.editing && app.detail.selected.as_deref() == Some(value) {
+            begin(app, value, None);
+        }
+        return true;
     }
     let picker = &mut app.launcher_picker;
     match action {
@@ -80,7 +108,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
 
 fn save(app: &mut App) {
     let picker = &mut app.launcher_picker;
-    if picker.request.is_some() || picker.selected.is_empty() {
+    if !picker.can_save() {
         return;
     }
     let payload = json!({"id":picker.id,"executable":picker.selected});
@@ -109,15 +137,28 @@ pub(crate) fn resolve(
     }
     app.launcher_picker.request = None;
     if !success {
+        if matches!(kind, Pending::LauncherList) {
+            app.launcher_picker.selected.clear();
+        }
         app.launcher_picker.error = Some(Message::from_error(payload));
         return true;
     }
     let result = (|| -> Result<(), serde_json::Error> {
         if matches!(kind, Pending::LauncherList) {
             app.launcher_picker.candidates = serde_json::from_str(payload)?;
+            if !app
+                .launcher_picker
+                .candidates
+                .iter()
+                .any(|candidate| candidate.path == app.launcher_picker.selected)
+            {
+                app.launcher_picker.selected.clear();
+            }
             if let [candidate] = app.launcher_picker.candidates.as_slice() {
                 app.launcher_picker.selected = candidate.path.clone();
-                save(app);
+                if app.launcher_picker.launch_action.is_some() {
+                    save(app);
+                }
             }
         } else {
             #[derive(Deserialize)]
@@ -140,9 +181,11 @@ pub(crate) fn resolve(
             if let Some(runtime) = saved.runtime {
                 app.runtime.insert(id.clone(), runtime);
             }
-            let action = std::mem::take(&mut app.launcher_picker.action);
+            let action = app.launcher_picker.launch_action.take();
             app.launcher_picker = State::default();
-            features::dispatch(app, &action, &id);
+            if let Some(action) = action {
+                features::dispatch(app, &action, &id);
+            }
         }
         Ok(())
     })();
@@ -155,11 +198,13 @@ pub(crate) fn resolve(
 pub(crate) fn render(html: &mut String, app: &App) {
     let picker = &app.launcher_picker;
     let busy = picker.request.is_some();
-    // 等待候选列表和自动保存期间保持选择框隐藏，保存失败后可在选择框内重试。
-    if picker.id.is_none() || (busy && picker.candidates.len() <= 1) {
+    // 首次启动的单候选仍自动确认；主动修改时始终显示弹窗并等待确认。
+    if picker.id.is_none()
+        || (picker.launch_action.is_some() && busy && picker.candidates.len() <= 1)
+    {
         return;
     }
-    write!(html, r#"<div class="library-overlay"><section class="library-dialog launcher-dialog" role="dialog" aria-modal="true" aria-labelledby="launcher-title"><header><h2 id="launcher-title">{}</h2></header><div class="launcher-list">"#, t(app, "launcher.title")).unwrap();
+    write!(html, r#"<div class="library-overlay"><section class="library-dialog launcher-dialog" role="dialog" aria-modal="true" aria-labelledby="launcher-title" tabindex="-1"><header><h2 id="launcher-title">{}</h2></header><div class="launcher-list">"#, t(app, "launcher.title")).unwrap();
     for item in &picker.candidates {
         write!(html, r#"<button class="launcher-option" data-action="launcher-select" data-value="{}" aria-pressed="{}" title="{}" {}>"#, esc(&item.path), picker.selected == item.path, esc(&item.path), if busy { "disabled" } else { "" }).unwrap();
         if let Some(image) = &item.icon {
@@ -170,7 +215,19 @@ pub(crate) fn render(html: &mut String, app: &App) {
         write!(html, "<span>{}</span></button>", esc(&item.name)).unwrap();
     }
     if picker.candidates.is_empty() && picker.error.is_none() {
-        write!(html, "<p role=\"status\">{}</p>", t(app, "launcher.empty")).unwrap();
+        write!(
+            html,
+            "<p role=\"status\">{}</p>",
+            t(
+                app,
+                if busy {
+                    "launcher.loading"
+                } else {
+                    "launcher.empty"
+                }
+            )
+        )
+        .unwrap();
     }
     if let Some(error) = &picker.error {
         write!(
@@ -197,7 +254,7 @@ pub(crate) fn render(html: &mut String, app: &App) {
             t(app, "common.confirm"),
             "check",
             "primary",
-            busy || picker.selected.is_empty()
+            !picker.can_save()
         )
     )
     .unwrap();

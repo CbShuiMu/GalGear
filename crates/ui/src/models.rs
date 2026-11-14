@@ -400,7 +400,37 @@ pub(crate) struct InstalledPatch {
 }
 
 #[derive(Clone, Default, Deserialize)]
+#[serde(transparent)]
 pub(crate) struct Catalog {
+    data: CatalogData,
+    #[serde(skip)]
+    revision: std::rc::Rc<()>,
+}
+
+impl Catalog {
+    pub(crate) fn revision(&self) -> std::rc::Rc<()> {
+        self.revision.clone()
+    }
+}
+
+impl std::ops::Deref for Catalog {
+    type Target = CatalogData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl std::ops::DerefMut for Catalog {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        // 所有写入口（包括 Vec 的原地修改）先换代，避免漏掉局部响应的缓存失效。
+        self.revision = std::rc::Rc::new(());
+        &mut self.data
+    }
+}
+
+#[derive(Clone, Default, Deserialize)]
+pub(crate) struct CatalogData {
     pub(crate) games: Vec<Game>,
     pub(crate) warnings: Vec<Message>,
 }
@@ -415,6 +445,13 @@ pub(crate) struct Bootstrap {
     pub(crate) catalog: Catalog,
     pub(crate) config_path: String,
     pub(crate) version: String,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RemovedLibrary {
+    pub(crate) settings: Settings,
+    pub(crate) catalog: Catalog,
+    pub(crate) warning: Option<Message>,
 }
 
 #[cfg(test)]

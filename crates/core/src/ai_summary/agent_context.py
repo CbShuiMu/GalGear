@@ -99,6 +99,10 @@ def bounded_result(work, value, limit=MAX_TOOL_BYTES):
     path, data = archive_result(work, value)
     result = dict(truncated=True, total_bytes=len(data), full_output=path,
                   instruction='Preview only. Read full_output with read_text(root="work", path=full_output, offset/length) when more detail is needed.')
+    if isinstance(value, (dict, list)):
+        result['read_result'] = dict(root='work', path=path, pointer='')
+        result['instruction'] = ('Preview only. Use read_json with read_result and pagination for the exact original JSON. '
+                                 'The root is pointer=""; do not add /result unless that key actually exists.')
     if isinstance(value, dict):
         if isinstance(value.get('source_context'), dict) and len(encode(value['source_context'])) <= 1200:
             result['source_context'] = value['source_context']

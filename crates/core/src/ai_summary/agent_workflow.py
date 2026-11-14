@@ -5,9 +5,9 @@ import pathlib
 import re
 
 
-EXPLORATION_TOOLS = {'inspect_data', 'inspect_engine_adapter', 'inspect_structured', 'inspect_archive_member', 'read_bytes', 'list_files', 'run_skill', 'read_text', 'read_json'}
+EXPLORATION_TOOLS = {'inspect_data', 'inspect_engine_adapter', 'inspect_skill_save', 'inspect_skill_resource', 'inspect_structured', 'inspect_archive_member', 'read_bytes', 'list_files', 'run_skill', 'read_text', 'read_json'}
 MILESTONE_TOOLS = {'write_program', 'reuse_engine_adapter', 'test_program', 'test_program_batch', 'load_script_metadata', 'load_script_metadata_batch', 'verify_resource_selection_batch'}
-READ_ONLY_RESEARCH_TOOLS = {'inspect_data', 'inspect_engine_adapter', 'inspect_structured', 'inspect_archive_member',
+READ_ONLY_RESEARCH_TOOLS = {'inspect_data', 'inspect_engine_adapter', 'inspect_skill_save', 'inspect_skill_resource', 'inspect_structured', 'inspect_archive_member',
                             'read_bytes', 'list_files', 'read_text', 'read_json'}
 
 
@@ -137,6 +137,8 @@ class Workflow:
         sample_selection_pending = state.get('script_sample_selection', {}).get('needs_story_sample') is True
         if not prerequisites.get('read_skill') or not prerequisites.get('read_contract'):
             stage = 'prerequisites'
+        elif prerequisites.get('preflight_pending'):
+            stage = 'save_preflight'
         elif not prerequisites.get('used_skill') or resource_selection_pending or sample_selection_pending:
             stage = 'resources'
         elif 'script' not in programs:
@@ -175,6 +177,7 @@ class Workflow:
         if self.save_failure_goal and stage == 'save_validation' and 'save' not in self.pending_validation:
             self.test_attempted = True
         goals = dict(prerequisites='Complete only unread documentation and the byte evidence contract.',
+                     save_preflight='Classify the current save using existing host probe fields and record_save_preflight before script work. If native layout needs script context, record needs_context with one exact missing fact first.',
                      resources='Use task.source_inventory preview or its exact read_json reference to find actual game-relative resource paths, including loose scripts. Choose an actual script in the configured UI language from these paths or the structured archive members/member_count and extracted sample output paths. Follow the full JSON member-list reference when needed. Verify its effective archive/version with verify_resource_selection using configuration evidence before writing a parser. If exploration is gated, plan_probe an exact listed member or extracted sample file, then inspect its bytes; do not guess a filename or pass a directory as the probe target.',
                      script_program='Write a minimal script parser with independently checkable byte/table evidence, then test it.',
                      script_validation='Verify/extract every pending transcript member, load matching scoped companion bindings in a batch, then test the script batch. A successful current-save sample is not complete transcript coverage.',
@@ -211,8 +214,9 @@ class Workflow:
         gated = len(self.inspection_turns) >= 8 and stage not in ('prerequisites', 'finish')
         resource_gate = ('Resource gate: use task.source_inventory or its work/source-inventory.json reference for actual paths; '
                          'choose the actual UI-language script from loose files or the structured member list and '
-                         'verify_resource_selection first. Use plan_probe with its exact extracted sample path for '
-                         'needed byte inspection; writing a parser before selecting and inspecting input is premature.') if stage == 'resources' else None
+                         'verify_resource_selection first. Filtered run_skill extraction remains available to inspect '
+                         'the candidate scripts/configuration needed for that decision; no exploration-budget waiver is needed. '
+                         'Writing a parser before selecting and inspecting input is premature.') if stage == 'resources' else None
         return dict(stage=stage, goal=goals[stage], exploratory_requests=len(self.inspection_turns),
                     exploration_gated=gated, probe=self.probe, test_attempted=self.test_attempted,
                     repeated_read_requests=len(self.repeated_read_turns),
@@ -568,6 +572,30 @@ class Workflow:
         self.probe = dict(question=question, expected_result=expected, targets=targets, remaining=3)
         return dict(saved=True, probe=self.probe, instruction='Use these inspections to answer this question, then implement/test. Observations and blockers do not waive verification.')
 
+    def _consume_probe(self, name, args):
+        path = args.get('archive') if name == 'run_skill' else args.get('path')
+        root = 'game' if name == 'run_skill' else args.get('root')
+        targets = self.probe.get('targets', []) if self.probe else []
+        allowed = self.probe and self.probe['remaining'] > 0 and any(
+            target['root'] == root and target['path'].replace('\\', '/') == str(path).replace('\\', '/') for target in targets)
+        if allowed:
+            self.probe['remaining'] -= 1
+        return bool(allowed)
+
+    def check_save_template_research(self, name, args, *, available, request_number=None):
+        """Bound rediscovery only after a usable raw decoder and script exist."""
+        if (not available or self.stage != 'save_program' or len(self.inspection_turns) < 3
+                or len(self.inspection_turns) == 3 and request_number in self.inspection_turns
+                or args.get('root') == 'skill' or not read_only_research(name, args)):
+            return
+        if self._consume_probe(name, args):
+            return
+        raise ValueError('Raw save template and verified script are ready: use reuse_engine_adapter(kind="save", '
+            'profile={"mode":"raw_observations"}, entry_source=<extract>) and test_program now. '
+            'Use lookup_verified_dialogue for existing _native script records; it remains available. '
+            'If a native relation is still missing, plan_probe one exact question and target for up to 3 inspections. '
+            'Reuse decoded fields; do not repeat container/section scans. All node evidence checks remain required.')
+
     def check(self, name, args):
         if args.get('root') == 'skill':
             return
@@ -586,6 +614,13 @@ class Workflow:
                 if self._allow_recovery_read(name, args):
                     return
                 raise ValueError(required_test)
+        if (self.stage == 'resources' and name == 'run_skill' and args.get('command') == 'x'
+                and isinstance(args.get('filter'), str) and args['filter'].strip()):
+            # Resource selection itself can require an extracted loader/script
+            # sample. Do not make that prerequisite depend on prior selection.
+            # Dispatch retains filters, safe paths, timeouts, provenance and
+            # preflight checks; extraction never grants independent validation.
+            return
         # This is the host-owned, already-scanned candidate inventory, not a
         # directory rescan or arbitrary work history. Pending tests above keep
         # their existing priority and bounded recovery allowance.
@@ -604,12 +639,7 @@ class Workflow:
             return
         if self._allow_name_resource_discovery(name, args):
             return
-        path = args.get('archive') if name == 'run_skill' else args.get('path')
-        root = 'game' if name == 'run_skill' else args.get('root')
-        targets = self.probe.get('targets', []) if self.probe else []
-        allowed = self.probe and self.probe['remaining'] > 0 and any(
-            target['root'] == root and target['path'].replace('\\', '/') == str(path).replace('\\', '/') for target in targets)
-        if not allowed:
+        if not self._consume_probe(name, args):
             if self.stage == 'resources':
                 raise ValueError('Resource exploration gate: use task.source_inventory or read_json(root="work",path="source-inventory.json",pointer="/entries") for actual game-relative paths. Choose the actual UI-language script from loose scripts or the structured archive member list and extracted sample output paths. Call verify_resource_selection for its effective archive/version. For further byte inspection, call plan_probe with one specific blocker and the exact listed member or extracted sample file; directories are not valid targets. Do not write a parser before selecting and inspecting its actual input.')
             if self.stage == 'speaker_review' and self.speaker_metadata_goal:
@@ -619,7 +649,6 @@ class Workflow:
             if self.stage == 'save_validation' and self.save_failure_goal:
                 raise ValueError('Save repair gate: ' + self.save_failure_goal)
             raise ValueError('Exploration gate: write/test the next program, or call plan_probe with one specific blocker and exact targets. Prior observations and analysis code are in the structural ledger; do not repeat directory/header scans.')
-        self.probe['remaining'] -= 1
 
     def observe(self, name, result, request_number, status, arguments=None):
         self._set_speaker_progress(status)

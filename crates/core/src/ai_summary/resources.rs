@@ -33,14 +33,21 @@ pub fn source_inventory(root: &Path) -> Result<Vec<Stamp>, Message> {
     files(root, 3)?
         .into_iter()
         .filter(|p| {
-            script_file(p)
+            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let split_archive = name.rsplit_once('.').is_some_and(|(stem, suffix)| {
+                stem.to_ascii_lowercase().ends_with(".pfs")
+                    && !suffix.is_empty()
+                    && suffix.bytes().all(|b| b.is_ascii_digit())
+            });
+            split_archive
+                || script_file(p)
                 || matches!(
                     p.extension()
                         .and_then(|e| e.to_str())
                         .unwrap_or("")
                         .to_lowercase()
                         .as_str(),
-                    "noa" | "xp3" | "arc" | "pfs" | "pak" | "ypf" | "xml"
+                    "noa" | "xp3" | "arc" | "pfs" | "pak" | "ypf" | "xml" | "pck" | "chs"
                 )
         })
         .map(|p| stamp(&p))

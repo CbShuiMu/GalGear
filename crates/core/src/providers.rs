@@ -619,7 +619,7 @@ pub fn save_cover(
 }
 
 /// 删除游戏目录直属的 `cover.jpg`。目录或文件缺失时视为已清理。
-/// 目录和封面必须是普通路径，遇到链接或 Windows 重解析点返回错误。
+/// 目录和封面必须是普通路径，拒绝父目录跳转、链接及 Windows 重解析点。
 pub fn remove_local_cover(folder: &Path) -> std::io::Result<()> {
     use std::{fs, io};
 
@@ -639,7 +639,11 @@ pub fn remove_local_cover(folder: &Path) -> std::io::Result<()> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error),
     };
-    if !folder.is_absolute() {
+    if !folder.is_absolute()
+        || folder
+            .components()
+            .any(|part| part == std::path::Component::ParentDir)
+    {
         return Err(invalid_path());
     }
     let Some(directory) = metadata(folder)? else {
@@ -647,6 +651,10 @@ pub fn remove_local_cover(folder: &Path) -> std::io::Result<()> {
     };
     if !directory.is_dir() {
         return Err(invalid_path());
+    }
+    // 目录本身可能是普通目录，但它的上级可能已被替换为联接点。
+    for parent in folder.ancestors().skip(1).filter(|path| path.has_root()) {
+        metadata(parent)?;
     }
     let cover = folder.join(LOCAL_COVER_NAME);
     let Some(file) = metadata(&cover)? else {

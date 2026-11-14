@@ -56,6 +56,36 @@ class WorkflowTests(unittest.TestCase):
         self.status.update(validated_saves=2, ready_for_finish=True)
         self.assertEqual(self.describe()['stage'], 'finish')
 
+    def test_raw_template_research_uses_bounded_exact_blocker_probes(self):
+        self.flow.stage = 'save_program'
+        args = dict(root='save', path='current.bin')
+        self.flow.inspection_turns = {1, 2}
+        self.flow.check_save_template_research('inspect_data', args, available=True)
+        self.flow.inspection_turns.add(3)
+        # All calls already batched into the third model request keep its allowance.
+        self.flow.check_save_template_research('inspect_data', args, available=True, request_number=3)
+        self.flow.check_save_template_research('lookup_verified_dialogue', dict(text='Caption'), available=True, request_number=4)
+        self.flow.check_save_template_research('inspect_data', args, available=False)
+        self.flow.check_save_template_research('verification_contract', {}, available=True)
+        self.flow.check_save_template_research('read_text', dict(root='skill', path='engine.md'), available=True)
+        with self.assertRaisesRegex(ValueError, 'Raw save template'):
+            self.flow.check_save_template_research('inspect_data', args, available=True)
+        self.plan(targets=[args])
+        self.flow.check_save_template_research('inspect_data', args, available=True, request_number=4)
+        self.flow.inspection_turns.add(4)
+        with self.assertRaisesRegex(ValueError, 'Raw save template'):
+            self.flow.check_save_template_research('inspect_data', dict(root='save', path='other.bin'), available=True, request_number=4)
+        for _ in range(2):
+            self.flow.check_save_template_research('inspect_data', args, available=True, request_number=4)
+        with self.assertRaisesRegex(ValueError, 'Raw save template'):
+            self.flow.check_save_template_research('inspect_data', args, available=True)
+        restored = workflow.Workflow()
+        restored.restore(self.flow.snapshot())
+        with self.assertRaisesRegex(ValueError, 'Raw save template'):
+            restored.check_save_template_research('inspect_data', args, available=True)
+        self.flow.stage = 'save_validation'
+        self.flow.check_save_template_research('inspect_data', args, available=True)
+
     def test_first_inventory_stays_in_resources_until_effective_ui_language_script_is_selected(self):
         self.prerequisites.update(resource_selection_required=True, resource_selected=False)
         state = self.describe()
@@ -123,14 +153,21 @@ class WorkflowTests(unittest.TestCase):
                 self.assertEqual(state['stage'], 'script_program')
                 self.assertFalse(state['resource_selection_pending'])
 
-    def test_resource_guidance_stays_advisory_for_reads_but_extraction_keeps_its_gate(self):
+    def test_resource_sample_extraction_can_resolve_selection_without_resetting_limits(self):
         self.prerequisites.update(resource_selection_required=True, resource_selected=False)
         self.gate()
         for name, args in [('list_files', dict(root='game', path='.')),
                            ('read_bytes', dict(root='work', path='unpacked/chapter.bin'))]:
             with self.subTest(name=name):
                 self.flow.check(name, args)
-        for command in ('x', 'unknown'):
+        self.flow.check('run_skill', dict(command='x', archive='localized.arc', filter='chapter.bin'))
+        self.flow.observe('run_skill', dict(exit_code=0), 9, self.status,
+                          dict(command='x', archive='localized.arc', filter='chapter.bin'))
+        self.assertEqual(self.describe()['exploratory_requests'], 9)
+        self.assertFalse(self.flow.extension_allowed(9, self.programs, self.status))
+        self.assertFalse(self.status['ready_for_finish'])
+        self.assertTrue(self.describe()['resource_selection_pending'])
+        for command in ('unknown',):
             with self.subTest(command=command), self.assertRaises(ValueError) as caught:
                 self.flow.check('run_skill', dict(command=command, archive='localized.arc', filter='chapter.bin'))
             message = str(caught.exception)

@@ -185,6 +185,21 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "folder-delete" => app.library.dialog = Some(Dialog::Delete { id: value.into() }),
+        "remove-folder" => {
+            if !app.busy() && app.settings.library_folders.iter().any(|path| path == value) {
+                app.library.dialog = Some(Dialog::RemoveLibrary { path: value.into() });
+            }
+        }
+        "remove-folder-confirm" => {
+            if !app.busy()
+                && !app.library.scanning
+                && let Some(Dialog::RemoveLibrary { path }) = &app.library.dialog
+            {
+                let payload = json!({"path": path});
+                app.library.dialog = None;
+                issue(app, Pending::Remove, "remove_library_folder", payload);
+            }
+        }
         "folder-delete-confirm" => {
             if let Some(Dialog::Delete { id }) = &app.library.dialog {
                 let id = id.clone();

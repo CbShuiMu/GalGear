@@ -6,8 +6,11 @@ mod context;
 mod process;
 mod report;
 mod resources;
+mod route_graph;
+mod route_html;
 mod route_map;
 mod sandbox;
+mod skill_analysis;
 
 pub use route_map::route_map;
 
@@ -111,6 +114,8 @@ struct Manifest {
     python_agent: bool,
     #[serde(default)]
     script_program_hash: Option<String>,
+    #[serde(default)]
+    route_evidence_hash: Option<String>,
     #[serde(default)]
     save_extensions: Vec<String>,
     #[serde(default)]
@@ -238,7 +243,13 @@ fn complete_part_with_validation(
     {
         return Ok(response);
     }
-    let response = ai::complete(source, token, model, system, input, true)?;
+    // 路线笔记允许较宽的字节预算；固定 8192 token 会截断合法的中文 JSON。
+    // 只扩大此结构化分析入口，内容及缓存验证仍由调用方执行。
+    let response = if source == "deepseek" {
+        ai::complete_with_output_limit(source, token, model, system, input, true, 32_768)?
+    } else {
+        ai::complete(source, token, model, system, input, true)?
+    };
     if cacheable(&response) {
         write_json(&path, &response)?;
     } else {
@@ -836,6 +847,27 @@ pub fn prepare(
     config: &Path,
     home: &Path,
 ) -> Result<Setup, Message> {
+    // 已有严格缓存继续保持离线重启语义；新模式不能强迫这些用户再次联网。
+    if !skill_analysis::exists(game, settings)
+        && let Ok(m) = manifest(game, settings.language)
+    {
+        return Ok(Setup {
+            reused: true,
+            directory: crate::config::display_path(&cache(game, settings.language)),
+            script_language: m.script_language,
+            dialogue_count: m.dialogue_count,
+        });
+    }
+    skill_analysis::prepare(game, settings, config, home)
+}
+
+/// 修复既有严格解析器缓存；新分析使用面向交付的 Skill 工作流。
+fn prepare_adapter(
+    game: &Game,
+    settings: &Settings,
+    config: &Path,
+    home: &Path,
+) -> Result<Setup, Message> {
     if let Ok(m) = manifest(game, settings.language) {
         return Ok(Setup {
             reused: true,
@@ -902,6 +934,16 @@ pub fn prepare(
     ] {
         fs::copy(work.join(name), directory.join(name)).map_err(io)?;
     }
+    let route_evidence_hash = if let Some(expected) = result["route_evidence_hash"].as_str() {
+        let bytes = read(&work.join("route-evidence.jsonl"), 128 * 1024 * 1024)?;
+        if format!("{:x}", Sha256::digest(&bytes)) != expected {
+            return Err(invalid());
+        }
+        fs::write(directory.join("route-evidence.jsonl"), bytes).map_err(io)?;
+        Some(expected.to_owned())
+    } else {
+        None
+    };
     let script_language = result["script_language"]
         .as_str()
         .ok_or_else(invalid)?
@@ -955,6 +997,7 @@ pub fn prepare(
             program_hash: hash(&directory.join("save_extractor.py"))?,
             python_agent: true,
             script_program_hash: Some(hash(&directory.join("script_extractor.py"))?),
+            route_evidence_hash,
             save_extensions,
             speaker_verification_version: result["speaker_verification"]["version"]
                 .as_u64()
@@ -1113,6 +1156,16 @@ pub fn summarize(
     config: &Path,
     home: &Path,
 ) -> Result<Summary, Message> {
+    if skill_analysis::exists(game, settings) {
+        if !settings
+            .game_edits
+            .get(&game.id)
+            .is_some_and(|e| e.ai_summary)
+        {
+            return Err(Message::new("summary.disabled"));
+        }
+        return skill_analysis::summarize(game, settings, config, home);
+    }
     summarize_attempt(game, settings, config, home, true)
 }
 
@@ -1164,7 +1217,7 @@ fn summarize_attempt(
                 if can_repair {
                     // One repair attempt uses the existing model checkpoint and revalidates
                     // the current save. A second failure remains explicit and retryable.
-                    prepare(game, settings, config, home)?;
+                    prepare_adapter(game, settings, config, home)?;
                     return summarize_attempt(game, settings, config, home, false);
                 }
                 return Err(error);
@@ -1685,6 +1738,7 @@ mod tests {
             dialogue_count: 1,
             python_agent: false,
             script_program_hash: None,
+            route_evidence_hash: None,
             save_extensions: Vec::new(),
             speaker_verification_version: 0,
             save_verification_version: 0,

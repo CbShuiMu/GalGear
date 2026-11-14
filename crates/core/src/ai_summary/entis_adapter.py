@@ -254,6 +254,60 @@ def title_value(data, cursor, end, depth=0):
         return (dict(kind='object', name=name, fields=fields), cursor + 9)
     raise UnsupportedVariant('unsupported title value type')
 
+def primitive_candidates(data, section, frame_start, parse_value, limit=96):
+    """Expose typed byte patterns, never inferred slot ordinals or current roles.
+
+    Unknown object payloads prevent a complete stack walk. Bounded candidate
+    reads still save repeated model-written scans; embedded lookalikes remain
+    explicitly unverified until a parser establishes their native relation.
+    """
+    found, total = [], 0
+    for offset in range(section['offset'] + 4, frame_start):
+        if data[offset] not in (4, 6):
+            continue
+        try:
+            value, end = parse_value(data, offset, frame_start)
+        except (ValueError, IndexError, UnicodeError):
+            continue
+        if value['kind'] == 'string' and (not value['value'] or len(value['value']) > 512):
+            continue
+        total += 1
+        if len(found) < limit:
+            found.append(dict(value, tag_offset=offset, end=end, certainty='candidate'))
+    return dict(values=found, total_candidates=total, omitted=max(0, total-len(found)),
+                complete_slot_walk=False, verified_current_node=False)
+
+
+
+def observed_save_fields(data, clear):
+    """Raw typed fields and candidate patterns; assign no current-state roles."""
+    sections, raw_sections = chunks(clear), save_sections(data)
+    title_section = raw_sections.get('title')
+    title = None
+    if title_section:
+        end = title_section['offset'] + title_section['length']
+        title, after = title_value(data, title_section['offset'], end)
+        if after != end:
+            raise ValueError('Title record does not consume its complete section')
+    frames = stack_frame_suffixes(clear, sections['stack']) if 'stack' in sections else {}
+    values = primitive_candidates(clear, sections['stack'], frames['offset'], title_value) if frames else {}
+    encoded = raw_sections['context']
+    view = [dict(op='erisa_nemesis', offset=encoded['offset']+4, length=encoded['length']-4,
+                 size_from=dict(offset=encoded['offset'], width=4, endian='little'))]
+    for frame in frames.get('frames', []):
+        frame['proof'] = dict(frame['proof'], view=view)
+    for value in values.get('values', []):
+        value['proof'] = dict(value['proof'], view=view)
+    return dict(raw_title=title, native_stack=frames, primitive_candidates=values,
+                decoded_view=view, sections=sections, analysis_only=True, verified_current_node=False)
+
+
+def raw_save_observations(data, decode):
+    """Decode structure independently of unsupported title-role semantics."""
+    state = saved_context(data, decode)
+    return observed_save_fields(data, state['data'])
+
+
 def current_title(data, section, profile):
     """A class/version/schema profile must have an independently audited API role."""
     start, end = (section['offset'], section['offset'] + section['length'])
@@ -528,11 +582,12 @@ def checked_profile(kind, profile):
     return json.loads(json.dumps(profile, ensure_ascii=False, allow_nan=False))
 
 def assemble(template, kind, profile):
-    profile = checked_profile(kind, profile)
+    raw = kind == 'save' and profile == {'mode': 'raw_observations'}
+    profile = dict(profile) if raw else checked_profile(kind, profile)
     tree = ast.parse(template)
     functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
     functions['bisect_right'] = ast.parse(BISECT_SOURCE).body[0]
-    root = 'script_candidate_adapter' if kind == 'script' else 'save_frame_adapter'
+    root = 'raw_save_observations' if raw else 'script_candidate_adapter' if kind == 'script' else 'save_frame_adapter'
     needed, pending = (set(), [root])
     while pending:
         name = pending.pop()
@@ -554,6 +609,8 @@ def assemble(template, kind, profile):
     source = ast.unparse(result) + '\n\nPROFILE = json.loads(' + repr(json.dumps(profile, ensure_ascii=False)) + ')\n\n'
     if kind == 'script':
         source += "def extract(data, metadata):\n    return script_candidate_adapter(data, message_callees=set(PROFILE['message_callees']), scalar_arguments=PROFILE['scalar_arguments'], call_arity=PROFILE['call_arity'], speaker_argument=PROFILE.get('speaker_argument', False), scope_transform=PROFILE.get('scope_transform'))\n"
+    elif raw:
+        source += "def inspect_save_state(data):\n    return raw_save_observations(data, galgear_codecs.decode)\n"
     else:
         source += "def extract(data, metadata):\n    return save_frame_adapter(data, metadata, decode=galgear_codecs.decode, title_profile=PROFILE['title_profile'], message_callees=PROFILE['message_callees'], text_argument=PROFILE['text_argument'])\n"
     return source
@@ -577,6 +634,26 @@ def describe():
             save=dict(message_callees=['<same audited native callee>'], text_argument='<native local index>',
                 vm_profile='cotopha-frame-vector-v1',
                 title_profile=dict(SUPPORTED_TITLE_PROFILE))),
+        raw_save_template=dict(profile=dict(mode='raw_observations'),
+            entry_prefix='def extract(data, metadata):\n    state = inspect_save_state(data)\n    rows = metadata["dialogue"]\n    # Establish the native relation and return save facts with byte proofs.',
+            entry_rules=[
+                'Reuse state["primitive_candidates"]["values"] for typed strings/integers and their exact proofs. '
+                'They already include tag_offset/end/view; do not decode ERISA or scan the same typed values again. '
+                'Candidates are not VM slot ordinals or current-state roles. Investigate only a specific missing field.',
+                'Use state["native_stack"]["frames"] and actual state layout to select scope and return fields. '
+                'Match their values to a unique row["_native"] kind=call_return, scope and value. '
+                'Do not invent a byte-distance window: a guessed distance can exclude the actual return field. '
+                'Caption text is an independent cross-check, never the sole current-node selector.',
+                'Output source=row["source"], line=row["position"], anchors=[caption_field["value"]], '
+                'variables={}, warnings=[...], evidence={"anchor":caption_field["proof"], '
+                '"node_link":{"kind":"call_return","scope":scope_field["proof"],"position":return_field["proof"]}}. '
+                'These names denote fields selected by YOUR audited native relation, not predefined template variables.',
+                'Optional scene must be a string with evidence.scene=scene_field["proof"] on EVERY returned branch. '
+                'If unavailable, omit both scene and its evidence; never return scene:null. Preserve complete proofs including view.',
+                'For repairs use write_program(edits=[{old,new}]) on the saved full source, or call '
+                'reuse_engine_adapter again with the repaired entry_source. A standalone entry is not a complete source file.'
+            ],
+            entry_source='Start def extract(data, metadata) with state = inspect_save_state(data). Raw save observations are NOT in metadata. metadata["dialogue"] is a LIST of verified rows with source,position,text,speaker,_native. The returned state has raw_title.fields, native_stack.frames, primitive_candidates.values; all proofs already include their standard view when needed. This template only decodes fields; the entry must establish the current native relation and pass test_program.'),
         guarantees=['Complete conststr and funcinfo table walk', 'Actual native call sequence and return coordinate',
             'Complete current-title object and version check', 'Unique complete frame-vector suffix and typed value prefix',
             'Caller short name and return Integer proofs; caption only crosschecks the uniquely selected native node'],
@@ -641,8 +718,9 @@ def inspect_save(data, metadata, profile):
             observed_title=dict(class_name=title['name'], version=version['value'], version_proof=version['proof']),
             supported_title=dict(SUPPORTED_TITLE_PROFILE),
             instruction='The actual title class/version is outside this bundled adapter. Stop retrying profile values. '
-                        'Reuse raw version evidence and byte codecs, inspect the missing native state layout, '
-                        'then write_program(kind="save") and test_program on this save. '
+                        'Use reuse_engine_adapter(kind="save", profile={"mode":"raw_observations"}, entry_source=<your entry>) '
+                        'to reuse raw fields and their byte proofs; inspect only the missing native state relation, '
+                        'then test_program on this save. '
                         'These observations do not establish a current caption or verified node.')
     title_profile=checked_title_profile(profile.get('title_profile', SUPPORTED_TITLE_PROFILE))
     state = saved_context(data, codec_decode)

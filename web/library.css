@@ -185,6 +185,7 @@
 .setup-entry-field .choice-copy,.setup-candidate-menu .choice-copy{display:flex;flex-direction:column;gap:2px;min-width:0;overflow:hidden}
 .setup-entry-field .choice-copy>span,.setup-entry-field .choice-copy>small,.setup-candidate-menu .choice-copy>span,.setup-candidate-menu .choice-copy>small{display:block;min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-line-clamp:unset}
 .launcher-dialog{width:min(640px,calc(100vw - 48px))}
+.library-overlay:has(.launcher-dialog){z-index:97}
 .launcher-dialog .library-dialog-footer{gap:12px}
 .launcher-list{padding:20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-height:60vh;overflow:auto}
 .launcher-option{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--button-bg);color:inherit;text-align:left;min-width:0}

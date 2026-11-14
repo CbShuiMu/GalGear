@@ -1,4 +1,4 @@
-"""Tool-calling host. Game-specific extraction code is supplied only by the model."""
+"""Tool host with read-only fixed Skill probes and independently verified parsers."""
 import ast
 import base64
 import builtins
@@ -28,6 +28,10 @@ import zlib
 
 MODULES = {m.__name__: m for m in (base64, codecs, collections, hashlib, json, math, re, struct, zlib)}
 CONTRACT_VERSION = 4
+SKILL_PROBE = runpy.run_path(str(pathlib.Path(__file__).with_name('agent_skill_probe.py')))
+SKILL_READERS = runpy.run_path(str(pathlib.Path(__file__).with_name('agent_skill_readers.py')))
+ARCHIVE_TOOLS = runpy.run_path(str(pathlib.Path(__file__).with_name('agent_archive_tools.py')))
+NATIVE_ROUTES = runpy.run_path(str(pathlib.Path(__file__).with_name('native_routes.py')))
 EVIDENCE = runpy.run_path(str(pathlib.Path(__file__).with_name('evidence.py')))
 CODECS = EVIDENCE['CODECS']
 CHECKSUM_HYPOTHESES = runpy.run_path(str(pathlib.Path(__file__).with_name('checksum_hypotheses.py')))
@@ -189,6 +193,19 @@ def validate_program(source):
         raise ValueError("Program exceeds 128KB")
     tree = ast.parse(source)
     for node in ast.walk(tree):
+        if (isinstance(node, ast.While) and isinstance(node.test, ast.Compare)
+                and isinstance(node.test.left, ast.Name) and len(node.test.comparators) == 1
+                and isinstance(node.test.comparators[0], ast.Constant)
+                and type(node.test.comparators[0].value) in (int, float)):
+            counter = node.test.left.id
+            body = [child for statement in node.body for child in ast.walk(statement)]
+            # Diagnose a stationary scalar search cursor, not all termination.
+            # Explicit exits/updates stay valid; the execution timeout remains.
+            if not any(isinstance(child, (ast.Break, ast.Return, ast.Raise))
+                       or isinstance(child, ast.Name) and child.id == counter and isinstance(child.ctx, ast.Store)
+                       for child in body):
+                raise ValueError('Loop at line ' + str(node.lineno) + ' never updates counter ' + counter
+                    + ' or exits. Advance the search cursor inside the loop, or add a bounded exit; preserve the existing decoder.')
         if isinstance(node, ast.Attribute) and isinstance(node.ctx, (ast.Store, ast.Del)):
             raise ValueError('Adapters cannot modify attributes of shared modules or decoder capabilities')
         if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -200,7 +217,7 @@ def validate_program(source):
         if isinstance(node, ast.Name) and (node.id.startswith('__') or node.id in {'open', 'eval', 'exec', 'compile', 'globals', 'locals', 'getattr', 'setattr', 'delattr', 'vars', 'dir', 'input', 'breakpoint', 'exit', 'quit', 'help', 'type', 'object', 'super', 'memoryview'}):
             raise ValueError("Unavailable name: " + node.id)
         if isinstance(node, ast.Attribute) and node.attr not in ATTRIBUTES:
-            raise ValueError("Unavailable attribute: " + node.attr)
+            raise ValueError("Unavailable attribute: " + node.attr + " at line " + str(node.lineno) + ". Use isinstance(value, list/dict) or str(error); type(value).__name__ and runtime introspection are unavailable.")
         if isinstance(node, (ast.ClassDef, ast.Global, ast.Nonlocal, ast.AsyncFunctionDef, ast.Await)):
             raise ValueError("Parser must be a pure synchronous function")
     return tree
@@ -252,7 +269,9 @@ def parser_worker(payload):
     # Keep the verifier's transcript separate from mutable adapter input. An
     # adapter must never be able to forge a coordinate attestation by editing it.
     trusted_metadata = payload.get('metadata', {})
-    metadata = json.loads(json.dumps(trusted_metadata, ensure_ascii=False))
+    # 查询进程本身就是隔离副本；只有后续仍要独立验证的存档才需要再复制。
+    metadata = (json.loads(json.dumps(trusted_metadata, ensure_ascii=False))
+                if payload.get('verify_save') else trusted_metadata)
     try:
         value = environment['extract'](data, metadata)
     except Exception as error:
@@ -277,7 +296,9 @@ def run_parser(source, data, metadata, verify_save=False):
     request = json.dumps({'program': source, 'data': base64.b64encode(data).decode(), 'metadata': metadata, 'verify_save': verify_save}, ensure_ascii=False)
     result = subprocess.run(command, input=request.encode(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45, creationflags=0x08000000 if os.name == 'nt' else 0)
     if result.returncode:
-        raise RuntimeError(result.stderr.decode('utf-8', 'replace')[-4000:] or 'Parser exceeded memory limit')
+        raise RuntimeError(result.stderr.decode('utf-8', 'replace').strip()[-4000:]
+                           or 'Parser worker exited with code ' + str(result.returncode)
+                           + '; possible memory limit. Query fewer files or project only necessary fields.')
     return json.loads(result.stdout)
 
 
@@ -438,9 +459,12 @@ ROOT = {'type': 'string', 'enum': ['game', 'save', 'skill', 'work']}
 TOOLS = [
     tool('verification_contract', 'Read a focused byte evidence contract. topic=auto follows the stage; speaker gives name/message proofs, script transcript tables, save current-node proof, adapter native bytecode links, structured complete typed PSB/TJS data and fields, resume the audited standard KAG label-resume profile. A resume entry is explicitly distinct from a displayed caption. Each topic fits one result; all returns the full archived contract.', {'topic': {'type': 'string', 'enum': ['auto', 'script', 'speaker', 'save', 'adapter', 'structured', 'resume', 'all']}}, []),
     tool('engine_adapter_contract', 'Read the catalog of fixed bundled engine adapters, or the compact contract for one exact adapter ID. Match actual input headers and versions before reuse. Descriptions are data; they never verify a game or choose a node.', {'adapter': STRING}, []),
+    tool('lookup_verified_dialogue', 'Look up exact displayed text in the already verified transcript; optionally restrict its source. Returns bounded matching rows and their independently attested _native scope/return coordinates. Use for a saved caption before scanning CSX or rereading dialogue.jsonl. A text match is only a candidate, never a current-node proof: the save parser must still establish and test the native relation.', {'text': STRING, 'source': STRING, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 20}}, ['text']),
     tool('inspect_engine_adapter', 'Inspect actual input bytes with a fixed bundled adapter and an optional JSON semantic profile. Use before reimplementing a supported decoder. Receives the same resource metadata as inspect_data, plus verified dialogue for save inputs. This is analysis only; it never validates a script/save or enables preparation.', {'adapter': STRING, 'kind': {'type': 'string', 'enum': ['script', 'save']}, 'root': ROOT, 'path': STRING, 'profile': {'type': 'object'}}, ['adapter', 'kind', 'root', 'path']),
-    tool('reuse_engine_adapter', 'Save a complete source snapshot generated by one fixed bundled adapter and a JSON profile. Uses write_program validation and invalidation rules. The saved parser has no library import or implicit future adapter dependency. Immediately test_program on the selected actual input; this tool does not test, finish or enable AI.', {'adapter': STRING, 'kind': {'type': 'string', 'enum': ['script', 'save']}, 'profile': {'type': 'object'}}, ['adapter', 'kind', 'profile']),
-    tool('verify_resource_selection', 'Independently list all inventory archives for this exact script basename, detect duplicate/patch versions, and verify the selected source against an explicit configuration search order. Use before extracting archived scripts. selected and configuration are paths relative to game. For ambiguous versions provide the actual configuration and documented first/last precedence; do not guess.', {'script_name': STRING, 'selected': STRING, 'configuration': STRING, 'encoding': STRING, 'priority': {'type': 'string', 'enum': ['first', 'last']}}, ['script_name', 'selected']),
+    tool('inspect_skill_save', 'Run the installed fixed Cotomi Skill inspector on a save, including unknown title versions. Reuses byte-bound decoded context and returns raw title/stack observations. No shell commands, progress classification or node validation. Use root=save and a path relative to that root.', {'root': {'type': 'string', 'enum': ['save']}, 'path': STRING}, ['root', 'path']),
+    tool('inspect_skill_resource', 'Directly run an installed read-only format reader BEFORE reimplementing it: ast_tables for literal AST tables, siglus_scene for decoded DAT messages/flow, siglus_save for local slot/header/active state, artemis_save for BOW containers. Returns observations and an exact JSON locator, not verified transcript/current-node facts. Keep native runtime semantics separate. options accepts only allow_duplicate_keys (AST) or const_profile (Siglus scene).', {'reader': {'type': 'string', 'enum': list(SKILL_READERS['READERS'])}, 'root': {'type': 'string', 'enum': ['game', 'save', 'work']}, 'path': STRING, 'options': {'type': 'object'}}, ['reader', 'root', 'path']),
+    tool('reuse_engine_adapter', 'Save a complete source snapshot generated by one fixed bundled adapter and a JSON profile. Uses write_program validation and invalidation rules. The saved parser has no library import or implicit future adapter dependency. For unsupported save versions, profile={mode:raw_observations} plus entry_source defining extract(data, metadata) snapshots the decoder and your semantic entry together. inspect_save_state(data) supplies raw_title, native_stack, primitive_candidates, decoded_view. metadata[dialogue] is a LIST of verified rows, not a rows wrapper. Immediately test_program on the selected actual input; this tool does not test, finish or enable AI.', {'adapter': STRING, 'kind': {'type': 'string', 'enum': ['script', 'save']}, 'profile': {'type': 'object'}, 'entry_source': STRING}, ['adapter', 'kind', 'profile']),
+    tool('verify_resource_selection', 'This operation lists archive candidates through GARbro: read the complete task.skill_documents.garbro document first, preferably with the initial Skill reads. Independently list all inventory archives for this exact script basename, detect duplicate/patch versions, and verify the selected source against an explicit configuration search order. Use before extracting archived scripts. selected and configuration are paths relative to game. For ambiguous versions provide the actual configuration and documented first/last precedence; do not guess.', {'script_name': STRING, 'selected': STRING, 'configuration': STRING, 'encoding': STRING, 'priority': {'type': 'string', 'enum': ['first', 'last']}}, ['script_name', 'selected']),
     tool('record_script_role', 'After inspecting an actual extracted/loose script, record its research role: story, system or unknown. Cite successful nonstale observations of THIS exact file, and distinguish displayed localized dialogue records from a raw string pool, commands, menus or test resources. role=story selects the representative sample for subsequent speaker research; role=system cannot waive transcript coverage or verify narration. This is model-authored scheduling, never byte/current-node verification.', {'root': ROOT, 'path': STRING, 'role': {'type': 'string', 'enum': ['story', 'system', 'unknown']}, 'reason': STRING, 'evidence_refs': {'type': 'array', 'minItems': 1, 'maxItems': 6, 'items': STRING}}, ['root', 'path', 'role', 'reason', 'evidence_refs']),
     tool('list_files', 'List a relative directory in an allowed root. Never follows links. Results are paginated; follow next_offset.', {'root': ROOT, 'path': STRING, 'offset': {'type': 'integer'}, 'limit': {'type': 'integer'}}, ['root', 'path']),
     tool('read_text', 'Read a skill, reference, source or configuration text file. Use offset/length for pagination, up to 8192 characters per page. Follow next_offset for unread content.', {'root': ROOT, 'path': STRING, 'encoding': STRING, 'offset': {'type': 'integer'}, 'length': {'type': 'integer'}}, ['root', 'path']),
@@ -449,7 +473,7 @@ TOOLS = [
     tool('inspect_data', 'Run YOUR temporary pure Python analysis on complete raw file bytes without replacing final parsers. Entry def extract(data, metadata). metadata includes the SAME verified global resources and speaker_resources as companion helpers; target_script optionally selects matching scoped bindings. For root="save", metadata["dialogue"] contains the same verified transcript supplied to save parsers. Inspect these maps directly, without recursively guessing their shape or persisting a probe as metadata. Import allowed modules explicitly. Return compact JSON. This is analysis, not speaker/script/save validation.', {'root': ROOT, 'path': STRING, 'source': STRING, 'target_script': {'type': 'object', 'properties': {'root': ROOT, 'path': STRING}, 'required': ['root','path'], 'additionalProperties': False}}, ['root', 'path', 'source']),
     tool('inspect_structured', 'Parse the COMPLETE actual file using the fixed typed data syntax from verification_contract(topic="structured"), with a declarative standard byte view. Optional field_path selects a typed node by actual object keys/array indices. Returns a bounded node and an exact read_json locator for the complete parsed tree, preserving native field/reference positions. Prefer this over repeatedly writing temporary TJS/PSB parsers. This proves data structure only, never dialogue roles, execution order or a current node.', {'root': ROOT, 'path': STRING, 'document': {'type': 'object'}, 'field_path': {'type': 'array', 'maxItems': 32, 'items': {'type': ['string', 'integer']}}}, ['root', 'path', 'document']),
     tool('inspect_archive_member', 'Read native metadata for an actual archive and an exact member extracted by run_skill into THIS work directory. Independently binds it by the exact native name and full raw segment bytes, or a unique complete raw-byte match for mapped names; size/caption alone cannot select a member. Returns native size/Adler-32/flags/segments and a binding receipt, never a key or decoded answer. Use this bounded checksum investigation even when ordinary exploration is gated; a newly changed parser must still be tested first. A metadata receipt does not verify restored bytes, dialogue or a node.', {'archive': STRING, 'root': {'type': 'string', 'enum': ['work']}, 'path': STRING}, ['archive', 'root', 'path']),
-    tool('run_skill', 'Run bundled GARbro CLI after reading its documentation. filter_syntax=glob accepts filename patterns such as *.txt; regex accepts GARbro regular expressions. auto recognizes leading filename wildcards and otherwise preserves regex compatibility. Other batch tools use filename GLOBS. Returns exact extracted members, member_count, full member_inventory JSON and sample_output. Re-extracting unchanged bytes preserves existing timestamps and verified metadata inputs. Stdout is paginated. Extraction requires a filter.', {'command': {'type': 'string', 'enum': ['i', 'l', 'x']}, 'archive': STRING, 'filter': STRING, 'filter_syntax': {'type': 'string', 'enum': ['auto','glob','regex']}, 'offset': {'type': 'integer'}, 'length': {'type': 'integer'}}, ['command', 'archive']),
+    tool('run_skill', 'List or extract with the installed archive backend chosen by actual header. Use the cli_document in source_inventory before calling. Specialized backends accept filename globs; GARbro also accepts regex. Extraction requires a filter and returns member_inventory and sample_output. For Siglus only, key_source may name an existing matching game-relative executable for static tool input, never execution or raw key text. A zero-member listing is not proof that an archive is empty.', {'command': {'type': 'string', 'enum': ['i', 'l', 'x']}, 'archive': STRING, 'key_source': STRING, 'filter': STRING, 'filter_syntax': {'type': 'string', 'enum': ['auto','glob','regex']}, 'offset': {'type': 'integer'}, 'length': {'type': 'integer'}}, ['command', 'archive']),
     tool('load_script_metadata', 'Parse a real companion file with YOUR pure Python helper. Return {values:{...},speakers:{entry:{id:<native ID>,text:<displayed name or null>,evidence:<name proof>,id_evidence:<ID proof>}}}. Name tables are global. Original-script message IDs MUST specify target_script:{root,path}: IDs restart in each script and may NEVER be shared across scripts. EVERY scoped entry, named or null, also requires supported native_link command-chain evidence from verification_contract(topic="speaker"); separate ID/NUL spans cannot establish it. Unsupported profiles cannot pass as verified. Include every native message with its actual displayed name or empty-name narration proof. Resolve names through the verified localized name table, not untranslated original names. Only matching scoped bindings are supplied to each transcript parser. Changed metadata invalidates affected validations.', {'root': ROOT, 'path': STRING, 'key': STRING, 'source': STRING, 'target_script': {'type': 'object', 'properties': {'root': ROOT, 'path': STRING}, 'required': ['root','path'], 'additionalProperties': False}}, ['root', 'path', 'key', 'source']),
     tool('load_script_metadata_batch', 'Apply YOUR tested companion helper to all matching original-script files, pairing each with one translated target of the SAME STEM. Supply helper_key from a successful load_script_metadata to reuse its saved code directly, or source for a new helper. Global name tables are available. Keeps the already verified sample binding; narration needs empty-name byte evidence. Never merge numeric IDs across files.', {'root': ROOT, 'path': STRING, 'filter': STRING, 'source': STRING, 'helper_key': STRING, 'target_root': ROOT, 'target_path': STRING, 'target_extension': STRING, 'key_prefix': STRING}, ['root','path','filter','target_root','target_path','target_extension']),
     tool('verify_resource_selection_batch', 'Verify the effective archive for every extracted script matching a filename filter. Listings are reused across files. Use before batch metadata and transcript extraction; do not prepare only the current-save sample.', {'root': ROOT,'path':STRING,'filter':STRING,'selected':STRING,'configuration':STRING,'priority':{'type':'string','enum':['first','last']},'encoding':STRING}, ['root','path','filter','selected']),
@@ -492,6 +516,7 @@ TOOLS = [
         'path': STRING,
         'classification': {'type': 'string', 'enum': ['progress_candidate', 'needs_context']},
         'explanation': STRING,
+        'observations_from_probe': {'type': 'boolean', 'enum': [True], 'description': 'Use the exact byte-bound raw title observations already supplied by the current host Skill probe. Omit observations; still provide your classification and explanation. Every field is independently replayed.'},
         'observations': {'type': 'array', 'minItems': 1, 'maxItems': 32, 'items': {'type': 'object', 'properties': {
             'role': {'type': 'string', 'minLength': 1, 'maxLength': 48, 'pattern': r'^[a-z][a-z0-9_]{0,47}(?![\s\S])',
                      'description': 'A short lowercase ASCII identifier; no whitespace or punctuation.'},
@@ -501,9 +526,12 @@ TOOLS = [
             'targets': {'type': 'array', 'minItems': 1, 'maxItems': 3, 'items': {'type': 'object', 'properties': {
                 'root': ROOT, 'path': STRING}, 'required': ['root', 'path'], 'additionalProperties': False}}},
             'required': ['missing_fact', 'targets'], 'additionalProperties': False}},
-        ['path', 'classification', 'explanation', 'observations']),
+        ['path', 'classification', 'explanation']),
     tool('finish', 'Finish only after reading SKILL.md, invoking an appropriate extraction tool, extracting a nonempty transcript with speaker fields, and testing YOUR save program on the latest required progress save. Follow the current validation_targets; additional saves are required only by explicit configuration. Verify the exact source/position of the current node. If dialogue omits names, inspect companion resources before declaring speakers unavailable. Record speaker evidence and limitations in notes; never infer hidden identities or progress.', {'engine': STRING, 'script_language': {'type': 'string', 'enum': ['zh-CN', 'ja-JP', 'en-US', 'original']}, 'speaker_resolution': {'type': 'string', 'enum': ['inline', 'external', 'mixed', 'unavailable']}, 'notes': STRING}, ['engine', 'script_language', 'speaker_resolution', 'notes']),
 ]
+
+next(item for item in TOOLS if item['function']['name'] == 'record_save_preflight')['function']['parameters']['oneOf'] = [
+    {'required': ['observations']}, {'required': ['observations_from_probe']}]
 
 next(item for item in TOOLS if item['function']['name'] == 'load_script_metadata_batch')['function']['parameters']['oneOf'] = [
     {'required': ['source'], 'not': {'required': ['helper_key']}},
@@ -582,6 +610,13 @@ class Agent:
         self.speaker_review = None
         self.program_test_cache = {}
         self.skill_run_cache = {}
+        worker = [sys.executable] if getattr(sys, 'frozen', False) else [sys.executable, '-I', '-S', str(pathlib.Path(__file__).resolve())]
+        self.skill_probes = SKILL_PROBE['SkillProbes'](self.roots['skill'], self.work, worker)
+        self.reader_command = worker
+        self.host_probes = []
+        self.save_probe_fields = {}
+        self.host_probe_files = set()
+        self.preflight_probe_targets = []
         self.archive_member_inspections = {}
         self.native_archive_inputs = {}
         self.batching_scripts = False
@@ -597,6 +632,8 @@ class Agent:
         self.samples = {str(pathlib.Path(p).resolve()): 'progress' for p in config.get('required_saves', [])}
         self.required = set(self.samples)
         self.resource_selections = {}
+        self.last_resource_failure = None
+        self.resource_content_cache = {}
         self.extracted_from = {}
         self.extraction_stamps = {}
         self.script_dependency_stamps = {}
@@ -669,6 +706,201 @@ class Agent:
                 self.save_preflight.restore(json.loads(receipt_path.read_text(encoding='utf-8')))
             except (OSError, ValueError, TypeError):
                 pass
+
+    def skill_save_probe(self, root, relative, timeout=40):
+        """Share the fixed read-only decoder between eager and model tool calls."""
+        if root != 'save':
+            raise ValueError('Skill save inspection requires root=save')
+        path = self.path(root, relative)
+        with path.open('rb') as stream:
+            header = stream.read(16)
+        if header[:4] in (b'BOWS', b'BOWG', b'BOWX'):
+            raise ValueError('Artemis BOW container, not Cotomi. See commands/artemis-save.md; an ASB system pointer is not a story node.')
+        probe = self.skill_probes.run(path, timeout=timeout)
+        output = self.work / ('host-skill-' + probe['key'][:20] + '.json')
+        atomic_json(output, dict(tool_call_id='host-skill-' + probe['key'][:20],
+            function=dict(name='inspect_skill_save', arguments=json.dumps(dict(root=root, path=relative))),
+            result=probe))
+        self.host_probe_files.update((output.resolve(), pathlib.Path(probe['decoded_path']).resolve()))
+        observations = [dict(role='raw_title_field_' + str(index), proof=field['proof'], value=field['value'])
+                        for index, field in enumerate((probe.get('raw_title') or {}).get('fields', []))
+                        if field.get('kind') in ('string', 'integer') and field.get('proof')][:16]
+        self.save_probe_fields[str(path)] = dict(sha256=probe['input_sha256'], observations=observations)
+        return dict(root=root, path=path.relative_to(self.roots[root]).as_posix(),
+                    skill_result=output.name, analysis_only=True, verified_current_node=False,
+                    decoded_path=pathlib.Path(probe['decoded_path']).relative_to(self.work).as_posix(),
+                    raw_title=probe['raw_title'], native_stack=probe['native_stack'],
+                    primitive_candidates=probe.get('primitive_candidates'), decoded_view=probe.get('decoded_view'),
+                    preflight_observations=observations,
+                    preflight_reuse=dict(function='record_save_preflight', path=relative,
+                        observations_from_probe=True, instruction='Supply your classification and explanation; omit observations. The host replays these exact raw fields, without granting node validation.'),
+                    save_template=dict(function='reuse_engine_adapter', adapter='entis_cotopha', kind='save',
+                        **ADAPTER_LIBRARY['describe']('entis_cotopha')['raw_save_template']),
+                    reused=probe.get('reused'), elapsed_seconds=probe.get('elapsed_seconds'),
+                    instruction=probe['instruction'])
+
+    def inspect_skill_resource(self, args, timeout=40):
+        path = self.path(args['root'], args['path'])
+        if args['root'] not in ('game', 'save', 'work'):
+            raise ValueError('Choose an actual game, save or extracted work file')
+        stamp = self.file_fingerprint(path)
+        result = SKILL_READERS['run'](self.reader_command, self.roots['skill'], path,
+            args['reader'], args.get('options'), timeout=min(timeout, (self.runtime_deadline or float('inf')) - time.monotonic()))
+        if self.file_fingerprint(path) != stamp:
+            raise ValueError('Reader input changed during inspection')
+        full, _ = CONTEXT['archive_result'](self.work, result)
+        self.host_probe_files.add(self.path('work', full))
+        for probe in self.host_probes:
+            if (probe.get('kind'), probe.get('root'), probe.get('path'), probe.get('reader')) == (
+                    'script', args['root'], args['path'], args['reader']):
+                probe.pop('next_tool', None)
+                probe['read_result'] = dict(root='work', path=full, pointer='')
+        return dict(reader=args['reader'], analysis_only=True, verified_current_node=False,
+            source_sha256=result['source_sha256'], result_keys=list(result),
+            counts={key: len(value) for key, value in result.items() if isinstance(value, list)},
+            read_result=dict(root='work', path=full, pointer=''),
+            preview={key: result[key] for key in ('header', 'active_caret', 'status', 'limitation') if key in result},
+            next_action='Use read_result with read_json, or inspect_data on that exact JSON file to query ast_tree/instructions/payload. Reuse the complete parsed structure rather than copying its implementation line by line. Final parsers and native current-node relationships still require test_program.')
+
+    def script_reader_candidates(self, paths):
+        """Advertise one installed reader per recognized format after extraction."""
+        candidates, seen = [], set()
+        for relative in paths[:64]:
+            path = self.path('work', relative)
+            with path.open('rb') as stream:
+                reader = SKILL_READERS['script_reader'](stream.read(512))
+            if reader is None or reader in seen:
+                continue
+            try:
+                SKILL_READERS['entry'](self.roots['skill'], reader)
+            except ValueError:
+                continue
+            seen.add(reader)
+            arguments = dict(reader=reader, root='work', path=relative)
+            probe = next((item for item in self.host_probes if item.get('kind') == 'script'
+                          and all(item.get(key) == value for key, value in arguments.items())), None)
+            if probe is None:
+                probe = dict(arguments, kind='script', analysis_only=True,
+                             next_tool=dict(function='inspect_skill_resource', arguments=arguments))
+                self.host_probes.append(probe)
+            candidates.append(probe)
+        return candidates
+
+    def probe_save_candidates(self):
+        """Probe unknown discovered files without promoting them to progress saves."""
+        candidates = self.preflight_targets()
+        discovered = []
+        for entry in self.config.get('save_candidates', []):
+            if entry.get('kind') == 'control' or not isinstance(entry.get('path'), str):
+                continue
+            try:
+                path = pathlib.Path(entry['path']).resolve()
+                relative = path.relative_to(self.roots['save']).as_posix()
+                if self.path('save', relative) != path or not path.is_file():
+                    continue
+                discovered.append((-path.stat().st_mtime_ns, relative))
+            except (OSError, ValueError):
+                continue
+        for _, relative in sorted(discovered):
+            if relative not in candidates:
+                candidates.append(relative)
+        return candidates[:2]
+
+    def automatic_probes(self):
+        """Provide known-format observations before asking the model to rediscover them.
+
+        This never reads prior benchmark artifacts, selects effective resources,
+        installs parsers, records progress semantics or grants verification.
+        """
+        candidates = [('save', relative) for relative in self.probe_save_candidates()]
+        scripts = [entry['path'] for entry in self.source_inventory['entries']
+                   if isinstance(entry.get('path'), str) and entry['path'].lower().endswith('.csx')]
+        if not self.source_inventory['provided']:
+            scripts = [path.name for path in sorted(self.roots['game'].glob('*.csx'))[:2]]
+        # Inspect the shallow original before nested alternatives. Content-identical
+        # copies do not consume the bounded probe allowance twice.
+        scripts.sort(key=lambda name: (len(pathlib.PurePath(name).parts), name))
+        candidates.extend(('game', relative) for relative in scripts)
+        script_hashes = set()
+        deadline = min(self.runtime_deadline or float('inf'), time.monotonic() + 45)
+        for root, relative in candidates:
+            if time.monotonic() >= deadline:
+                break
+            try:
+                path = self.path(root, relative)
+                if not path.is_file() or not 0 < path.stat().st_size <= 32 * 1024 * 1024:
+                    continue
+                data = path.read_bytes()
+                kind = 'save' if root == 'save' else 'script'
+                if not SKILL_PROBE['matches'](data, kind):
+                    if kind == 'save':
+                        reader = SKILL_READERS['save_reader'](data)
+                        document = SKILL_READERS['text_container'](data)
+                        if reader:
+                            inspected = self.inspect_skill_resource(dict(reader=reader, root=root, path=relative), timeout=deadline-time.monotonic())
+                            self.host_probes.append(dict(root=root, path=relative, **inspected))
+                        elif document:
+                            self.host_probes.append(dict(root=root, path=relative, analysis_only=True,
+                                next_tool=dict(function='inspect_structured', arguments=dict(root=root, path=relative, document=document)),
+                                instruction='Header-based text-container candidate. Use the existing complete typed reader once; it must validate the framing and syntax before interpreting any field.'))
+                    continue
+                if kind == 'script':
+                    digest = hashlib.sha256(data).hexdigest()
+                    if digest in script_hashes or len(script_hashes) >= 2:
+                        continue
+                    script_hashes.add(digest)
+                args = dict(adapter='entis_cotopha', kind=kind, root=root, path=relative)
+                if kind == 'script':
+                    # An exact native function lookup gives bounded ABI candidates;
+                    # its name remains an observation, never an automatic profile.
+                    module = NATIVE_ROUTES['ADAPTER']['parse_csx'](data)
+                    names = [f['name'] for f in module['functions'] if f['name'].endswith('::OutMsg')][:4]
+                    args['profile'] = dict(inspection=dict(function_names=names), message_callees=names)
+                try:
+                    inspection = ADAPTER_LIBRARY['inspect']('entis_cotopha', kind, data, {}, args.get('profile'))
+                    result = dict(adapter_id='entis_cotopha', inspection=inspection,
+                                  ok=inspection.get('ok', True), analysis_only=True, verified_current_node=False)
+                except (ValueError, KeyError, struct.error) as error:
+                    result = dict(ok=False, analysis_only=True, error=str(error)[:500])
+                identity = hashlib.sha256((root + relative).encode() + data + pathlib.Path(__file__).with_name('entis_adapter.py').read_bytes()).hexdigest()[:20]
+                output = self.work / ('host-adapter-' + identity + '.json')
+                function = dict(name='inspect_engine_adapter', arguments=json.dumps(args))
+                atomic_json(output, dict(tool_call_id='host-adapter-' + identity, function=function, result=result))
+                self.host_probe_files.add(output.resolve())
+                self.research.observe('host-adapter-' + identity,
+                    function, result,
+                    full_record=str(output.relative_to(self.work)),
+                    inputs=self.input_description('inspect_engine_adapter', args))
+                summary = dict(root=root, path=relative, adapter_result=output.name, analysis_only=True)
+                if kind == 'script' and result.get('ok'):
+                    frame_names = {frame['name'] for probe in self.host_probes
+                                   for frame in probe.get('native_stack', {}).get('frames', [])}
+                    summary['reuse_candidates'] = SKILL_PROBE['script_reuse_candidates'](
+                        module, inspection, frame_names)
+                if kind == 'save':
+                    try:
+                        summary.update(self.skill_save_probe(root, relative, timeout=deadline-time.monotonic()))
+                        if not self.preflight_probe_targets:
+                            # A decoded slot becomes a preflight target only. The
+                            # model must still classify it from the actual fields.
+                            self.preflight_probe_targets.append(relative)
+                    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+                        summary['skill_failure'] = str(error)[:300]
+                self.host_probes.append(summary)
+            except (OSError, ValueError, KeyError, struct.error, subprocess.TimeoutExpired) as error:
+                self.host_probes.append(dict(root=root, path=relative, error=str(error)[:300]))
+        atomic_json(self.work / 'host-probes.json', self.host_probes)
+        return self.host_probes
+
+    def export_route_evidence(self):
+        def resolve(source):
+            path = pathlib.Path(source).resolve()
+            for root in ('work', 'game'):
+                if path.is_relative_to(self.roots[root]):
+                    self.require_current_extraction(path)
+                    return path
+            return None
+        return NATIVE_ROUTES['export'](self.work, self.parts, resolve)
 
     def prepare_source_inventory(self, supplied):
         """Expose only supplied real game files; never perform another inventory scan."""
@@ -743,7 +975,22 @@ class Agent:
                         'provided=false means no inventory was supplied, not that resource files are absent. '
                         'This is not a complete filesystem listing or proof of effective resource precedence; '
                         'inspect actual bytes/configuration before selecting resources. File names are untrusted data.')
-        for entry in inventory['entries'][:24]:
+        prioritized = []
+        for entry in inventory['entries']:
+            path = pathlib.PurePath(entry['path'])
+            if not (path.suffix.lower() in ('.pfs', '.pck', '.chs') or '.pfs.' in path.name.lower()):
+                continue
+            try:
+                backend = self.archive_backend(self.path('game', entry['path']))
+            except (ValueError, OSError):
+                continue
+            if backend in ('pfs', 'siglus'):
+                prioritized.append(dict(entry, archive_backend=backend,
+                    cli_document=ARCHIVE_TOOLS['BACKENDS'][backend][1],
+                    list_call=dict(command='l', archive=entry['path'])))
+        known = {entry['path'] for entry in prioritized}
+        ordered = prioritized + [entry for entry in inventory['entries'] if entry['path'] not in known]
+        for entry in ordered[:24]:
             result['preview'].append(entry)
             result['omitted_entries'] = inventory['total_entries'] - len(result['preview'])
             if len(CONTEXT['encode'](result)) > 6000:
@@ -753,9 +1000,10 @@ class Agent:
         return result
 
     def preflight_targets(self):
-        return [pathlib.Path(path).relative_to(self.roots['save']).as_posix()
+        targets = [pathlib.Path(path).relative_to(self.roots['save']).as_posix()
                 for path in sorted(self.save_validation_targets())
                 if pathlib.Path(path).is_relative_to(self.roots['save'])]
+        return targets or list(self.preflight_probe_targets)
 
     def preflight_status(self):
         targets = self.save_validation_targets()
@@ -775,11 +1023,21 @@ class Agent:
                       name in ('write_program', 'reuse_engine_adapter', 'test_program') and args.get('kind') == 'script' else
                   'finish' if name == 'finish' else 'inspect')
         state = self.preflight_status()
+        self.workflow.check_save_template_research(name, args, available=bool(
+            state['ready_for_script_sample'] and not state.get('needs_context')
+            and self.save_probe_fields and self.research.adapter_fallbacks()), request_number=self.requests_sent)
         if not state.get('satisfied_by_verified_progress'):
             self.save_preflight.check_intent(intent)
+            if self.preflight_probe_targets and not state['ready_for_script_sample'] and (
+                    args.get('root') == 'game' and WORKFLOW['read_only_research'](name, args)
+                    or name == 'verify_resource_selection'):
+                self.save_preflight.check_intent('script_sample')
         # Save inspection is a prerequisite, including during resource discovery
         # and parser repair. An unrelated exploration gate cannot suppress it.
-        if args.get('root') == 'save' and name in ('list_files', 'read_json', 'read_text', 'read_bytes', 'inspect_data', 'inspect_engine_adapter', 'inspect_structured'):
+        if args.get('root') == 'save' and name in ('list_files', 'read_json', 'read_text', 'read_bytes', 'inspect_data', 'inspect_engine_adapter', 'inspect_skill_save', 'inspect_skill_resource', 'inspect_structured'):
+            return
+        if (args.get('root') == 'work' and name in ('read_json', 'read_text', 'read_bytes')
+                and self.path('work', args['path']) in self.host_probe_files):
             return
         if state.get('needs_context'):
             root = 'game' if name == 'run_skill' else args.get('root')
@@ -797,6 +1055,9 @@ class Agent:
         if not name or pathlib.Path(name).name != name:
             raise ValueError('Use one exact script basename')
         selected = self.path('game', args['selected'])
+        if selected.name == name and (selected.suffix.lower() in {'.noa', '.xp3', '.arc', '.pfs', '.pak', '.ypf', '.npa', '.npk', '.rpa', '.zip'}
+                                      or self.archive_backend(selected) in ('pfs', 'siglus')):
+            raise ValueError('script_name must be an actual member basename from the archive listing, not the archive filename; keep selected as the archive path')
         matches = []
         loose = self.roots['game'] / name
         if loose.is_file():
@@ -804,11 +1065,20 @@ class Agent:
         extensions = {'.noa', '.xp3', '.arc', '.pfs', '.pak', '.ypf', '.npa', '.npk', '.rpa', '.zip', '.dat'}
         if selected.name == name and selected.suffix.lower() not in extensions and selected not in matches and selected.is_file():
             matches.append(selected)
+        unreadable = []
         for item in self.config.get('inventory', []):
             archive = pathlib.Path(item['path']).resolve()
-            if archive.suffix.lower() not in extensions:
+            if not archive.is_relative_to(self.roots['game']) or not archive.is_file():
                 continue
-            result = self.dispatch('run_skill', dict(command='l', archive=str(archive.relative_to(self.roots['game']))))
+            backend = self.archive_backend(archive)
+            if archive.suffix.lower() not in extensions and backend not in ('pfs', 'siglus'):
+                continue
+            relative = str(archive.relative_to(self.roots['game']))
+            try:
+                result = self.dispatch('run_skill', dict(command='l', archive=relative))
+            except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+                unreadable.append(dict(path=relative, error=str(error)[:1200]))
+                continue
             # Verification uses the complete local listing, never the API preview.
             if result.get('full_output'):
                 result = json.loads(self.path('work', result['full_output']).read_text(encoding='utf-8'))
@@ -816,17 +1086,54 @@ class Agent:
                 # GARbro uses exit 1 for a successful archive scan with zero matches.
                 if result['exit_code'] == 1 and result.get('stderr', '').strip() == 'Error: No files match the given filter':
                     continue
-                raise ValueError('Cannot verify resource candidate: ' + str(archive))
-            entries = re.findall(r'^\s*\[[0-9A-Fa-f]+\]\s+\d+\s+(.+?)\s*$', result['stdout'], re.M)
+                unreadable.append(dict(path=relative, error=(result.get('stderr') or result.get('stdout') or 'No readable index')[:1200],
+                                       exit_code=result['exit_code']))
+                continue
+            if result.get('member_inventory'):
+                entries = json.loads(self.path('work', result['member_inventory']).read_text(encoding='utf-8'))['members']
+            else:
+                entries = re.findall(r'^\s*\[[0-9A-Fa-f]+\]\s+\d+\s+(.+?)\s*$', result['stdout'], re.M)
             if any(pathlib.PureWindowsPath(entry).name.casefold() == name.casefold() for entry in entries):
                 matches.append(archive)
+        if unreadable:
+            raise ARCHIVE_TOOLS['selection_error']('resource_inventory_incomplete',
+                'Resource selection is unresolved because some candidate indices cannot be read. '
+                'A discovered file is not proof that the engine loads it. Do not repeat unchanged verification, '
+                'discard the candidate by filename, or conclude that the selected story archive is unsupported. '
+                'Inspect only the listed failed index/loader relationship with a supported reader; preserve the unresolved scope if it cannot be established.',
+                script_name=name, selected=args['selected'],
+                confirmed_candidates=[str(path.relative_to(self.roots['game'])) for path in matches],
+                unresolved_candidates=unreadable)
         if selected not in matches:
             raise ValueError('Selected resource does not contain the requested script')
-        if len(matches) > 1:
-            config = self.path('game', args.get('configuration', ''))
-            text = config.read_text(encoding=args.get('encoding', 'utf-8-sig')).casefold()
+        groups = ARCHIVE_TOOLS['equivalent_sources'](matches, selected, self.resource_content_cache)
+        if len(groups) > 1:
+            candidates = [str(group[0].relative_to(self.roots['game'])) for group in groups]
+            if not args.get('configuration'):
+                raise ARCHIVE_TOOLS['selection_error']('resource_precedence_unresolved',
+                                 'Ambiguous script versions; supply an actual configuration file and first/last '
+                                 'load precedence. Distinct candidates: ' + json.dumps(candidates, ensure_ascii=False)
+                                 + '. Byte-identical backup copies have already been grouped; do not use an inventory or generated report as configuration. '
+                                 'Repeating this check without new loader evidence cannot resolve the conflict.',
+                                 script_name=name, selected=args['selected'], confirmed_candidates=candidates)
+            config = self.path('game', args['configuration'])
+            if (not config.is_file() or config.stat().st_size > 1024 * 1024
+                    or '.galgear-ai-summary' in (p.casefold() for p in config.parts)):
+                raise ValueError('Resource configuration must be an original text file of at most 1 MiB, not a directory, executable or generated analysis artifact')
+            raw_config = config.read_bytes()
+            if raw_config.startswith((b'MZ', b'\x7fELF')):
+                raise ARCHIVE_TOOLS['selection_error']('resource_configuration_binary',
+                    'Resource configuration is an executable/library, not a text load-order declaration. '
+                    'Changing text encodings cannot turn executable bytes into configuration evidence. '
+                    'Inspect native loader semantics separately or preserve the unresolved precedence.',
+                    script_name=name, selected=args['selected'], configuration=args['configuration'],
+                    confirmed_candidates=candidates)
+            text = raw_config.decode(args.get('encoding', 'utf-8-sig')).casefold()
+            if '\0' in text:
+                raise ValueError('Resource configuration is binary; inspect its format instead of treating it as a text load order')
             ordered = []
-            for candidate in matches:
+            for group in groups:
+                candidate = group[0]
                 # Loose files have an explicit configuration reference too; no default precedence.
                 offset = text.find(candidate.name.casefold())
                 if offset < 0:
@@ -854,12 +1161,167 @@ class Agent:
             self.required_script_sets.clear()
             self.speaker_parts.clear()
             self.speaker_review = None
-        inputs = {str(selected): self.file_fingerprint(selected)}
+        inputs = {str(path): self.file_fingerprint(path) for path in matches}
         if args.get('configuration'):
             configuration = self.path('game', args['configuration'])
             inputs[str(configuration)] = self.file_fingerprint(configuration)
-        self.resource_selections[name] = dict(selected=str(selected), candidates=[str(p) for p in matches], priority=args.get('priority'), configuration=args.get('configuration'), input_stamps=inputs)
+        self.resource_selections[name] = dict(selected=str(selected), candidates=[str(p) for p in matches], equivalent_sources=[[str(p) for p in group] for group in groups], priority=args.get('priority'), configuration=args.get('configuration'), input_stamps=inputs)
         return self.resource_selections[name]
+
+    def archive_backend(self, path):
+        backend = ARCHIVE_TOOLS['classify'](path)
+        entry = ARCHIVE_TOOLS['BACKENDS'].get(backend)
+        if entry and (self.roots['skill'] / entry[0]).is_file():
+            return backend
+        if ARCHIVE_TOOLS['mod_installed'](self.roots['skill']):
+            return 'garbro-mod'
+        return 'garbro'
+
+    def run_specialized_archive(self, archive, backend, args):
+        command = args['command']
+        if command not in ('i', 'l', 'x'):
+            raise ValueError('Supported read-only commands: i, l, x')
+        if (backend == 'pfs' and command == 'x' and archive.stat().st_size > ARCHIVE_TOOLS['MAX_SPECIALIZED_ARCHIVE']
+                and ARCHIVE_TOOLS['mod_installed'](self.roots['skill'])):
+            # pfs-rs cannot filter before materializing the entire archive. Mod
+            # independently lists the same source and extracts only exact names.
+            return self.run_specialized_archive(archive, 'garbro-mod', args)
+        pattern = args.get('filter', '')
+        syntax = args.get('filter_syntax', 'auto')
+        if len(pattern) > 512 or (syntax == 'regex' and backend != 'garbro-mod') or (command == 'x' and not pattern):
+            raise ValueError('Supply a bounded filename glob for extraction; only GARbro accepts regex')
+        stamp = self.file_fingerprint(archive)
+        executable = self.path('skill', ARCHIVE_TOOLS['BACKENDS'][backend][0])
+        key_source = None
+        if args.get('key_source'):
+            if backend != 'siglus' or command != 'x':
+                raise ValueError('key_source is only accepted for Siglus extraction')
+            key_source = self.path('game', args['key_source'])
+            if key_source.suffix.casefold() != '.exe' or key_source.stat().st_size > 64 * 1024 * 1024:
+                raise ValueError('Select an existing matching game executable, at most 64 MiB')
+            with key_source.open('rb') as stream:
+                if stream.read(2) != b'MZ':
+                    raise ValueError('Key source must be a game executable with an MZ header')
+        key_stamp = self.file_fingerprint(key_source) if key_source else None
+        version = hashlib.sha256(CONTEXT['encode']([str(archive), stamp, backend, self.file_fingerprint(executable)])).hexdigest()[:20]
+        listing_key = ('specialized-list', version)
+        failure_key = ('specialized-list-failure', version)
+        flags = 0x08000000 if os.name == 'nt' else 0
+        if failure_key in self.skill_run_cache:
+            raise ValueError(self.skill_run_cache[failure_key] + ' Unchanged input/tool: reusing the recorded failure; another identical list/extract call cannot resolve it.')
+        names = self.skill_run_cache.get(listing_key)
+        if names is None:
+            if backend == 'siglus':
+                names = ARCHIVE_TOOLS['scene_members'](archive)
+            else:
+                argv = [str(executable), str(archive)] if backend == 'garbro-mod' else [str(executable), 'list', str(archive)]
+                result = subprocess.run(argv, stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, timeout=35, creationflags=flags)
+                if result.returncode or len(result.stdout) > 8 * 1024 * 1024:
+                    raise ValueError('Installed archive tool could not produce a bounded member listing')
+                names = (ARCHIVE_TOOLS['mod_members'](result.stdout) if backend == 'garbro-mod' else
+                         ARCHIVE_TOOLS['safe_members'](result.stdout.decode('utf-8').splitlines()))
+                if not names:
+                    stderr = result.stderr if isinstance(result.stderr, bytes) else b''
+                    message = ('Archive backend returned no readable members for ' + str(archive.relative_to(self.roots['game']))
+                               + '. This does not prove the archive is empty. CLI diagnostic: '
+                               + (stderr or result.stdout).decode('utf-8', 'replace')[:1200])
+                    self.skill_run_cache[failure_key] = message
+                    raise ValueError(message)
+            if self.file_fingerprint(archive) != stamp:
+                raise ValueError('Archive changed during member listing')
+            self.skill_run_cache[listing_key] = names
+        if not names:
+            raise ValueError('Archive backend returned no readable members. This does not prove the archive is empty; avoid repeating the same request.')
+        if backend == 'garbro-mod' and pattern and (syntax == 'regex' or syntax == 'auto' and not pattern.startswith(('*', '?'))):
+            matcher = re.compile(pattern)
+            matches = [name for name in names if matcher.search(name)]
+        else:
+            matches = ARCHIVE_TOOLS['selected'](names, pattern)
+        variant = hashlib.sha256(CONTEXT['encode']([str(key_source), key_stamp])).hexdigest()[:12] if key_source else 'default'
+        target = self.path('work', 'unpacked/' + version + '-' + variant)
+        extracted = []
+        extraction_key = ('specialized-extract', version, variant, tuple(matches))
+        previous = self.skill_run_cache.get(extraction_key)
+        reused = bool(command == 'x' and previous and all(self.file_fingerprint(self.path('work', name)) == stamp
+                                                        for name, stamp in previous.items()))
+        if reused:
+            extracted = list(previous)
+        if command == 'x' and not reused:
+            if not matches:
+                raise ValueError('The glob matches no listed archive member; use the member inventory')
+            try:
+                ARCHIVE_TOOLS['safe_members'](matches)
+            except ValueError as error:
+                raise ValueError('Selected members have ambiguous or unsafe output paths. Narrow the filter to unique '
+                                 'members; duplicate entries require the installed ordinal exporter described in '
+                                 'commands/garbro-archive.md. ' + str(error)) from error
+            if backend != 'garbro-mod' and archive.stat().st_size > ARCHIVE_TOOLS['MAX_SPECIALIZED_ARCHIVE']:
+                raise ValueError('This CLI extracts the entire archive before filtering; use bounded listing or a smaller source archive')
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(prefix='.extract-', dir=target.parent) as stage:
+                staging = pathlib.Path(stage).resolve()
+                if staging.parent != target.parent or not staging.is_relative_to(self.work):
+                    raise ValueError('Unsafe archive staging path')
+                payload = staging / 'members'
+                input_archive = archive
+                if backend == 'siglus':
+                    helper = self.roots['skill'] / 'tools/siglus-ssu/scene_read_copy.py'
+                    if helper.is_file():
+                        try:
+                            candidate = staging / 'scene.pck'
+                            runpy.run_path(str(helper))['prepare'](archive, candidate)
+                            input_archive = candidate
+                        except ValueError:
+                            # The installed helper only accepts an exact EOF match.
+                            pass
+                if backend == 'garbro-mod':
+                    payload.mkdir()
+                    commands = ([str(executable), str(archive), *batch] for batch in ARCHIVE_TOOLS['argv_batches'](matches))
+                    cwd = payload
+                else:
+                    argv = ([str(executable), 'extract', str(archive), str(payload), '--quiet'] if backend == 'pfs' else
+                            [str(executable), 'unpack', str(input_archive), str(payload)])
+                    if key_source:
+                        argv.extend(['--angou', str(key_source)])
+                    commands, cwd = [argv], None
+                deadline = time.monotonic() + 90
+                for argv in commands:
+                    result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                            cwd=cwd, timeout=max(0.1, deadline-time.monotonic()), creationflags=flags)
+                    if result.returncode:
+                        hint = ' Supply the matching installed executable as key_source if the package requires it.' if backend == 'siglus' and not key_source else ''
+                        raise ValueError(f'{backend} CLI could not decode this archive; do not repeat unchanged extraction.' + hint)
+                if self.file_fingerprint(archive) != stamp or (key_source and self.file_fingerprint(key_source) != key_stamp):
+                    raise ValueError('Archive or key source changed during extraction')
+                for name in matches:
+                    source = payload / name
+                    destination = target / name
+                    if (source.resolve() != source or not source.is_file() or
+                            destination.resolve() != destination):
+                        raise ValueError('Extracted output does not match a safe listed member')
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    if not destination.is_file() or hashlib.sha256(destination.read_bytes()).digest() != hashlib.sha256(source.read_bytes()).digest():
+                        os.replace(source, destination)
+                    extracted.append(destination.relative_to(self.work).as_posix())
+            self.extracted_from[str(target)] = str(archive)
+            self.extraction_stamps[str(target)] = stamp
+            self.skill_run_cache[extraction_key] = {name: self.file_fingerprint(self.path('work', name)) for name in extracted}
+            if key_source:
+                self.sources.add(str(key_source))
+        self.used_skill = True
+        self.sources.add(str(archive))
+        inventory, _ = CONTEXT['archive_result'](self.work, dict(
+            members=matches, archive=archive.relative_to(self.roots['game']).as_posix(),
+            output=target.relative_to(self.work).as_posix() if extracted else None))
+        output = dict(exit_code=0, backend=backend, stdout='', stderr='', members=matches[:30],
+                      member_count=len(matches), member_inventory=inventory,
+                      read_members=dict(root='work', path=inventory, pointer='/members'),
+                      output=target.relative_to(self.work).as_posix(), sample_output=next(iter(extracted), None), reused=reused)
+        if extracted:
+            output['reader_candidates'] = self.script_reader_candidates(extracted)
+        log, _ = CONTEXT['archive_result'](self.work, output)
+        return dict(output, full_output=log)
 
     def path(self, root, relative):
         if root not in self.roots or pathlib.Path(relative).is_absolute():
@@ -1079,7 +1541,7 @@ class Agent:
         records = [self.research.resolve(ref, require_success=True) for ref in refs]
         if any(record is None or record.get('stale') for record in records):
             raise ValueError('Script role observations must be successful and nonstale')
-        inspected = any(record['tool'] in ('read_text', 'read_bytes', 'inspect_data', 'inspect_engine_adapter', 'inspect_structured', 'test_program')
+        inspected = any(record['tool'] in ('read_text', 'read_bytes', 'inspect_data', 'inspect_engine_adapter', 'inspect_skill_resource', 'inspect_structured', 'test_program')
                         and record.get('inputs_stamped')
                         and description in record.get('inputs', []) for record in records)
         if not inspected:
@@ -1374,6 +1836,7 @@ class Agent:
             script_verification_version=SCRIPT_VERIFICATION_VERSION, context=self.context(),
             parts=self.parts, representative_script=self.representative_script, script_roles=self.script_roles,
             last_script_failure=self.last_script_failure, last_save_failure=self.last_save_failure,
+            last_resource_failure=self.last_resource_failure,
             tests=self.tests, script_resources=self.script_resources,
             speaker_resources=self.speaker_resources, speaker_resource_inputs=self.speaker_resource_inputs,
             speaker_resource_dependencies=self.speaker_resource_dependencies,
@@ -1493,6 +1956,7 @@ class Agent:
         if compatible:
             self.last_script_failure = saved.get('last_script_failure')
             self.last_save_failure = saved.get('last_save_failure')
+            self.last_resource_failure = saved.get('last_resource_failure')
             self.representative_script = saved.get('representative_script')
             self.script_roles = saved.get('script_roles', {}) if isinstance(saved.get('script_roles'), dict) else {}
             if self.representative_script is None:
@@ -1558,7 +2022,7 @@ class Agent:
         output_state = saved.get('output_limit_state', {})
         restore_ceiling = output_token_policy(self.model_capabilities, None)['ceiling'] if self.capabilities_checked else MAX_OUTPUT_BUDGET
         if (compatible and isinstance(output_state, dict)
-                and output_state.get('stage') in ('prerequisites', 'resources', 'script_program', 'script_validation', 'speaker_review', 'save_program', 'save_validation', 'finish')
+                and output_state.get('stage') in ('prerequisites', 'save_preflight', 'resources', 'script_program', 'script_validation', 'speaker_review', 'save_program', 'save_validation', 'finish')
                 and type(output_state.get('max_tokens')) is int and 0 < output_state['max_tokens'] <= restore_ceiling):
             self.output_limit_stage, self.output_limit = output_state['stage'], output_state['max_tokens']
         else:
@@ -1631,14 +2095,19 @@ class Agent:
 
     def work_guidance(self):
         missing = [kind for kind in ('script', 'save') if kind not in self.programs]
+        preflight = self.preflight_status()
         state = self.workflow.describe(self.preparation_status(), self.programs,
                                        dict(read_skill=self.read_skill, read_contract=self.read_contract, used_skill=self.used_skill,
+                                            preflight_pending=bool(preflight['required']) and not self.programs
+                                                and not preflight['ready_for_script_sample'],
                                             resource_selection_required=bool(self.config.get('inventory')) and not self.programs,
                                             resource_selected=bool(self.resource_selections)))
-        preflight = self.preflight_status()
         next_action = state['goal']
         if not preflight['ready_for_script_sample']:
-            next_action = ('First inspect the current required save, using root="save" list_files/read_bytes/inspect_data. '
+            next_action = ('First inspect the current required save using existing probe observations. If host_probes has preflight_observations for this path, '
+                           'inspect those already decoded fields and call record_save_preflight(observations_from_probe=true), supplying your classification/explanation and omitting observations. This replays the exact raw fields without copying offsets. '
+                           'Do not repeat header scans, decoding or script ABI investigation before recording the save classification. '
+                           'If no probe is available, use root="save" list_files/read_bytes/inspect_skill_save/inspect_data. '
                            'These inspections remain available before resource selection and through exploration gates. '
                            'Record actual native state with record_save_preflight. If a key/layout needs resource context, '
                            'record needs_context with one missing_fact and exact existing targets including this save. '
@@ -1657,12 +2126,39 @@ class Agent:
         if fallbacks and self.workflow.stage in ('save_program', 'save_validation'):
             instruction = ('The bundled save adapter has an observed unsupported variant in guidance.adapter_fallbacks. '
                            'For those inputs, stop retrying version/profile guesses. Reuse the observed raw fields and '
-                           'available byte codecs to write_program(kind="save"), then test_program on the required save. '
+                           'available byte codecs. Prefer reuse_engine_adapter(kind="save", profile={"mode":"raw_observations"}, entry_source=<your extract function>) to snapshot all structural decoding; inspect_save_state(data) returns raw fields and view-aware proofs. Write only the current-node association, then test_program on the required save. '
+                           'If no raw template supports the container, use write_program(kind="save"). '
                            'If one native layout fact is missing, inspect only that fact before writing/testing. '
                            'Complete pending preflight and script verification first; an unsupported adapter is not an unsupported game. ')
             next_action = instruction + next_action
+            if self.save_probe_fields and self.workflow.stage == 'save_program':
+                next_action = ('A raw save template and decoded observations are already available. '
+                    'First use lookup_verified_dialogue(text=<saved caption>) to obtain existing _native scope/return records; do not reparse the verified script or reread its parser. This bounded lookup remains available. '
+                    'After at most 3 research requests in this stage, write/test your semantic entry or plan_probe ONE missing native relation; '
+                    'do not rediscover container headers/sections. ' + next_action)
+                state['read_only_research_advisory'] = next_action
+                state['exploration_gated'] = len(self.workflow.inspection_turns) >= 3
+                state['gate_instruction'] = next_action
+        if self.last_resource_failure and state['stage'] == 'resources':
+            state['resource_failure'] = self.last_resource_failure
+            next_action = ('Resolve guidance.resource_failure before repeating source selection. '
+                           'The candidate discovery list is not an engine load manifest. Repeating an unchanged failed '
+                           'archive listing or selecting another script from the same unresolved archive set will not help. '
+                           'Use its exact failed paths/diagnostics and the installed format documentation to investigate one '
+                           'missing index or loader fact. Do not invent a precedence configuration or silently omit unknown archives. '
+                           + next_action)
+            state['gate_instruction'] = next_action
+        readers = [probe for probe in self.host_probes if probe.get('kind') == 'script' and probe.get('next_tool')]
+        if readers and state['stage'] == 'script_program':
+            next_action = ('A matching installed reader is available for the freshly extracted bytes. '
+                           'First execute guidance.reader_candidates[0].next_tool, then query its read_result. '
+                           'Do not copy the reader source or reimplement its structural decoder. '
+                           'Implement only the missing evidence/semantics required by the validation contract. ' + next_action)
+            state['gate_instruction'] = next_action
         state['goal'] = next_action
         return dict(state, save_preflight=preflight, missing_programs=missing,
+                    reader_candidates=readers,
+                    host_probes=self.host_probes,
                     adapter_fallbacks=fallbacks,
                     adapter_attempts=self.research.adapter_attempts(),
                     requests_without_milestone=state['exploratory_requests'], next_action=next_action)
@@ -1940,6 +2436,8 @@ class Agent:
                     continue
                 if selection.get('selected'):
                     capture(pathlib.Path(selection['selected']))
+                for source in selection.get('input_stamps', {}):
+                    capture(pathlib.Path(source))
                 if selection.get('configuration'):
                     capture(self.path('game', selection['configuration']))
         return dependencies
@@ -2042,6 +2540,8 @@ class Agent:
         try:
             result = self._dispatch(name, args)
         except Exception as error:
+            if name == 'verify_resource_selection' and isinstance(getattr(error, 'error_details', None), dict):
+                self.last_resource_failure = dict(error.error_details)
             if name == 'test_program' and args.get('kind') == 'script':
                 stale = [key for key, description in self.speaker_resource_inputs.items()
                          if self.input_description('load_script_metadata', description) != description]
@@ -2057,6 +2557,8 @@ class Agent:
             elif name == 'test_program' and args.get('kind') == 'save':
                 self.record_save_failure(args, error)
             raise
+        if name == 'verify_resource_selection':
+            self.last_resource_failure = None
         if name == 'test_program' and args.get('kind') == 'script':
             self.clear_script_failure(args)
         elif name == 'test_program' and args.get('kind') == 'save':
@@ -2148,6 +2650,22 @@ class Agent:
         self.last_save_failure = failure
 
     def _dispatch(self, name, args):
+        if name == 'lookup_verified_dialogue':
+            query, limit = args.get('text'), args.get('limit', 5)
+            source = args.get('source')
+            if (not isinstance(query, str) or not query or len(query.encode('utf-8')) > 8192
+                    or type(limit) is not int or not 1 <= limit <= 20
+                    or source is not None and not isinstance(source, str)):
+                raise ValueError('Provide exact nonempty text up to 8192 UTF-8 bytes and limit 1..20')
+            matches = [row for rows in self.parts.values() for row in rows
+                       if row.get('text') == query and (source is None or row.get('source') == source)]
+            rows = [{key: row[key] for key in ('source', 'position', 'text', 'speaker', '_native') if key in row}
+                    for row in matches[:limit]]
+            return dict(total_matches=len(matches), truncated=len(matches) > limit,
+                        rows=json.loads(json.dumps(rows)), analysis_only=True, verified_current_node=False,
+                        instruction='Reuse these verified script native records. The save must independently prove its native scope and position; neither caption matching nor choosing the first hit validates a current node.')
+        if name == 'inspect_skill_save':
+            return self.skill_save_probe(args['root'], args['path'])
         if name in ('engine_adapter_contract', 'inspect_engine_adapter', 'reuse_engine_adapter'):
             catalog = ADAPTER_LIBRARY['capabilities']()
             adapter = args.get('adapter')
@@ -2180,11 +2698,38 @@ class Agent:
                     raise ValueError('Return a compact engine-adapter inspection under 40000 UTF-8 bytes')
                 return dict(adapter_id=adapter, adapter_version=record['version'], inspection=value,
                             ok=value.get('ok', True), analysis_only=True, verified_current_node=False)
+            entry = args.get('entry_source')
+            raw_template = args['kind'] == 'save' and args.get('profile') == {'mode': 'raw_observations'}
+            if raw_template:
+                entry_tree = validate_program(entry) if isinstance(entry, str) else None
+                if entry_tree is None or not any(isinstance(node, ast.FunctionDef) and node.name == 'extract'
+                                                for node in entry_tree.body):
+                    raise ValueError('Raw save reuse needs entry_source defining extract(data, metadata); call inspect_save_state(data), then implement only current-node semantics.')
+                # Diagnose an omitted decoder call early; this syntax check is
+                # never proof of execution or a replacement for test_program.
+                if not any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                           and node.func.id == 'inspect_save_state' for node in ast.walk(entry_tree)):
+                    raise ValueError('Raw template entry must call state = inspect_save_state(data). '
+                        'metadata contains verified dialogue, NOT raw save observations. Call the supplied decoder '
+                        'instead of searching metadata for raw_title/native_stack. No program was changed.')
+            elif entry is not None:
+                raise ValueError('entry_source is only supported by the raw_observations save template')
             source = ADAPTER_LIBRARY['program'](adapter, args['kind'], args.get('profile'))
+            if raw_template:
+                source += '\n' + entry
             saved = self.dispatch('write_program', dict(kind=args['kind'], source=source))
             return dict(saved, adapter_id=adapter, adapter_version=record['version'],
                         source_sha256=hashlib.sha256(source.encode('utf-8')).hexdigest())
         if name == 'record_save_preflight':
+            if 'observations_from_probe' in args:
+                if args['observations_from_probe'] is not True or 'observations' in args:
+                    raise ValueError('Use observations_from_probe=true OR explicit observations, not both')
+                path = self.path('save', args['path'])
+                fields = self.save_probe_fields.get(str(path))
+                if not fields or fields['sha256'] != hashlib.sha256(path.read_bytes()).hexdigest():
+                    raise ValueError('No unchanged Skill probe observations for this save; call inspect_skill_save first')
+                args = dict(args, observations=fields['observations'])
+                del args['observations_from_probe']
             receipt = self.save_preflight.record(args)
             self.samples.setdefault(str(self.path('save', args['path'])), 'progress')
             atomic_json(self.work / 'save-preflight.json', self.save_preflight.serialise())
@@ -2363,13 +2908,15 @@ class Agent:
             if topic not in (*indices, 'all'):
                 raise ValueError('Choose contract topic auto, script, speaker, save, adapter, structured, resume, or all')
             if topic == 'all':
-                path, _ = CONTEXT['archive_result'](self.work, dict(complete, speaker_proofs=SPEAKER_PROOFS, adapter_evidence=EVIDENCE['ADAPTERS']['CONTRACT'], byte_codecs=codec_capabilities(), structured_literals=LITERALS['CONTRACT'], typed_documents=STRUCTURED['CONTRACT'], kag_resume=EVIDENCE['KAG_RESUME_CONTRACT']))
+                path, _ = CONTEXT['archive_result'](self.work, dict(complete, speaker_proofs=SPEAKER_PROOFS, adapter_evidence=EVIDENCE['ADAPTERS']['CONTRACT'], offset_length_array=EVIDENCE['INDEXED_TEXT']['CONTRACT'], byte_codecs=codec_capabilities(), structured_literals=LITERALS['CONTRACT'], typed_documents=STRUCTURED['CONTRACT'], kag_resume=EVIDENCE['KAG_RESUME_CONTRACT']))
                 return dict(contract_version=CONTRACT_VERSION, script_verification_version=SCRIPT_VERIFICATION_VERSION,
                             topic=topic, full_contract=path,
                             available_topics=list(indices), instruction='Read a focused topic directly, or use read_json on full_contract. All verification rules still apply.')
             result = dict(contract_version=CONTRACT_VERSION, script_verification_version=SCRIPT_VERIFICATION_VERSION, topic=topic,
                           rules=[complete['rules'][index] for index in indices[topic]],
                           available_topics=list(indices), encodings=sorted(EVIDENCE['ENCODINGS']))
+            if topic == 'script':
+                result['offset_length_array'] = 'Full schema: verification_contract(topic=all), /offset_length_array'
             if topic in ('script', 'save', 'adapter'):
                 result['typed_documents'] = dict(topic='structured', instruction='Read complete typed PSB/TJS schemas there. Typed structure is not current-state attestation.')
                 result['adapter_evidence'] = (EVIDENCE['ADAPTERS']['CONTRACT'] if topic == 'adapter' else
@@ -2378,7 +2925,8 @@ class Agent:
                 result['byte_codecs']['checksum_hypotheses'] = (
                     'galgear_codecs.adler32_xor_prefix_lengths(data,key,target_checksum,max_candidates=64): numerical hypotheses only; '
                     'caller checksum is not native archive evidence. See galgear_codecs.capabilities() for limits.')
-                result['resume_profile'] = dict(topic='resume', instruction='Read the audited KAG label/source profile there. Resume keeps empty anchors and its resume_node role.')
+                if topic != 'script':
+                    result['resume_profile'] = dict(topic='resume', instruction='Read the audited KAG label/source profile there. Resume keeps empty anchors and its resume_node role.')
             if topic == 'adapter':
                 result['adapter_evidence'] = dict(result['adapter_evidence'])
                 if 'typed_records' in result['adapter_evidence']:
@@ -2391,6 +2939,8 @@ class Agent:
                 result['proof_shapes'] = SPEAKER_PROOFS
                 result['rules'] = [complete['rules'][index] for index in (0, 4, 8, 9, 10, 11)]
             return result
+        if name == 'inspect_skill_resource':
+            return self.inspect_skill_resource(args)
         if name == 'verify_resource_selection':
             return self.verify_resource_selection(args)
         if name == 'verify_resource_selection_batch':
@@ -2403,7 +2953,13 @@ class Agent:
                     selection = self.verify_resource_selection(request)
                     results.append(dict(path=path.name, selected=selection['selected']))
                 except Exception as error:
-                    results.append(dict(path=path.name,error=str(error)[:1000]))
+                    result = dict(path=path.name, error=str(error)[:1000])
+                    if isinstance(getattr(error, 'error_details', None), dict):
+                        result['error_details'] = error.error_details
+                        self.last_resource_failure = dict(error.error_details)
+                    results.append(result)
+            if all('error' not in item for item in results):
+                self.last_resource_failure = None
             return dict(files=results, verified=sum('error' not in item for item in results))
         if name == 'load_script_metadata_batch':
             if ('source' in args) == ('helper_key' in args):
@@ -2647,7 +3203,7 @@ class Agent:
         if name == 'inspect_data':
             path = self.path(args['root'], args['path'])
             if path.stat().st_size > 32 * 1024 * 1024:
-                raise ValueError('Input exceeds 32MB')
+                raise ValueError('Input exceeds 32MB. A different parser cannot remove this limit. For archives use run_skill list/extract with a script glob; for headers use read_bytes. For verified dialogue use lookup_verified_dialogue.')
             if args['root'] == 'game' and '.galgear-ai-summary' not in path.parts:
                 self.sources.add(str(path))
             scope = args.get('target_script')
@@ -2656,8 +3212,11 @@ class Agent:
             if args['root'] == 'save':
                 metadata['dialogue'] = self.dialogue()
             value = run_parser(args['source'], path.read_bytes(), metadata)
-            if len(json.dumps(value, ensure_ascii=False)) > 40000:
-                raise ValueError('Return a compact inspection result under 40000 characters')
+            size = len(CONTEXT['encode'](value))
+            if size > 32 * 1024 * 1024:
+                raise ValueError('Inspection result exceeds 32 MiB; return a focused structural query')
+            if size > CONTEXT['MAX_TOOL_BYTES']:
+                return CONTEXT['bounded_result'](self.work, value)
             return value
         if name == 'project_memory':
             helper = self.roots['skill'] / 'scripts/memory.py'
@@ -2688,14 +3247,18 @@ class Agent:
         if name == 'run_skill':
             if not self.read_skill:
                 raise ValueError('Read skill/SKILL.md and the relevant CLI reference first')
-            cli_document = WORKFLOW['skill_document_paths'](self.roots['skill']).get('garbro')
+            archive = self.path('game', args['archive'])
+            backend = self.archive_backend(archive)
+            specialized = ARCHIVE_TOOLS['BACKENDS'].get(backend)
+            cli_document = specialized[1] if specialized else WORKFLOW['skill_document_paths'](self.roots['skill']).get('garbro')
             if cli_document:
                 document = self.documents.get(cli_document, {})
                 if (not document.get('complete') or document.get('sha256') != hashlib.sha256(
                         self.path('skill', cli_document).read_bytes()).hexdigest()):
-                    raise ValueError('Read the complete current GARbro CLI documentation with read_text(root="skill", path="'
+                    raise ValueError('Read the complete current CLI documentation with read_text(root="skill", path="'
                                      + cli_document + '"); follow next_offset before run_skill')
-            archive = self.path('game', args['archive'])
+            if specialized:
+                return self.run_specialized_archive(archive, backend, args)
             archive_info = archive.stat()
             archive_stamp = self.file_fingerprint(archive)
             # Separate versions so extracting a name table from a modified
@@ -2796,6 +3359,9 @@ class Agent:
                         output=target.relative_to(self.work).as_posix() if args['command'] == 'x' else None))
                     output.update(members=member_names[:30], member_count=len(member_names), member_inventory=inventory,
                                   sample_output=extracted_members[0].relative_to(self.work).as_posix() if extracted_members else None)
+                if extracted_members:
+                    output['reader_candidates'] = self.script_reader_candidates(
+                        [path.relative_to(self.work).as_posix() for path in extracted_members])
                 hints = WORKFLOW['reference_hints'](self.roots['skill'], [dict(path=name) for name in member_names])
                 if hints:
                     output['reference_hints'] = hints
@@ -2841,7 +3407,14 @@ class Agent:
                 raise ValueError('Select the actual UI-language transcript before writing its first parser. '
                                  'Use run_skill structured members/member_inventory and sample_output to identify exact files, '
                                  'then verify_resource_selection and inspect the selected script bytes.')
-            validate_program(source)
+            tree = validate_program(source)
+            if (kind == 'save'
+                    and any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                            and node.func.id == 'inspect_save_state' for node in ast.walk(tree))
+                    and not any(isinstance(node, ast.FunctionDef) and node.name == 'inspect_save_state' for node in ast.walk(tree))):
+                raise ValueError('Complete save source must define inspect_save_state when calling it. '
+                    'Use write_program(edits=...) to preserve the decoder, or reuse_engine_adapter with the repaired entry_source. '
+                    'No program or validation was changed.')
             current = self.work / (kind + '_extractor.py')
             if self.programs.get(kind) == source and current.is_file() and current.read_bytes().decode('utf-8') == source:
                 return dict(saved=current.name, sha256=hashlib.sha256(source.encode()).hexdigest(), reused=True)
@@ -3038,7 +3611,8 @@ class Agent:
             args = dict(args, speaker_resolution='mixed' if external and named > external else 'external' if external else 'inline' if named else 'unavailable')
             artifacts = {name: hashlib.sha256((self.work / name).read_bytes()).hexdigest() for name in ('save_extractor.py', 'script_extractor.py', 'dialogue.jsonl')}
             stamps = {path: [pathlib.Path(path).stat().st_size, pathlib.Path(path).stat().st_mtime_ns] for path in sorted(self.sources)}
-            self.done = dict(args, contract_version=CONTRACT_VERSION, save_verification_version=SAVE_VERIFICATION_VERSION,
+            route_evidence_hash = self.export_route_evidence()
+            self.done = dict(args, route_evidence_hash=route_evidence_hash, contract_version=CONTRACT_VERSION, save_verification_version=SAVE_VERIFICATION_VERSION,
                 script_verification_version=SCRIPT_VERIFICATION_VERSION,
                 dialogue_count=sum(not resume_marker(row) for row in self.dialogue()),
                 artifact_rows_count=len(self.dialogue()), resume_marker_count=sum(resume_marker(row) for row in self.dialogue()),
@@ -3137,6 +3711,8 @@ class Agent:
                 result = self.dispatch(name, arguments)
             except Exception as error:
                 result = {'error': str(error)[:5000]}
+                if isinstance(getattr(error, 'error_details', None), dict):
+                    result['error_details'] = error.error_details
                 if isinstance(error, EVIDENCE['SpeakerMetadataError']):
                     result['error_details'] = error.diagnostic
                 if isinstance(error, PREFLIGHT['PreflightRequired']):
@@ -3248,6 +3824,15 @@ The latest Host progress supplies the stage, exact remaining_work_requests (incl
                             'A title-only directory does not prove there are no story saves elsewhere.')
         user['save_candidates'] = config.get('save_candidates', [])
         user['source_inventory'] = self.source_inventory_task()
+        user['host_probes'] = self.automatic_probes()
+        user['probe_instruction'] = ('Read the host-probe JSON artifacts under work before repeating a known decoder. '
+            'The installed Skill decoded only actual current input bytes; reuse those observations and context.bin, '
+            'If the save was discovered later, call inspect_skill_save(root=save, path=<relative path>) directly; do not rewrite its decompressor. '
+            'Prefer record_save_preflight(observations_from_probe=true) with your classification/explanation and no observations array; this independently replays the exact probe fields. If supplying explicit observations instead, preserve proof/value pairs and their view verbatim. '
+            'Use the exact root/path in each probe for subsequent tool calls, never an absolute path in record_save_preflight. '
+            'Script host_probes.reuse_candidates contains concrete arguments and real sample text/speakers. Confirm their displayed-message semantics and the effective resource, then call reuse_engine_adapter and test_program before writing more temporary call/table scanners. Only investigate the specific remaining failure. '
+            'Then write/test only missing version semantics. These results never satisfy preflight or current-node validation. '
+            'Unknown versions must not be repaired by guessing a supported version.')
         self.context_system, self.context_task = system, json.dumps(user, ensure_ascii=False)
         state = self.work / 'conversation.json'
         if state.is_file():
@@ -3318,6 +3903,7 @@ The latest Host progress supplies the stage, exact remaining_work_requests (incl
                     result['validated_saves'] = self.current_validated_saves()
                     audit_validated = self.validated_saves()
                     result['rejected_samples'] = [path for path in self.samples if path not in audit_validated]
+                    result['route_evidence_hash'] = self.export_route_evidence()
                     atomic_json(result_path, result)
                     return result
             if not current_script_proof:
@@ -3422,11 +4008,23 @@ if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
     try:
-        if '--parse' in sys.argv:
+        if '--analysis-query' in sys.argv:
+            result = runpy.run_path(str(pathlib.Path(__file__).with_name('analysis_reads.py')))['query_worker'](json.load(sys.stdin), globals())
+        elif '--analysis-read' in sys.argv:
+            limit_worker_memory()
+            result = runpy.run_path(str(pathlib.Path(__file__).with_name('analysis_reads.py')))['worker'](json.load(sys.stdin), globals())
+        elif '--skill-reader' in sys.argv:
+            result = SKILL_READERS['worker'](json.load(sys.stdin))
+        elif '--skill-probe' in sys.argv:
+            result = SKILL_PROBE['inspect'](json.load(sys.stdin))
+        elif '--parse' in sys.argv:
             result = parser_worker(json.load(sys.stdin))
         else:
             config = probe_config(*sys.argv[2:6]) if len(sys.argv) > 1 and sys.argv[1] == '--probe' else json.load(sys.stdin)
-            result = Agent(config).run()
+            if config.get('mode') == 'skill_analysis':
+                result = runpy.run_path(str(pathlib.Path(__file__).with_name('analysis_agent.py')))['run'](config, globals())
+            else:
+                result = Agent(config).run()
         print(json.dumps(result, ensure_ascii=False))
     except Exception as error:
         print(str(error)[:5000], file=sys.stderr)

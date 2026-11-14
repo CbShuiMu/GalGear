@@ -14,7 +14,7 @@ import re
 VERSION = 1
 MAX_PREVIEW_BYTES = 1200
 MAX_NOTES_BYTES = 12000
-STRUCTURAL_TOOLS = {'inspect_data', 'inspect_engine_adapter', 'inspect_structured', 'inspect_archive_member', 'read_bytes', 'load_script_metadata',
+STRUCTURAL_TOOLS = {'lookup_verified_dialogue', 'inspect_data', 'inspect_engine_adapter', 'inspect_skill_save', 'inspect_skill_resource', 'inspect_structured', 'inspect_archive_member', 'read_bytes', 'load_script_metadata',
                     'verify_resource_selection', 'run_skill', 'test_program',
                     'test_program_batch'}
 NON_EVIDENCE_TOOLS = {'record_findings', 'record_script_role'}

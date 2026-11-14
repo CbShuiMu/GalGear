@@ -7,6 +7,7 @@ import re
 import zlib
 
 CODECS = runpy.run_path(str(pathlib.Path(__file__).with_name("bytecodecs.py")))
+INDEXED_TEXT = runpy.run_path(str(pathlib.Path(__file__).with_name('indexed_text_evidence.py')))
 LITERALS = runpy.run_path(str(pathlib.Path(__file__).with_name("literal_evidence.py")))
 TYPED = runpy.run_path(str(pathlib.Path(__file__).with_name("typed_evidence.py")))
 KAG = runpy.run_path(str(pathlib.Path(__file__).with_name("kag_evidence.py")))
@@ -65,6 +66,8 @@ def text_table(data, schema):
     fields: text(length_width,unit,encoding), skip(count_width,unit), fixed(length).
     This handles either field order without assuming any particular engine format.
     """
+    if schema.get('kind') == 'offset_length_array':
+        return INDEXED_TEXT['text_table'](data, schema, read_count=identifier, apply_view=view)
     offset, length = schema['offset'], schema['length']
     if schema.get('kind') == 'length_array':
         count = identifier(data, schema.get('count'))
@@ -128,7 +131,9 @@ def text_table(data, schema):
     endian = schema.get('endian', 'little')
     count = integer(data, offset, width, endian)
     if not 0 < count <= MAX_ROWS:
-        raise ValueError('Invalid table record count')
+        raise ValueError('Invalid table record count for an inline counted layout. If the native count is stored '
+                         'separately and records point into a string pool, use an indirect table kind such as '
+                         'offset_length_array; read verification_contract(topic="script") instead of guessing an inline count.')
     pos, end, result = offset + width, offset + length, []
     for _ in range(count):
         text = None
@@ -490,7 +495,7 @@ def script_rows(data, output, required_table_regions=None, speaker_resources=Non
                     and type(schema.get('length')) is int):
                 region = (schema['offset'], schema['length'])
                 if region in required:
-                    if schema.get('kind') in ('offset_array', 'length_array'):
+                    if schema.get('kind') in ('offset_array', 'length_array', 'offset_length_array'):
                         raise ValueError('Known counted table regions require complete interleaved record schemas; indirect arrays cannot replace their original structure')
                     matching_tables.add(name)
                     covered.add(region)

@@ -67,6 +67,15 @@ class StructuredResearchTests(unittest.TestCase):
         self.assertFalse(self.agent.preparation_status()['script_sample_selection']['needs_story_sample'])
         self.assertFalse(result['host_verified'])
 
+    def test_installed_reader_counts_as_exact_file_research_without_granting_validation(self):
+        result = self.classify(refs=[self.observe('inspect_skill_resource')])
+        self.assertEqual(self.agent.representative_script, dict(root='game', path='chapter.dat'))
+        self.assertFalse(result['host_verified'])
+        self.assertEqual(self.agent.parts, {})
+        self.assertEqual(self.agent.tests, {})
+        self.target.write_bytes(b'changed')
+        self.assertEqual(self.agent.current_script_roles(), {})
+
     def test_changed_input_drops_the_role_without_reusing_its_old_findings(self):
         self.classify()
         self.target.write_bytes(b'Changed bytes')

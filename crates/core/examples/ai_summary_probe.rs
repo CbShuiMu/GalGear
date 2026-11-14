@@ -6,7 +6,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let action = args.next().unwrap_or_else(|| "prepare".into());
     let config = PathBuf::from(args.next().ok_or("config path required")?);
     let root = PathBuf::from(args.next().ok_or("game directory required")?);
-    let home = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    // Examples live in target/{profile}/examples. Use the same installed Skill
+    // and host as the desktop executable, not an older source-tree checkout.
+    let executable = std::env::current_exe()?;
+    let home = executable
+        .parent()
+        .and_then(|p| p.parent())
+        .filter(|p| galgear_core::ai::runtime::available(p))
+        .map(PathBuf::from)
+        .ok_or("Build/install the desktop AI runtime beside the examples directory first")?;
     let mut settings = ConfigStore::new(config.clone()).load()?;
     let mut game = catalog::manual_game(&root.join("angeltear.exe"), "Angel Tear".into())?;
     if let Ok(saved) = catalog::load(&config.with_file_name("catalog.json"))

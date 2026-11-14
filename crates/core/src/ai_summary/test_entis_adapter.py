@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 import runpy
 import struct
+import sys
+import types
 import unittest
 from unittest import mock
 
@@ -183,6 +185,25 @@ class EntisAdapterTests(unittest.TestCase):
         self.assertEqual(output['functions'][0]['name'],'module@synthetic_scope')
         with self.assertRaises(ValueError):
             ADAPTER['inspect_script'](raw,{},dict(inspection=dict(limit=100)))
+
+    def test_raw_save_template_reuses_decoder_without_qualifying_unknown_title(self):
+        data, unused = fixture(version=20250210)
+        observed = ADAPTER['raw_save_observations'](data, identity_decoder)
+        self.assertEqual(observed['raw_title']['fields'][0]['value'], 20250210)
+        self.assertFalse(observed['verified_current_node'])
+        self.assertFalse(observed['primitive_candidates']['complete_slot_walk'])
+        source = ADAPTER['program']('save', dict(mode='raw_observations'))
+        source += '\ndef extract(data, metadata):\n return inspect_save_state(data)\n'
+        HOST['validate_program'](source)
+        namespace = {}
+        with mock.patch.dict(sys.modules, galgear_codecs=types.SimpleNamespace(decode=identity_decoder)):
+            exec(source, namespace)
+            self.assertEqual(namespace['extract'](data, {}), observed)
+        self.assertNotIn('runpy', source)
+        self.assertNotIn('pathlib', source)
+        self.assertNotIn('current_caption', observed)
+        with self.assertRaises(ValueError):
+            ADAPTER['program']('save', dict(mode='raw_observations', caption_field=3))
 
     def test_save_inspection_emits_preflight_proofs_without_dialogue(self):
         data,unused = fixture()

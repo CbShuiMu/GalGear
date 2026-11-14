@@ -117,6 +117,7 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
         Dialog::Picker { .. } => "folders.add_games",
         Dialog::Delete { .. } => "folders.delete",
         Dialog::Exclude { .. } => "bulk.exclude",
+        Dialog::RemoveLibrary { .. } => "settings.remove_folder",
         Dialog::Warnings => "library.warnings_title",
         Dialog::Failures => "bulk.failures",
         Dialog::FolderFailures { .. } => "library.folder_failures",
@@ -306,6 +307,15 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
                 )
             );
         }
+        Dialog::RemoveLibrary { path } => {
+            write!(
+                html,
+                "<p>{}</p><p>{}</p>",
+                esc(path),
+                t(app, "settings.remove_folder_tip")
+            )
+            .unwrap();
+        }
         Dialog::Warnings => {
             html.push_str("<ul>");
             for warning in &app.catalog.warnings {
@@ -383,6 +393,11 @@ pub(crate) fn dialog(html: &mut String, app: &App) {
         Dialog::Edit { .. } => Some(("folder-save", "common.save", app.busy())),
         Dialog::Delete { .. } => Some(("folder-delete-confirm", "common.confirm", app.busy())),
         Dialog::Exclude { .. } => Some(("batch-exclude-confirm", "context.delete", app.busy())),
+        Dialog::RemoveLibrary { .. } => Some((
+            "remove-folder-confirm",
+            "common.confirm",
+            app.busy() || app.library.scanning,
+        )),
         Dialog::Tags { .. } => Some(("tag-filter-apply", "common.confirm", false)),
         _ => None,
     };

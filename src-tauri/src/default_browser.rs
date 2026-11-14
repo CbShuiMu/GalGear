@@ -1,4 +1,4 @@
-//! Open a generated SVG with the default web browser's registered launch behavior.
+//! Open a generated route document with the default web browser's registered launch behavior.
 use galgear_i18n::Message;
 use std::path::Path;
 
@@ -6,16 +6,20 @@ fn failed() -> Message {
     Message::new("route.open_failed")
 }
 
-fn svg_url(path: &Path) -> Result<reqwest::Url, Message> {
-    if path.extension().is_none_or(|extension| extension != "svg") || !path.is_file() {
+fn route_url(path: &Path) -> Result<reqwest::Url, Message> {
+    if !matches!(
+        path.extension().and_then(|e| e.to_str()),
+        Some("svg" | "html")
+    ) || !path.is_file()
+    {
         return Err(failed());
     }
     let path = path.canonicalize().map_err(|_| failed())?;
     reqwest::Url::from_file_path(path).map_err(|_| failed())
 }
 
-pub(crate) fn open_svg(path: &Path) -> Result<(), Message> {
-    let url = svg_url(path)?;
+pub(crate) fn open_route(path: &Path) -> Result<(), Message> {
+    let url = route_url(path)?;
     // Shell extensions may require a COM apartment. A fresh thread keeps its
     // lifetime independent of Tauri's async runtime and its existing apartments.
     std::thread::Builder::new()
@@ -153,7 +157,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("路线 #1 & 100%.svg");
         std::fs::write(&path, "<svg xmlns=\"http://www.w3.org/2000/svg\"/>").unwrap();
-        let url = svg_url(&path).unwrap();
+        let url = route_url(&path).unwrap();
         assert_eq!(url.scheme(), "file");
         assert!(url.fragment().is_none());
         assert!(url.query().is_none());
@@ -164,12 +168,20 @@ mod tests {
     }
 
     #[test]
-    fn missing_or_non_svg_files_are_rejected_before_launch() {
+    fn offline_html_uses_the_same_default_browser_path() {
         let root = tempfile::tempdir().unwrap();
-        assert!(svg_url(&root.path().join("missing.svg")).is_err());
-        let path = root.path().join("route.html");
+        let path = root.path().join("route-map.html");
+        std::fs::write(&path, "<!doctype html>").unwrap();
+        assert!(route_url(&path).is_ok());
+    }
+
+    #[test]
+    fn missing_or_unsupported_files_are_rejected_before_launch() {
+        let root = tempfile::tempdir().unwrap();
+        assert!(route_url(&root.path().join("missing.svg")).is_err());
+        let path = root.path().join("route.exe");
         std::fs::write(&path, "html").unwrap();
-        assert!(svg_url(&path).is_err());
+        assert!(route_url(&path).is_err());
     }
 
     #[cfg(windows)]
@@ -198,6 +210,6 @@ mod tests {
     fn opens_saved_svg_in_default_browser() {
         let path = std::env::var_os("GALGEAR_ROUTE_MAP_SMOKE_FILE")
             .expect("Set GALGEAR_ROUTE_MAP_SMOKE_FILE to an existing SVG for this manual test");
-        open_svg(Path::new(&path)).unwrap();
+        open_route(Path::new(&path)).unwrap();
     }
 }

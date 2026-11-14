@@ -515,15 +515,14 @@ fn configuration(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
         return;
     }
     html.push_str("<dl class=\"configuration-summary\">");
+    let executable = game.executable.as_deref().unwrap_or_default();
+    write!(html, r#"<div><dt>{}</dt><dd><button type="button" class="configuration-executable" data-action="launcher-edit" data-value="{}" title="{}" {}>{}</button></dd></div>"#,
+        t(app, "detail.executable"), esc(&game.id), esc(executable),
+        if app.busy() || !game.available { "disabled" } else { "" },
+        esc(value(app, file_name(executable))),
+    ).unwrap();
     let arguments = edit.arguments.join(" ");
     for (label, text) in [
-        (
-            "detail.executable",
-            game.executable
-                .as_deref()
-                .map(file_name)
-                .unwrap_or_default(),
-        ),
         ("edit.args", arguments.as_str()),
         (
             "edit.launcher",

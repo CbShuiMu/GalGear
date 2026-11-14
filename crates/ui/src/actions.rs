@@ -349,12 +349,6 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 );
             }
         }
-        "remove-folder" => issue(
-            app,
-            Pending::Remove,
-            "remove_library_folder",
-            json!({"path": value}),
-        ),
         "sort" | "sort-direction" => {
             let size = app.settings.card_size;
             let descending = app.settings.sort_descending();

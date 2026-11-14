@@ -251,7 +251,7 @@ class SharedPipelineTests(unittest.TestCase):
 
     def test_duplicate_archive_member_requires_verified_configuration_priority(self):
         for name in ('base.arc', 'patch.arc'):
-            (self.root / name).write_bytes(b'fixture')
+            (self.root / name).write_bytes(name.encode())
         (self.root / 'load.xml').write_bytes(b'<archive path="patch.arc"/><archive path="base.arc"/>')
         self.agent.config['inventory'] = [dict(path=str(self.root / n)) for n in ('base.arc', 'patch.arc')]
         listing = dict(exit_code=0, stdout=' [00000000] 10 scene.bin\n')

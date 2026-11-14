@@ -323,7 +323,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             issue(&mut app, Pending::Account, "refresh_fan_status", json!({}));
                         }
                     }
-                    Pending::Bootstrap | Pending::Add | Pending::Remove => {
+                    Pending::Bootstrap | Pending::Add => {
                         let data: Bootstrap =
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         apply_settings(&mut app, data.settings, id);
@@ -343,6 +343,19 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                         }
                         if !matches!(kind, Pending::Bootstrap) {
                             app.library.path_input.clear();
+                            show_toast(&mut app, Message::new("notice.library_saved"), false);
+                        }
+                    }
+                    Pending::Remove => {
+                        let data: crate::models::RemovedLibrary =
+                            serde_json::from_str(payload).map_err(|error| error.to_string())?;
+                        apply_settings(&mut app, data.settings, id);
+                        playtime::replace_catalog(&mut app.catalog, data.catalog);
+                        app.library.path_input.clear();
+                        crate::startup::refresh_library(&mut app);
+                        if let Some(warning) = data.warning {
+                            show_toast(&mut app, warning, true);
+                        } else {
                             show_toast(&mut app, Message::new("notice.library_saved"), false);
                         }
                     }

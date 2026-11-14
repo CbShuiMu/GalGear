@@ -25,9 +25,11 @@ PREPARATION_REASONING_EFFORT = 'max'
 
 
 def preparation_reasoning_effort(stage, capabilities, repair=False):
-    """Spend less on setup/research, retaining strongest reasoning for repairs."""
+    """Use bounded effort for routine work; escalate actual parser repairs."""
     desired = 'max' if repair else {
-        'prerequisites': 'low', 'finish': 'low', 'resources': 'high',
+        'prerequisites': 'low', 'save_preflight': 'low', 'finish': 'low', 'resources': 'low',
+        'script_program': 'high', 'save_program': 'high',
+        'script_validation': 'high', 'save_validation': 'high', 'speaker_review': 'high',
     }.get(stage, 'max')
     levels = capabilities.get('effort', {}).get('supported_levels')
     if capabilities.get('status') != 'available' or not isinstance(levels, list):
@@ -164,8 +166,9 @@ def complete(config, messages, tools, max_tokens=12000, timeout=300):
             effort = config.get('reasoning_effort', PREPARATION_REASONING_EFFORT)
             if effort not in ('low', 'high', 'max'):
                 raise failure('configuration')
-            payload.update(max_tokens=max_tokens, thinking={'type': 'enabled'},
-                           reasoning_effort=effort)
+            payload.update(max_tokens=max_tokens, thinking={'type': 'enabled' if config.get('thinking_enabled',True) else 'disabled'})
+            if config.get('thinking_enabled',True):
+                payload['reasoning_effort']=effort
         else:
             endpoint = 'https://api.openai.com/v1/chat/completions'
             payload.update(max_completion_tokens=max_tokens, tool_choice='auto')

@@ -170,14 +170,10 @@ mod tests {
 
     #[test]
     fn stale_scan_catalog_keeps_the_final_playtime_checkpoint() {
-        let mut current = Catalog {
-            games: vec![game("Original", 7200, Some(200))],
-            ..Default::default()
-        };
-        let incoming = Catalog {
-            games: vec![game("Rescanned", 3600, Some(100))],
-            ..Default::default()
-        };
+        let mut current = Catalog::default();
+        current.games = vec![game("Original", 7200, Some(200))];
+        let mut incoming = Catalog::default();
+        incoming.games = vec![game("Rescanned", 3600, Some(100))];
 
         replace_catalog(&mut current, incoming);
 
@@ -210,14 +206,10 @@ mod tests {
 
     #[test]
     fn newer_catalog_playtime_is_not_replaced_by_older_local_values() {
-        let mut current = Catalog {
-            games: vec![game("Original", 3600, Some(100))],
-            ..Default::default()
-        };
-        let incoming = Catalog {
-            games: vec![game("Refreshed", 7200, Some(200))],
-            ..Default::default()
-        };
+        let mut current = Catalog::default();
+        current.games = vec![game("Original", 3600, Some(100))];
+        let mut incoming = Catalog::default();
+        incoming.games = vec![game("Refreshed", 7200, Some(200))];
 
         replace_catalog(&mut current, incoming);
 

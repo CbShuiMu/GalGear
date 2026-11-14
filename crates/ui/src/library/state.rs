@@ -47,6 +47,7 @@ impl StatusFilter {
 }
 
 pub(crate) struct State {
+    pub(super) search_index: std::cell::RefCell<super::query::SearchIndex>,
     pub(crate) collection: Option<String>,
     pub(crate) size_request: u32,
     pub(crate) display_request: u32,
@@ -76,6 +77,7 @@ pub(crate) struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            search_index: Default::default(),
             collection: None,
             size_request: 0,
             display_request: 0,

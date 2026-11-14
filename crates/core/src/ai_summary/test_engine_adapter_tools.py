@@ -39,6 +39,8 @@ class EngineAdapterToolTests(unittest.TestCase):
 
         def program(kind, profile):
             self.calls.append(dict(program_kind=kind, profile=copy.deepcopy(profile)))
+            if kind == 'save' and profile == {'mode': 'raw_observations'}:
+                return 'def inspect_save_state(data):\n return {}\n'
             return 'import json\ndef extract(data, metadata):\n return json.loads(' + repr(json.dumps(profile)) + ')\n'
 
         self.implementation = dict(describe=lambda: dict(profile=dict(variant='synthetic')),
@@ -68,10 +70,50 @@ class EngineAdapterToolTests(unittest.TestCase):
         self.assertEqual(self.agent.programs, {})
         self.assertEqual(self.agent.tests, {})
 
+    def test_raw_save_reuse_requires_a_sandboxed_semantic_entry(self):
+        args = dict(adapter='entis_cotopha', kind='save', profile=dict(mode='raw_observations'))
+        with self.assertRaisesRegex(ValueError, 'entry_source'):
+            self.agent.dispatch('reuse_engine_adapter', args)
+        with self.assertRaises(ValueError):
+            self.agent.dispatch('reuse_engine_adapter', dict(args, entry_source='import os\ndef extract(data, metadata): return {}'))
+        self.assertEqual(self.agent.programs, {})
+        entry = 'def extract(data, metadata):\n return {"source":"","line":0,"anchors":[],"warnings":[]}'
+        self.agent.dispatch('verification_contract', {})
+        with self.assertRaisesRegex(ValueError, 'must call state = inspect_save_state'):
+            self.agent.dispatch('reuse_engine_adapter', dict(args, entry_source=entry))
+        self.assertEqual(self.agent.programs, {})
+        entry = 'def extract(data, metadata):\n state = inspect_save_state(data)\n return {"source":"","line":0,"anchors":[],"warnings":[]}'
+        self.agent.dispatch('reuse_engine_adapter', dict(args, entry_source=entry))
+        self.assertTrue(self.agent.programs['save'].endswith(entry))
+        self.assertEqual(self.agent.tests, {})
+
     def test_contract_rejects_oversized_description_instead_of_hiding_required_fields(self):
         self.implementation['describe'] = lambda: dict(schema='x' * 8192)
         with self.assertRaisesRegex(ValueError, '8192-byte'):
             self.agent.dispatch('engine_adapter_contract', dict(adapter='entis_cotopha'))
+
+    def test_stationary_search_cursor_is_diagnosed_before_execution(self):
+        source = 'def extract(data, metadata):\n o = data.find(b"x")\n while o >= 0:\n  data.find(b"y", o)\n return {}'
+        with self.assertRaisesRegex(ValueError, 'line 3 never updates counter o'):
+            host.validate_program(source)
+        for repair in ('o = data.find(b"x", o + 1)', 'o -= 1', 'break', 'return {}', 'raise ValueError("missing field")'):
+            host.validate_program(source.replace('data.find(b"y", o)', repair))
+        host.validate_program('def extract(data, metadata):\n items = [1]\n while items:\n  items.pop()\n return {}')
+
+    def test_incomplete_replacement_keeps_the_saved_decoder_and_validation(self):
+        self.agent.dispatch('verification_contract', {})
+        entry = 'def extract(data, metadata):\n return inspect_save_state(data)'
+        with self.assertRaisesRegex(ValueError, 'Complete save source must define inspect_save_state'):
+            self.agent.dispatch('write_program', dict(kind='save', source=entry))
+        self.assertEqual(self.agent.programs, {})
+        original = 'def inspect_save_state(data):\n return {}\ndef extract(data, metadata):\n return inspect_save_state(data)'
+        self.agent.dispatch('write_program', dict(kind='save', source=original))
+        self.agent.tests['existing'] = {'verified': True}
+        with self.assertRaisesRegex(ValueError, 'Complete save source must define inspect_save_state'):
+            self.agent.dispatch('write_program', dict(kind='save', source=entry))
+        self.assertEqual(self.agent.programs['save'], original)
+        self.assertEqual((self.agent.work / 'save_extractor.py').read_text(encoding='utf-8'), original)
+        self.assertEqual(self.agent.tests, {'existing': {'verified': True}})
 
     def test_adapter_paths_and_unknown_ids_cannot_select_external_code(self):
         for adapter in ('../outside.py', 'C:\\outside.py', 'entis_adapter.py', 'unknown'):

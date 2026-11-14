@@ -3,6 +3,7 @@ mod actions;
 mod dialogs;
 pub(crate) mod display;
 pub(crate) mod folders;
+mod query;
 pub(crate) mod size;
 mod state;
 mod view;
@@ -25,6 +26,7 @@ pub(crate) enum Dialog {
     Picker { ids: Vec<String> },
     Delete { id: String },
     Exclude { ids: Vec<String> },
+    RemoveLibrary { path: String },
     Warnings,
     Failures,
     FolderFailures { failed: Vec<crate::models::LibraryFolderFailure>, page: usize },
@@ -125,23 +127,19 @@ pub(crate) fn matching<'a>(
         return Vec::new();
     }
     let query = state.search.to_lowercase();
-    let selected_tags: BTreeSet<_> = state
-        .tag_filter
-        .iter()
-        .map(|tag| galgear_tags::key(tag))
-        .collect();
-    let selected_brands: BTreeSet<_> = state
-        .brand_filter
-        .iter()
-        .map(|brand| galgear_tags::key(brand))
-        .collect();
+    let candidates = state.search_index.borrow_mut().matching(
+        catalog,
+        &query,
+        &state.tag_filter,
+        &state.brand_filter,
+    );
     let folder = state
         .collection
         .as_ref()
         .and_then(|id| settings.collections.iter().find(|f| &f.id == id));
-    let mut games: Vec<_> = catalog
-        .games
-        .iter()
+    let mut games: Vec<_> = candidates
+        .into_iter()
+        .map(|index| &catalog.games[index])
         .filter(|g| {
             crate::game_setup::visible(settings, g)
                 && (state.collection.is_none() || folder.is_some_and(|f| f.games.contains(&g.id)))
@@ -149,22 +147,6 @@ pub(crate) fn matching<'a>(
                 && state.status_filter.favorite.is_none_or(|favorite| {
                     settings.collections.iter().any(|folder| folder.games.contains(&g.id)) == favorite
                 })
-                && (g.title.to_lowercase().contains(&query)
-                    || g.aliases
-                        .iter()
-                        .any(|alias| alias.to_lowercase().contains(&query)))
-                && (selected_brands.is_empty()
-                    || selected_brands.is_subset(
-                        &filter_brands(g)
-                            .map(|brand| galgear_tags::key(&brand))
-                            .collect(),
-                    ))
-                && (selected_tags.is_empty()
-                    || selected_tags.is_subset(
-                        &filter_tags(g)
-                            .map(|name| galgear_tags::key(&name))
-                            .collect(),
-                    ))
         })
         .collect();
     sort_games(&mut games, settings);

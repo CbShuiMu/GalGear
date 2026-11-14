@@ -7,6 +7,7 @@ import importlib.util
 import json
 import pathlib
 import re
+import struct
 import tempfile
 import unittest
 from unittest import mock
@@ -36,6 +37,114 @@ class ResourceDiscoveryTests(unittest.TestCase):
     @staticmethod
     def normalized(names):
         return [name.replace('\\', '/') for name in names]
+
+    def test_split_pfs_is_routed_by_header_and_verified_from_member_inventory(self):
+        archive = self.root / 'localized.pfs.015'
+        archive.write_bytes(b'pf6' + bytes(128))
+        executable = self.root / 'tools/pfs-rs/pfs-rs.exe'
+        executable.parent.mkdir(parents=True)
+        executable.touch()
+        document = self.root / 'commands/pfs-rs.md'
+        document.parent.mkdir()
+        document.write_text('Read-only fixture CLI', encoding='utf-8')
+        self.agent = host.Agent(dict(self.config, inventory=[dict(path=str(archive))]))
+        self.agent.read_skill = True
+        self.agent.dispatch('read_text', dict(root='skill', path='commands/pfs-rs.md'))
+        with mock.patch.object(host.subprocess, 'run', return_value=mock.Mock(returncode=0, stdout=b'script\\scene.ast\n')) as process:
+            listed = self.agent.dispatch('run_skill', dict(command='l', archive=archive.name))
+            self.assertEqual(listed['backend'], 'pfs')
+            selection = self.agent.dispatch('verify_resource_selection', dict(script_name='scene.ast', selected=archive.name))
+            self.assertEqual(selection['selected'], str(archive))
+            process.assert_called_once()
+
+    def test_siglus_index_works_with_custom_suffix_and_rejects_invalid_member_extent(self):
+        archive = self.root / 'localized.custom'
+        h = [0] * 23
+        h[0], h[13:21] = 92, [92, 1, 100, 1, 110, 1, 118, 1]
+        def fixture(length):
+            return struct.pack('<23i', *h) + struct.pack('<ii', 0, 5) + '場面001'.encode('utf-16-le') + struct.pack('<ii', 0, length) + b'data'
+        archive.write_bytes(fixture(4))
+        self.assertEqual(host.ARCHIVE_TOOLS['classify'](archive), 'siglus')
+        self.assertEqual(host.ARCHIVE_TOOLS['scene_members'](archive), ['場面001.dat'])
+        with mock.patch.object(self.agent, 'archive_backend', return_value='siglus'):
+            with self.assertRaisesRegex(ValueError, 'actual member basename'):
+                self.agent.verify_resource_selection(dict(script_name=archive.name, selected=archive.name))
+        archive.write_bytes(fixture(5))
+        with self.assertRaisesRegex(ValueError, 'payload extent'):
+            host.ARCHIVE_TOOLS['scene_members'](archive)
+
+    def test_specialized_archive_rejects_unsafe_names_before_extraction(self):
+        for names in (['../outside'], ['C:/outside'], ['abc', 'ABC'], ['dir/CON.txt']):
+            with self.subTest(names=names), self.assertRaises(ValueError):
+                host.ARCHIVE_TOOLS['safe_members'](names)
+
+    def test_large_pfs_extraction_uses_selective_mod_backend(self):
+        marker = self.root / 'tools/GARbro-cli/provenance.json'
+        marker.parent.mkdir(parents=True)
+        marker.write_text('{"distribution":"GARbro-Mod-1.0.2.2"}', encoding='utf-8')
+        original = self.agent.run_specialized_archive
+        with mock.patch.dict(host.ARCHIVE_TOOLS, MAX_SPECIALIZED_ARCHIVE=1):
+            with mock.patch.object(self.agent, 'run_specialized_archive', return_value={'selective': True}) as run:
+                result = original(self.archive, 'pfs', dict(command='x', filter='*.ast'))
+        self.assertTrue(result['selective'])
+        self.assertEqual(run.call_args.args[1], 'garbro-mod')
+
+    def test_garbro_mod_uses_positional_member_names_and_checks_files(self):
+        tool = self.root / 'tools/GARbro-cli'
+        tool.mkdir(parents=True)
+        (tool / 'GARbro.Console.exe').touch()
+        (tool / 'provenance.json').write_text('{"distribution":"GARbro-Mod-1.0.2.2"}', encoding='utf-8')
+        doc = self.root / 'commands/garbro.md'
+        doc.parent.mkdir()
+        doc.write_text('Mod fixture reference', encoding='utf-8')
+        self.agent.dispatch('read_text', dict(root='skill', path='commands/garbro.md'))
+        def run(argv, **kwargs):
+            self.assertEqual(pathlib.Path(argv[1]), self.archive)
+            if len(argv) == 2:
+                return mock.Mock(returncode=0, stdout=b'    7 [0000ABCD] scene.ks\r\n')
+            self.assertEqual(argv[2:], ['scene.ks'])
+            (kwargs['cwd'] / 'scene.ks').write_bytes(b'Current')
+            return mock.Mock(returncode=0)
+        with mock.patch.object(host.subprocess, 'run', side_effect=run) as process:
+            result = self.agent.dispatch('run_skill', dict(command='x', archive=self.archive.name, filter='*.ks'))
+            self.assertEqual(self.agent.path('work', result['sample_output']).read_bytes(), b'Current')
+            again = self.agent.dispatch('run_skill', dict(command='x', archive=self.archive.name, filter='*.ks'))
+            self.assertTrue(again['reused'])
+            self.assertEqual(process.call_count, 2)
+
+    def test_mod_lists_duplicate_names_but_extracts_unique_selected_members(self):
+        listing = b' 7 [00000000] script\\scene.ks\n 1 [00000007] duplicate.bin\n 1 [00000008] duplicate.bin\n'
+        names = host.ARCHIVE_TOOLS['mod_members'](listing)
+        self.assertEqual(names, ['script\\scene.ks', 'duplicate.bin', 'duplicate.bin'])
+        selected = host.ARCHIVE_TOOLS['selected'](names, '*.ks')
+        self.assertEqual(selected, ['script\\scene.ks'])
+        self.assertEqual(host.ARCHIVE_TOOLS['safe_members'](selected), ['script/scene.ks'])
+        with self.assertRaisesRegex(ValueError, 'duplicate'):
+            host.ARCHIVE_TOOLS['safe_members'](names)
+        tool = self.root / 'tools/GARbro-cli'
+        tool.mkdir(parents=True)
+        (tool / 'GARbro.Console.exe').touch()
+        (tool / 'provenance.json').write_text('{"distribution":"GARbro-Mod-1.0.2.2"}', encoding='utf-8')
+        document = self.root / 'commands/garbro.md'
+        document.parent.mkdir()
+        document.write_text('Fixture CLI document', encoding='utf-8')
+        self.agent.dispatch('read_text', dict(root='skill', path='commands/garbro.md'))
+        def run(argv, **kwargs):
+            if len(argv) == 2:
+                return mock.Mock(returncode=0, stdout=listing)
+            self.assertEqual(argv[2:], ['script\\scene.ks'])
+            target = kwargs['cwd'] / 'script/scene.ks'
+            target.parent.mkdir()
+            target.write_bytes(b'Current')
+            return mock.Mock(returncode=0)
+        with mock.patch.object(host.subprocess, 'run', side_effect=run) as process:
+            result = self.agent.dispatch('run_skill', dict(command='l', archive=self.archive.name))
+            self.assertEqual(result['member_count'], 3)
+            result = self.agent.dispatch('run_skill', dict(command='x', archive=self.archive.name, filter='*.ks'))
+            self.assertEqual(self.agent.path('work', result['sample_output']).read_bytes(), b'Current')
+            with self.assertRaisesRegex(ValueError, 'ordinal exporter'):
+                self.agent.dispatch('run_skill', dict(command='x', archive=self.archive.name, filter='*.bin'))
+            self.assertEqual(process.call_count, 2)
 
     def garbro(self, command, **kwargs):
         """Replace only the absent process, retaining the real host boundary."""
@@ -234,6 +343,114 @@ class ResourceDiscoveryTests(unittest.TestCase):
                             ('test_program_batch', {})]:
             with self.subTest(tool=name), self.assertRaisesRegex(ValueError, 'GLOB matched no files'):
                 self.agent.dispatch(name, dict(root='game', path='.', filter='nonexistent', **extra))
+
+    def test_identical_backup_needs_no_artificial_precedence_but_changed_bytes_do(self):
+        backup = self.root / 'backup/data.arc'
+        backup.parent.mkdir()
+        backup.write_bytes(self.archive.read_bytes())
+        self.agent.config['inventory'].append(dict(path=str(backup)))
+        listing = dict(exit_code=0, stdout=' [00000000] 7 scene.bin\n')
+        args = dict(script_name='scene.bin', selected='data.arc')
+        with mock.patch.object(self.agent, 'dispatch', return_value=listing):
+            result = self.agent.verify_resource_selection(args)
+            self.assertEqual(result['equivalent_sources'], [[str(self.archive), str(backup)]])
+            self.assertIn(str(backup), result['input_stamps'])
+            before = self.agent.script_dependencies(self.archive)
+            self.assertIn(str(backup), before)
+            backup.write_bytes(b'other generic archive fixture')
+            self.assertNotEqual(before, self.agent.script_dependencies(self.archive))
+            with self.assertRaisesRegex(ValueError, 'Distinct candidates'):
+                self.agent.verify_resource_selection(args)
+
+    def test_conflicting_sources_reject_directory_binary_and_generated_configuration(self):
+        patch = self.root / 'patch.arc'
+        patch.write_bytes(b'different fixture')
+        self.agent.config['inventory'].append(dict(path=str(patch)))
+        generated = self.root / '.galgear-ai-summary/inventory.json'
+        generated.parent.mkdir()
+        generated.write_text('data.arc patch.arc', encoding='utf-8')
+        (self.root / 'binary.cfg').write_bytes(b'data.arc\0patch.arc')
+        (self.root / 'library.dll').write_bytes(b'MZ\x90\0' + bytes(60))
+        listing = dict(exit_code=0, stdout=' [00000000] 7 scene.bin\n')
+        with mock.patch.object(self.agent, 'dispatch', return_value=listing):
+            for config in ('.', '.galgear-ai-summary/inventory.json', 'binary.cfg'):
+                with self.subTest(config=config), self.assertRaisesRegex(ValueError, 'configuration'):
+                    self.agent.verify_resource_selection(dict(script_name='scene.bin', selected='data.arc',
+                                                             configuration=config, priority='first'))
+            for encoding in ('utf-8', 'utf-16-le', 'gb18030'):
+                with self.subTest(encoding=encoding), self.assertRaisesRegex(ValueError, 'Changing text encodings'):
+                    self.agent.verify_resource_selection(dict(script_name='scene.bin', selected='data.arc',
+                        configuration='library.dll', encoding=encoding, priority='first'))
+
+    def test_unreadable_candidate_preserves_other_candidates_and_actionable_scope_failure(self):
+        unknown = self.root / 'nested/unknown.arc'
+        unknown.parent.mkdir()
+        unknown.write_bytes(b'unknown fixture')
+        self.agent.config['inventory'].insert(0, dict(path=str(unknown)))
+        original = self.agent._dispatch
+        listing = dict(exit_code=0, stdout=' [00000000] 7 scene.bin\n')
+        calls = []
+        def dispatch(name, arguments):
+            if name != 'run_skill':
+                return original(name, arguments)
+            calls.append(arguments['archive'])
+            if pathlib.Path(arguments['archive']).name == 'unknown.arc':
+                return dict(exit_code=2, stdout='', stderr='unrecognized index variant')
+            return listing
+        args = dict(script_name='scene.bin', selected='data.arc')
+        with mock.patch.object(self.agent, '_dispatch', side_effect=dispatch):
+            with self.assertRaisesRegex(ValueError, 'not proof') as failure:
+                self.agent.dispatch('verify_resource_selection', args)
+        details = failure.exception.error_details
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(details['category'], 'resource_inventory_incomplete')
+        self.assertEqual(details['confirmed_candidates'], ['data.arc'])
+        self.assertEqual(details['unresolved_candidates'][0]['error'], 'unrecognized index variant')
+        self.assertEqual(self.agent.resource_selections, {})
+        self.assertEqual(self.agent.work_guidance()['resource_failure'], details)
+        self.assertIn('unchanged', self.agent.work_guidance()['next_action'])
+        # A successful fresh listing can resolve this failure. Merely recording
+        # the failed listing never promotes or excludes any candidate.
+        def repaired(name, arguments):
+            if name != 'run_skill':
+                return original(name, arguments)
+            return (dict(exit_code=0, stdout=' [00000000] 7 image.bin\n')
+                    if pathlib.Path(arguments['archive']).name == 'unknown.arc' else listing)
+        with mock.patch.object(self.agent, '_dispatch', side_effect=repaired):
+            self.agent.dispatch('verify_resource_selection', args)
+        self.assertIsNone(self.agent.last_resource_failure)
+        self.assertEqual(self.agent.resource_selections['scene.bin']['selected'], str(self.archive))
+
+    def test_extracted_native_header_offers_an_existing_reader_with_exact_arguments(self):
+        reader = self.root / 'scripts/parse_ast_tables.py'
+        reader.parent.mkdir()
+        reader.write_text('# installed fixture reader', encoding='utf-8')
+        self.members = {'chapter.ast': b'ast={text={}}'}
+        with mock.patch.object(host.subprocess, 'run', side_effect=self.garbro):
+            result = self.agent.dispatch('run_skill', dict(command='x', archive='data.arc', filter='*.ast'))
+            self.agent.dispatch('verify_resource_selection', dict(script_name='chapter.ast', selected='data.arc'))
+        candidate = result['reader_candidates'][0]
+        self.assertEqual(candidate['next_tool']['function'], 'inspect_skill_resource')
+        self.assertEqual(candidate['next_tool']['arguments'], dict(reader='ast_tables', root='work', path=result['sample_output']))
+        self.assertIn('reader_candidates[0].next_tool', self.agent.work_guidance()['next_action'])
+        self.assertEqual(self.agent.parts, {})
+        self.assertEqual(self.agent.tests, {})
+        with mock.patch.dict(host.SKILL_READERS, run=mock.Mock(return_value=dict(source_sha256='0'*64, reader='ast_tables'))):
+            inspected = self.agent.dispatch('inspect_skill_resource', candidate['next_tool']['arguments'])
+        self.assertNotIn('next_tool', candidate)
+        self.assertEqual(candidate['read_result'], inspected['read_result'])
+
+    def test_large_inspection_is_archived_and_paginated_without_becoming_verified_data(self):
+        result = self.agent.dispatch('inspect_data', dict(root='game', path='data.arc',
+            source='def extract(data, metadata): return {"rows":[{"n":i,"value":"value"*50} for i in range(300)]}'))
+        self.assertTrue(result['truncated'])
+        self.assertEqual(result['read_result']['pointer'], '')
+        original = json.loads(self.agent.path('work', result['full_output']).read_text('utf-8'))
+        self.assertEqual(len(original['rows']), 300)
+        page = self.agent.dispatch('read_json', dict(result['read_result'], pointer='/rows', offset=299, limit=1))
+        self.assertEqual(page['items'], [{'n':299, 'value':'value'*50}])
+        self.assertEqual(self.agent.parts, {})
+        self.assertEqual(self.agent.tests, {})
 
 
 if __name__ == '__main__':

@@ -166,8 +166,22 @@ pub fn complete(
     input: &str,
     json: bool,
 ) -> Result<String, Message> {
+    complete_with_output_limit(provider, token, model, system, input, json, 8192)
+}
+
+/// 用于有界结构化分析；上限包含输出 token，截断内容仍不得作为完整结果返回。
+pub(crate) fn complete_with_output_limit(
+    provider: &str,
+    token: &str,
+    model: &str,
+    system: &str,
+    input: &str,
+    json: bool,
+    max_output_tokens: u32,
+) -> Result<String, Message> {
     validate_token(token)?;
-    let (url, body) = completion_request(provider, model, system, input, json)?;
+    let (url, mut body) = completion_request(provider, model, system, input, json)?;
+    set_output_limit(&mut body, provider, max_output_tokens);
     let client = client_builder(provider)?
         .connect_timeout(Duration::from_secs(15))
         .timeout(Duration::from_secs(180))
@@ -175,6 +189,15 @@ pub fn complete(
         .build()
         .map_err(|_| Message::new("ai.network_error"))?;
     complete_with_client(&client, url, token, &body, Duration::from_millis(500))
+}
+
+fn set_output_limit(body: &mut serde_json::Value, provider: &str, limit: u32) {
+    let field = if provider == "openai" {
+        "max_completion_tokens"
+    } else {
+        "max_tokens"
+    };
+    body[field] = serde_json::json!(limit);
 }
 
 fn completion_request(
@@ -596,6 +619,42 @@ mod tests {
     }
 
     const COMPLETED: &str = r#"{"choices":[{"finish_reason":"stop","message":{"content":"complete recap and progress"}}]}"#;
+
+    #[test]
+    fn structured_analysis_can_request_wider_output_without_changing_provider_parameters() {
+        for (provider, field, absent) in [
+            ("deepseek", "max_tokens", "max_completion_tokens"),
+            ("openai", "max_completion_tokens", "max_tokens"),
+        ] {
+            let (_, mut body) = completion_request(
+                provider,
+                "configured-model",
+                "Return JSON",
+                "evidence",
+                true,
+            )
+            .unwrap();
+            set_output_limit(&mut body, provider, 32_768);
+            let server = CompletionServer::start(vec![completion_reply("200 OK", COMPLETED)]);
+            complete_with_client(
+                &completion_client(),
+                &server.url,
+                "test-token",
+                &body,
+                Duration::ZERO,
+            )
+            .unwrap();
+            let requests = server.requests();
+            let sent: serde_json::Value =
+                serde_json::from_str(requests[0].split_once("\r\n\r\n").unwrap().1).unwrap();
+            assert_eq!(sent[field], 32_768);
+            assert!(sent.get(absent).is_none());
+            assert_eq!(sent["response_format"]["type"], "json_object");
+            if provider == "deepseek" {
+                assert_eq!(sent["thinking"]["type"], "disabled");
+            }
+        }
+    }
 
     #[test]
     fn domestic_completion_requests_use_provider_parameters_and_parse_final_content() {

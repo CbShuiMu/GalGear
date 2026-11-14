@@ -118,7 +118,7 @@ pub async fn prepare_ai_route_map(id: String, state: State<'_, AppState>) -> Res
 #[tauri::command]
 pub async fn open_ai_route_map(id: String, state: State<'_, AppState>) -> Result<(), Message> {
     let path = generate_route_map(id, state).await?;
-    tauri::async_runtime::spawn_blocking(move || crate::default_browser::open_svg(&path))
+    tauri::async_runtime::spawn_blocking(move || crate::default_browser::open_route(&path))
         .await
         .map_err(|_| Message::new("error.operation"))?
 }

@@ -158,7 +158,7 @@ class TransportIntegrationTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
         self.assertEqual([item['max_tokens'] for item in payloads], [12000, 24000])
-        self.assertEqual([item['reasoning_effort'] for item in payloads], ['high', 'high'])
+        self.assertEqual([item['reasoning_effort'] for item in payloads], ['low', 'low'])
         self.assertEqual(payloads[0]['messages'], payloads[1]['messages'][:len(payloads[0]['messages'])])
         retry = json.loads(payloads[1]['messages'][-1]['content'].split('\n')[0].removeprefix('Host progress: '))
         self.assertEqual(retry['remaining_work_requests'], 4)
@@ -197,7 +197,7 @@ class TransportIntegrationTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
             self.agent.run_turn(self.messages, host.TOOLS, 1, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
-        self.assertEqual([item['reasoning_effort'] for item in payloads], ['high', 'high', 'high'])
+        self.assertEqual([item['reasoning_effort'] for item in payloads], ['low', 'low', 'low'])
         self.assertEqual([item['max_tokens'] for item in payloads], [12000, 24000, 24000])
 
     def test_authoring_stages_start_at_32000_and_never_retry_truncated_program_arguments(self):
@@ -217,9 +217,9 @@ class TransportIntegrationTests(unittest.TestCase):
                 self.assertEqual(caught.exception.max_tokens, 32000)
                 opener.open.assert_called_once()
                 payload = json.loads(opener.open.call_args.args[0].data)
-                self.assertEqual((payload['max_tokens'], payload['reasoning_effort']), (32000, 'max'))
+                self.assertEqual((payload['max_tokens'], payload['reasoning_effort']), (32000, 'high'))
                 self.assertEqual(self.requests()[-1]['max_tokens'], 32000)
-                self.assertEqual(self.requests()[-1]['reasoning_effort'], 'max')
+                self.assertEqual(self.requests()[-1]['reasoning_effort'], 'high')
                 dispatch.assert_not_called()
         self.assertEqual(self.agent.requests_sent, len(stages))
         self.assertEqual((self.agent.work / 'script_extractor.py').read_bytes(), original_program)
@@ -241,8 +241,7 @@ class TransportIntegrationTests(unittest.TestCase):
                                         'finish' if stage == 'finish' else 'prepare')
                 payload = json.loads(opener.open.call_args.args[0].data)
                 self.assertEqual(payload['thinking'], dict(type='enabled'))
-                expected_effort = ('low' if stage in ('prerequisites', 'finish')
-                                   else 'high' if stage == 'resources' else 'max')
+                expected_effort = ('low' if stage in ('prerequisites', 'save_preflight', 'resources', 'finish') else 'high')
                 self.assertEqual(payload['reasoning_effort'], expected_effort)
                 self.assertEqual(self.requests()[-1]['reasoning_effort'], expected_effort)
                 expected_cap = 32000 if stage in ('script_program', 'script_validation', 'speaker_review',
@@ -439,10 +438,14 @@ class TransportIntegrationTests(unittest.TestCase):
             self.agent.run_turn(self.messages, host.TOOLS, 3, 'prepare')
         payloads = [json.loads(call.args[0].data) for call in opener.open.call_args_list]
         self.assertEqual([payload['max_tokens'] for payload in payloads], [12000, 24000, 24000, 32000, 12000])
-        self.assertEqual([payload['reasoning_effort'] for payload in payloads], ['high', 'high', 'high', 'max', 'high'])
+        self.assertEqual([payload['reasoning_effort'] for payload in payloads], ['low', 'low', 'low', 'high', 'low'])
         self.assertEqual(self.agent.requests_sent, 5)
 
     def test_expanded_output_state_survives_compatible_checkpoint_only_with_allowed_caps(self):
+        self.agent.dispatch('record_save_preflight', dict(path='two.sav',
+            classification='progress_candidate', explanation='Fixture current save fields',
+            observations=[dict(role='caption', value='Current',
+                               proof=dict(offset=0, length=7, encoding='utf-8'))]))
         self.agent.work_guidance()
         self.agent.output_limit_stage, self.agent.output_limit = self.agent.workflow.stage, 24000
         self.agent.checkpoint(self.messages)
@@ -457,13 +460,17 @@ class TransportIntegrationTests(unittest.TestCase):
         with patcher:
             restored.run_turn(self.messages, host.TOOLS, 0, 'prepare')
         resumed_payload = json.loads(opener.open.call_args.args[0].data)
-        self.assertEqual((resumed_payload['max_tokens'], resumed_payload['reasoning_effort']), (32000, 'max'))
+        self.assertEqual((resumed_payload['max_tokens'], resumed_payload['reasoning_effort']), (32000, 'high'))
         for unsafe in (64000, True, '32000'):
             saved['output_limit_state']['max_tokens'] = unsafe
             restored.restore_checkpoint(saved)
             self.assertEqual((restored.output_limit_stage, restored.output_limit), (None, 12000))
 
     def test_resume_uses_bounded_failed_length_cap_behind_rust_start_marker(self):
+        self.agent.dispatch('record_save_preflight', dict(path='two.sav',
+            classification='progress_candidate', explanation='Fixture current save fields',
+            observations=[dict(role='caption', value='Current',
+                               proof=dict(offset=0, length=7, encoding='utf-8'))]))
         self.agent.work_guidance()
         self.agent.checkpoint(self.messages)
         saved = json.loads((self.agent.work / 'checkpoint.json').read_text('utf-8'))
@@ -487,7 +494,7 @@ class TransportIntegrationTests(unittest.TestCase):
                 self.agent.run_turn(self.messages, host.TOOLS, 0, 'prepare')
         opener.open.assert_called_once()
         payload = json.loads(opener.open.call_args.args[0].data)
-        self.assertEqual((payload['max_tokens'], payload['reasoning_effort']), (32000, 'high'))
+        self.assertEqual((payload['max_tokens'], payload['reasoning_effort']), (32000, 'low'))
         self.assertEqual(self.agent.events, [])
 
 

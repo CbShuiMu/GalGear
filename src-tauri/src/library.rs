@@ -3,7 +3,9 @@ use crate::{
     covers::prepare_cover, dialogs, state::AppState, state::find_game, state::persist_game,
     state::snapshot,
 };
-use galgear_core::{Bootstrap, Game, ScanResult, catalog, config::normalize_folder, scanner};
+use galgear_core::{
+    Bootstrap, Game, ScanResult, Settings, catalog, config::normalize_folder, providers, scanner,
+};
 use galgear_i18n::{Message, tr};
 use std::{path::PathBuf, sync::Arc, sync::atomic::AtomicBool, sync::atomic::Ordering};
 use tauri::{Emitter, Manager, State};
@@ -105,8 +107,12 @@ pub(crate) async fn refresh(
             .catalog
             .lock()
             .map_err(|_| Message::new("error.catalog_state"))?;
+        let mut current_by_id = std::collections::HashMap::new();
+        for game in &current.games {
+            current_by_id.entry(game.id.as_str()).or_insert(game);
+        }
         for game in &mut fresh.games {
-            if let Some(updated) = current.games.iter().find(|g| g.id == game.id)
+            if let Some(updated) = current_by_id.get(game.id.as_str())
                 && previous_covers
                     .get(&game.id)
                     .is_none_or(|before| before != &updated.cover)
@@ -376,10 +382,97 @@ pub(crate) async fn add_library_folders(
 
 #[cfg(test)]
 mod folder_tests {
-    use super::{persist_library_folders, pick_library_folders};
+    use super::{persist_library_folders, pick_library_folders, remove_folder};
     use crate::state::AppState;
     use galgear_core::config::display_path;
     use std::fs;
+
+    #[test]
+    fn removing_library_cleans_only_detached_game_covers() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("config")).unwrap();
+        let library = temp.path().join("Library");
+        let shared = library.join("Shared");
+        fs::create_dir_all(&shared).unwrap();
+        let removed = display_path(&library);
+        let kept = display_path(&shared);
+        let added = persist_library_folders(&state, vec![removed.clone(), kept.clone()]).unwrap();
+        assert_eq!(added.added, 2);
+
+        let detached = library.join("Nested").join("Game");
+        let manual = library.join("Manual");
+        let sibling = temp.path().join("Library-other");
+        for folder in [&detached, &manual, &shared, &sibling] {
+            fs::create_dir_all(folder).unwrap();
+            let exe = folder.join("game.exe");
+            for path in [&exe, &folder.join("cover.jpg"), &folder.join("poster.png")] {
+                fs::write(path, b"fixture").unwrap();
+            }
+            let mut game = galgear_core::catalog::manual_game(&exe, "Game".into()).unwrap();
+            if folder == &manual {
+                state
+                    .settings
+                    .lock()
+                    .unwrap()
+                    .manual_games
+                    .push(game.clone());
+            } else if folder.starts_with(&library) {
+                game.library.clone_from(&removed);
+            }
+            state.catalog.lock().unwrap().games.push(game);
+        }
+        let result = remove_folder(&state, &removed).unwrap();
+        assert!(result.warning.is_none());
+        assert_eq!(result.settings.library_folders, vec![kept.clone()]);
+        assert_eq!(result.catalog.games.len(), 3);
+        assert!(
+            result
+                .catalog
+                .games
+                .iter()
+                .any(|game| game.folder == kept && game.library == kept)
+        );
+        assert!(!detached.join("cover.jpg").exists());
+        assert!(detached.join("game.exe").is_file());
+        assert!(detached.join("poster.png").is_file());
+        for folder in [&manual, &shared, &sibling] {
+            assert!(folder.join("cover.jpg").is_file());
+        }
+        assert!(remove_folder(&state, &removed).unwrap().warning.is_none());
+    }
+
+    #[test]
+    fn removing_library_reports_cover_failure_after_committing_settings() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::load(temp.path().join("config")).unwrap();
+        let library = temp.path().join("Library");
+        let folder = library.join("Game");
+        let cover = folder.join("cover.jpg");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(&cover, b"fixture").unwrap();
+        let removed = display_path(&library);
+        persist_library_folders(&state, vec![removed.clone()]).unwrap();
+        let game =
+            galgear_core::catalog::manual_game(&folder.join("game.exe"), "Game".into()).unwrap();
+        state.catalog.lock().unwrap().games.push(game);
+
+        fs::remove_file(&state.store.path).unwrap();
+        fs::create_dir(&state.store.path).unwrap();
+        assert!(remove_folder(&state, &removed).is_err());
+        assert!(cover.is_file());
+        assert_eq!(state.catalog.lock().unwrap().games.len(), 1);
+
+        fs::remove_dir(&state.store.path).unwrap();
+        fs::remove_file(&cover).unwrap();
+        fs::create_dir(&cover).unwrap();
+        let result = remove_folder(&state, &removed).unwrap();
+        assert!(state.store.load().unwrap().library_folders.is_empty());
+        assert!(result.catalog.games.is_empty());
+        let warning = result.warning.unwrap();
+        assert_eq!(warning.key, "error.library_cover_cleanup");
+        assert_eq!(warning.args["path"], folder.display().to_string());
+        assert!(cover.is_dir());
+    }
 
     #[test]
     fn many_folders_deduplicate_and_keep_valid_paths_when_some_fail() {
@@ -502,22 +595,62 @@ mod folder_tests {
     }
 }
 
+#[derive(serde::Serialize)]
+pub(crate) struct RemovedLibrary {
+    settings: Settings,
+    catalog: ScanResult,
+    warning: Option<Message>,
+}
+
 #[tauri::command]
 pub(crate) async fn remove_library_folder(
     path: String,
-    state: State<'_, AppState>,
-) -> Result<Bootstrap, Message> {
-    {
-        let mut settings = state
-            .settings
-            .lock()
-            .map_err(|_| Message::new("error.config_state"))?;
+    app: tauri::AppHandle,
+) -> Result<RemovedLibrary, Message> {
+    tauri::async_runtime::spawn_blocking(move || remove_folder(&app.state::<AppState>(), &path))
+        .await
+        .map_err(|error| Message::detail("error.operation", error))?
+}
+
+fn remove_folder(state: &AppState, path: &str) -> Result<RemovedLibrary, Message> {
+    // 扫描使用设置快照，移除期间独占扫描入口，防止旧扫描重新发布已移除条目。
+    if state.scan.scanning.swap(true, Ordering::SeqCst) {
+        return Err(Message::new("error.scan_running"));
+    }
+    let _guard = ScanGuard(&state.scan.scanning);
+    let mut settings = state
+        .settings
+        .lock()
+        .map_err(|_| Message::new("error.config_state"))?;
+    let mut list = state
+        .catalog
+        .lock()
+        .map_err(|_| Message::new("error.catalog_state"))?;
+    let mut warning = None;
+    if settings.library_folders.iter().any(|root| root == path) {
         let mut next = settings.clone();
-        next.library_folders.retain(|p| p != &path);
+        next.library_folders.retain(|root| root != path);
         state.store.save(&next)?;
         *settings = next;
+
+        // 下载封面也要取得目录锁并重新确认条目，迟到的结果无法重建已清理的封面。
+        for folder in catalog::detach_library_games(&mut list, &settings, path) {
+            if let Err(error) = providers::remove_local_cover(&folder) {
+                let failure = Message::detail("error.library_cover_cleanup", error)
+                    .arg("path", folder.display());
+                log::warn!("{failure}");
+                warning.get_or_insert(failure);
+            }
+        }
+        let cache_warning =
+            catalog::save(&state.store.path.with_file_name("catalog.json"), &list).err();
+        warning = warning.or(cache_warning);
     }
-    bootstrap(state).await
+    Ok(RemovedLibrary {
+        settings: settings.clone(),
+        catalog: list.clone(),
+        warning,
+    })
 }
 
 #[tauri::command]

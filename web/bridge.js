@@ -409,13 +409,6 @@ function renderFrame(html) {
       else if (!trigger) choiceReturnFocus = null;
     }
     previousChoice = choiceId;
-    if (hasLibraryDialog && !previousLibraryDialog) (document.getElementById('folder-name') || document.getElementById('folder-query') || document.getElementById('tag-query') || document.getElementById('game-query') || document.getElementById('library-dialog-close'))?.focus({preventScroll:true});
-    else if (!hasLibraryDialog && previousLibraryDialog) {
-      const origin=libraryReturnFocus;
-      const target=(origin?.id && document.getElementById(origin.id)) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===origin?.action && node.dataset.value===origin?.value) || document.querySelector('.collection-bar [data-action=folder-new]');
-      target?.focus({ preventScroll: true });
-    }
-    previousLibraryDialog = hasLibraryDialog;
     placeTagSearch();
     document.querySelectorAll('.sidebar,.page-scroll,.detail-overlay').forEach(node => {
       node.inert = hasEditor || (node.matches('.detail-overlay') && !!detailReturnAnimation);
@@ -464,6 +457,18 @@ function renderFrame(html) {
       previousContext=false;contextReturnId=null;
     }
     syncModalBoundary();
+    // Nested launcher selection must restore focus after the settings dialog stops being inert.
+    if (hasLibraryDialog && !previousLibraryDialog) (document.getElementById('folder-name') || document.getElementById('folder-query') || document.getElementById('tag-query') || document.getElementById('game-query') || document.getElementById('library-dialog-close'))?.focus({preventScroll:true});
+    else if (!hasLibraryDialog && previousLibraryDialog) {
+      const origin=libraryReturnFocus;
+      const target=(origin?.id && document.getElementById(origin.id)) || [...document.querySelectorAll('[data-action]')].find(node=>node.dataset.action===origin?.action && node.dataset.value===origin?.value) || document.querySelector('.collection-bar [data-action=folder-new]');
+      target?.focus({ preventScroll: true });
+    }
+    previousLibraryDialog = hasLibraryDialog;
+    const launcherDialog = document.querySelector('.launcher-dialog');
+    if (launcherDialog && (!launcherDialog.contains(document.activeElement) || document.activeElement === launcherDialog)) {
+      (launcherDialog.querySelector('[aria-pressed="true"]:not(:disabled)') || launcherDialog.querySelector('button:not(:disabled)') || launcherDialog).focus({preventScroll:true});
+    }
     const shortcutDialog = document.querySelector('.shortcut-dialog');
     if (shortcutDialog && !shortcutReturnFocus) {
       shortcutReturnFocus = shortcutDialog.dataset.shortcutField;

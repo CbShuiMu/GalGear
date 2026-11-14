@@ -180,6 +180,7 @@
 .game-settings-dialog .configuration-summary>div{display:grid;grid-template-columns:minmax(130px,35%) minmax(0,1fr);gap:16px;font-size:calc(var(--ui-font)*.875);line-height:1.7}
 .game-settings-dialog .configuration-summary dt{color:var(--muted)}
 .game-settings-dialog .configuration-summary dd{margin:0;overflow-wrap:anywhere}
+.configuration-summary .configuration-executable{padding:0;border:0;background:none;color:inherit;font:inherit;line-height:inherit;text-align:left;text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere;max-width:100%}
 .game-settings-dialog .runtime-line{margin:14px 0;font-size:calc(var(--ui-font)*.8);color:var(--muted)}
 .game-settings-dialog .path-value{margin:12px 0;padding:10px 12px;border-radius:6px;background:var(--detail-path);font-size:calc(var(--ui-font)*.8);overflow-wrap:anywhere}
 .game-settings-dialog .utility-heading{display:flex;align-items:center;gap:12px;justify-content:space-between}
