@@ -154,6 +154,12 @@ AI 总结并保存配置，游戏配置中的勾选及详情页前情提要入�
 前加载，避免最后补人物表而重做整套验证。参考 [WillPlus / AdvHD](../Galgear-GalgameReverse-Skill/GalgameResourceExtract/engine/willplus.md)
 及 [KiriKiri](../Galgear-GalgameReverse-Skill/GalgameResourceExtract/engine/kirikiri.md) 文档，并核对实际资源结构。
 
+归档解包和内层读取分别确认。宿主接入读取器时，按版本、语言层及工具来源提供可直接调用的入口。
+例如 WillPlus 的 ARC 成员解包后，优先检查是否已有与样本匹配的 WS2 指令读取器、LNG 语言表读取器
+及人物表。验证指令边界、原生消息和选项编号后，路线和提要共用同一批结构化结果。
+缺少匹配读取器时，字符串抽取只提供对白候选，实际跳转与结局标为待确认。翻译表暂时不可读时，
+可以用存档场景及字幕对照原版对白，唯一可信的匹配仅作为前情提要的候选截断点。
+
 脚本或存档验证阶段若已有当前解析程序、累计 8 次探索请求却尚未实际测试，
 `test_attempted` 状态要求先调用对应 `test_program`，取得真实验证结果，再决定
 如何修改。非技能目录的 `read_text`、`read_json` 和新的探查计划也不能绕过这一步；
