@@ -122,7 +122,7 @@ GalGear first scans a preset list of possible paths. AI-assisted save discovery 
 
 An optional **AI story recap** is available. Configure an API token and model for DeepSeek, OpenAI, Qwen, or Kimi under **Settings → AI**, then enable AI analysis in the game's configuration editor. Initial preparation may take some time. Once it finishes, you can view the recap and your current progress on the details page.
 
-An **AI route map** opens a generated map of branches and endings in your default browser. Route maps always use DeepSeek, which must be configured separately. The feature analyzes the full dialogue and may reveal later story events and endings.
+An **AI route map** opens a generated map of branches and endings in your default browser. The interactive map works offline and lets you expand branches, zoom, and pan. Route maps always use DeepSeek, which must be configured separately. The feature analyzes the full dialogue and may reveal later story events and endings.
 
 These features are experimental. Save and script support varies by game, and generated summaries and routes may be inaccurate. When enabled, the dialogue, save information, and game metadata needed for analysis are sent to the corresponding AI service. API usage is billed to your own account. See [AI settings](docs/ai-settings.md) and [Story recaps](docs/ai-summary.md) for details (in Chinese).
 
@@ -160,6 +160,8 @@ Keep the application folder, `data/`, `tools/`, the configured global backup fol
 Account tokens, cookies, and cloud storage passwords are stored in the local Windows Credential Manager and must be configured again on another computer. Permanently deleting a library entry removes its details, settings, collection membership, and play history; using it again requires reimporting. Game files, saves, and backups remain on disk. Unavailable games stay in the library, and drive changes trigger a background rescan. For 2DFan, you need to obtain the token and cookies yourself.
 
 ## 📌 Usage notes
+
+Permanently deleting a game entry deletes `cover.jpg` in its game folder. Confirming removal of a library also deletes that file for games removed with the library, including existing covers. Games in another library and manually added games keep their covers.
 
 - GalGear manages local EXE games that are already installed. It does not provide games or mount or install disc images.
 - Save detection does not support every engine; check the location before making your first backup. Locale Emulator and Magpie configuration paths can be changed under **Settings → Paths & backups**. Their behavior also depends on the game and your local environment.
