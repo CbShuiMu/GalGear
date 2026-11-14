@@ -161,6 +161,8 @@ Account tokens, cookies, and cloud storage passwords are stored in the local Win
 
 ## 📌 Usage notes
 
+On Windows, a normal game launch requests administrator permission. For locale-emulated launches, permissions follow the selected Locale Emulator profile.
+
 Permanently deleting a game entry deletes `cover.jpg` in its game folder. Confirming removal of a library also deletes that file for games removed with the library, including existing covers. Games in another library and manually added games keep their covers.
 
 - GalGear manages local EXE games that are already installed. It does not provide games or mount or install disc images.
