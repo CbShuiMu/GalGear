@@ -40,6 +40,7 @@ mod updates;
 mod startup;
 mod skill_update;
 
+pub use ai_summary::progress::ai_summary_progress;
 pub use events::{
     cover_enhanced,
     backup_completed, choice_key, dispatch, download_progress, enrichment_progress,

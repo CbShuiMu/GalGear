@@ -156,6 +156,7 @@ pub(crate) fn paint(app: &App) {
     crate::shortcut_picker::render(&mut html, app);
     crate::startup::render(&mut html, app);
     html.push_str("</main><div class=\"notification-stack\">");
+    crate::ai_summary::progress::render(&mut html, app);
     game_setup::render_progress(&mut html, app);
     crate::detail_form::render_refresh_progress(&mut html, app);
     if app.library.scanning {
@@ -175,32 +176,51 @@ pub(crate) fn paint(app: &App) {
     }
     if let Some((message, error)) = &app.toast {
         let key = message.key.as_str();
-        let bottom_right = key.starts_with("save.ai_")
-            || key.starts_with("local_patches.")
-            || key.starts_with("update.")
-            || key.starts_with("setup.auto_")
-            || key.starts_with("setup.save_")
-            || matches!(key, "patches.nextmoe_download_key" | "patches.nextmoe_file_missing");
-        let status_icon = if *error {
-            icon("error")
-        } else if toast_in_progress(key) {
-            progress_icon()
-        } else if key == "setup.auto_stopped" {
-            icon("about")
+        if key.starts_with("setup.save_") {
+            crate::widgets::stage_toast(
+                &mut html,
+                "setup-save-toast",
+                &esc(&message.render(app.settings.language)),
+                *error,
+                false,
+            );
+        } else if key.starts_with("summary.")
+            || key.starts_with("route.")
+            || key.starts_with("save.ai_")
+        {
+            crate::widgets::stage_toast(
+                &mut html,
+                "ai-result-toast",
+                &esc(&message.render(app.settings.language)),
+                *error,
+                toast_in_progress(key),
+            );
         } else {
-            icon("check")
-        };
-        write!(
-            html,
-            r#"<div class="toast {} {}" role="{}">{status_icon}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
-            if *error { "error" } else { "" },
-            if bottom_right { "save-ai-toast" } else { "" },
-            if *error { "alert" } else { "status" },
-            esc(&message.render(app.settings.language)),
-            t(app, "common.close"),
-            icon("close")
-        )
-        .unwrap();
+            let bottom_right = key.starts_with("local_patches.")
+                || key.starts_with("update.")
+                || key.starts_with("setup.auto_")
+                || matches!(key, "patches.nextmoe_download_key" | "patches.nextmoe_file_missing");
+            let status_icon = if *error {
+                icon("error")
+            } else if toast_in_progress(key) {
+                progress_icon().to_owned()
+            } else if key == "setup.auto_stopped" {
+                icon("about")
+            } else {
+                icon("check")
+            };
+            write!(
+                html,
+                r#"<div class="toast {} {}" role="{}">{status_icon}<span>{}</span><button class="icon-button" data-action="dismiss-toast" aria-label="{}">{}</button></div>"#,
+                if *error { "error" } else { "" },
+                if bottom_right { "save-ai-toast" } else { "" },
+                if *error { "alert" } else { "status" },
+                esc(&message.render(app.settings.language)),
+                t(app, "common.close"),
+                icon("close")
+            )
+            .unwrap();
+        }
     }
     network_popup(&mut html, app);
     download_notice(&mut html, app);

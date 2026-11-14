@@ -373,23 +373,15 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "confirm-action" => {
-            if let Some((action, value)) = app.detail.confirmation.clone() {
-                match action.as_str() {
-                    "snapshot-delete" => {
-                        if let Some(id) = app.detail.selected.clone() {
-                            request_history(
-                                app,
-                                "update_snapshot",
-                                json!({"id":id,"snapshotId":value,"locked":false,"note":"","delete":true}),
-                            );
-                        }
-                    }
-                    "launch" | "launch-locale" => {
-                        launch(app, &value, action == "launch-locale", true)
-                    }
-                    _ => {}
-                }
-                app.detail.confirmation = None;
+            if let Some((action, value)) = app.detail.confirmation.take()
+                && action == "snapshot-delete"
+                && let Some(id) = app.detail.selected.clone()
+            {
+                request_history(
+                    app,
+                    "update_snapshot",
+                    json!({"id":id,"snapshotId":value,"locked":false,"note":"","delete":true}),
+                );
             }
         }
         "cancel-action" => app.detail.confirmation = None,
@@ -486,7 +478,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
             }
         }
         "launch" | "launch-normal" | "launch-locale" => {
-            if crate::launcher_picker::open(app, value, action) { return true; }
+            if crate::launcher_picker::open(app, value, action) {
+                return true;
+            }
             let locale = action == "launch-locale"
                 || (action == "launch"
                     && app
@@ -494,15 +488,19 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                         .game_edits
                         .get(value)
                         .is_some_and(|e| e.launch_mode == "locale"));
-            match app.runtime.get(value).map(String::as_str) {
-                Some("running") => show_toast(app, Message::new("error.already_running"), true),
-                Some("stopped") => launch(app, value, locale, false),
-                _ => {
-                    app.detail.confirmation = Some((
-                        (if locale { "launch-locale" } else { "launch" }).into(),
-                        value.into(),
-                    ))
-                }
+            if app
+                .runtime
+                .get(value)
+                .is_some_and(|status| status == "running")
+            {
+                show_toast(app, Message::new("error.already_running"), true);
+            } else {
+                issue(
+                    app,
+                    Pending::Launch,
+                    "launch_game",
+                    json!({"id":value,"mode":if locale {"locale"} else {"normal"}}),
+                );
             }
         }
         "detect-runtime" => issue(
@@ -545,26 +543,6 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
         _ => return false,
     }
     true
-}
-
-fn launch(app: &mut App, id: &str, locale: bool, confirmed: bool) {
-    issue(
-        app,
-        Pending::Launch,
-        "launch_game",
-        json!({"id":id,"mode":if locale {"locale"} else {"normal"},"confirmedUnknown":confirmed}),
-    );
-}
-
-pub(crate) fn confirmation(html: &mut String, app: &App) {
-    if let Some((action, _value)) = &app.detail.confirmation {
-        let message = if action.starts_with("launch") {
-            t(app, "runtime.confirm").to_owned()
-        } else {
-            t(app, "backup.delete_confirm").into()
-        };
-        write!(html,r#"<section class="confirmation" role="alert"><p>{}</p><div class="detail-actions">{}{}</div></section>"#,esc(&message),button("cancel-action","",t(app,"common.cancel"),"close","quiet",false),button("confirm-action","",t(app,"common.confirm"),"check","primary",app.busy())).unwrap();
-    }
 }
 
 pub(crate) const METADATA_FIELDS: [(&str, &str); 10] = [

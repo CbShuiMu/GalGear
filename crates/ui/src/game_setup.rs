@@ -1,10 +1,12 @@
 //! Batch association and executable confirmation, with independent row drafts.
 use crate::{
-    choices, models::Game, models::Resource, models::Settings, preferences, requests::Pending,
-    requests::issue,
+    choices,
+    models::{Game, Resource, Settings, SetupSaveProgress, SetupSaveStage},
+    preferences,
+    requests::{Pending, issue},
     state::{App, show_toast},
     view::{f, t},
-    widgets::{button, esc, icon, progress_toast},
+    widgets::{button, esc, icon, progress_toast, stage_toast},
 };
 use galgear_i18n::{Message, format_text};
 use serde::Deserialize;
@@ -20,7 +22,6 @@ pub(crate) struct State {
     deferred: BTreeSet<String>,
     progress: Option<ScrapeProgress>,
     save_progress: Option<SaveProgress>,
-    batch_progress: Option<(u32, usize)>,
 }
 
 #[derive(PartialEq)]
@@ -69,6 +70,13 @@ struct ScrapeProgress {
 struct SaveProgress {
     total: usize,
     saved: usize,
+    request_id: u32,
+    sequence: u64,
+    stage: Option<SetupSaveStage>,
+    current: usize,
+    error: Option<Message>,
+    failure: Option<Message>,
+    rematch: bool,
 }
 
 struct Draft {
@@ -118,7 +126,17 @@ impl State {
             row.error = None;
             total += 1;
         }
-        self.save_progress = (total > 0).then_some(SaveProgress { total, saved: 0 });
+        self.save_progress = (total > 0).then_some(SaveProgress {
+            total,
+            saved: 0,
+            request_id: 0,
+            sequence: 0,
+            stage: None,
+            current: 0,
+            error: None,
+            failure: None,
+            rematch: self.rematch.is_some(),
+        });
     }
 }
 
@@ -318,7 +336,9 @@ fn pump(app: &mut App) {
             inputs.push(json!({"id":row.id,"source":row.source,"url":row.url,"executable":"","confirmed":row.confirmed}));
         }
         let request_id = app.requests.next_id();
-        app.setup.batch_progress = Some((request_id, 0));
+        if let Some(progress) = &mut app.setup.save_progress {
+            progress.request_id = request_id;
+        }
         issue(
             app,
             Pending::SetupBatch(ids),
@@ -343,7 +363,11 @@ fn pump(app: &mut App) {
         };
         row.queued = false;
         row.saving = true;
-        let payload = json!({"id":row.id,"source":row.source,"url":row.url,"executable":"","confirmed":row.confirmed});
+        let request_id = app.requests.next_id();
+        let payload = json!({"id":row.id,"source":row.source,"url":row.url,"executable":"","confirmed":row.confirmed,"requestId":request_id});
+        if let Some(progress) = &mut app.setup.save_progress {
+            progress.request_id = request_id;
+        }
         let id = row.id.clone();
         let command = if app.setup.rematch.is_some() {
             "rematch_game_metadata"
@@ -363,19 +387,23 @@ fn pump(app: &mut App) {
         && let Some(progress) = app.setup.save_progress.take()
     {
         let failed = progress.total - progress.saved;
-        let key = if failed == 0 {
-            "setup.save_complete"
+        let error = progress.failure;
+        let key = if progress.rematch {
+            "setup.save_rematched"
         } else {
-            "setup.save_failed"
+            "setup.save_complete"
         };
-        show_toast(
-            app,
-            Message::new(key)
+        let message = if let Some(error) = &error {
+            Message::new("setup.save_error").arg("detail", error.render(app.settings.language))
+        } else if failed > 0 {
+            Message::new("setup.save_failed")
                 .arg("saved", progress.saved)
                 .arg("total", progress.total)
-                .arg("failed", failed),
-            failed > 0,
-        );
+                .arg("failed", failed)
+        } else {
+            Message::new(key).arg("progress", batch_suffix(app, progress.saved, progress.total))
+        };
+        show_toast(app, message, failed > 0 || error.is_some());
     }
 }
 
@@ -397,27 +425,52 @@ fn finish_progress(app: &mut App, stopped: bool) {
 /// 进度事件按请求编号隔离，提交响应到达前不把准备完成计为保存成功。
 #[wasm_bindgen::prelude::wasm_bindgen]
 pub fn setup_save_progress(payload: &str) {
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Progress {
-        request_id: u32,
-        done: usize,
-        total: usize,
-    }
-    let Ok(progress) = serde_json::from_str::<Progress>(payload) else {
+    let Ok(progress) = serde_json::from_str::<SetupSaveProgress>(payload) else {
         return;
     };
     crate::state::APP.with(|state| {
         let mut app = state.borrow_mut();
-        let total = app.setup.save_progress.as_ref().map(|value| value.total);
-        if let Some((id, done)) = &mut app.setup.batch_progress
-            && *id == progress.request_id
-            && total == Some(progress.total)
-        {
-            *done = (*done).max(progress.done.min(progress.total));
+        if accept_save_progress(&mut app, progress) {
             crate::view::paint(&app);
         }
     });
+}
+
+fn accept_save_progress(app: &mut App, event: SetupSaveProgress) -> bool {
+    let Some(progress) = &mut app.setup.save_progress else {
+        return false;
+    };
+    if progress.request_id != event.request_id
+        || progress.total != event.total
+        || event.sequence <= progress.sequence
+        || event.current == 0
+        || event.current > event.total
+        || (event.stage.is_none() && event.error.is_none())
+    {
+        return false;
+    }
+    progress.sequence = event.sequence;
+    progress.stage = event.stage;
+    progress.current = event.current;
+    if progress.failure.is_none() {
+        progress.failure = event.error.clone();
+    }
+    progress.error = event.error;
+    true
+}
+
+fn batch_suffix(app: &App, current: usize, total: usize) -> String {
+    if total <= 1 {
+        return String::new();
+    }
+    format_text(
+        app.settings.language,
+        "setup.save_count",
+        &[
+            ("current", &current.to_string()),
+            ("total", &total.to_string()),
+        ],
+    )
 }
 
 pub(crate) fn render_progress(html: &mut String, app: &App) {
@@ -437,22 +490,32 @@ pub(crate) fn render_progress(html: &mut String, app: &App) {
         );
     }
     if let Some(progress) = &app.setup.save_progress {
-        let (key, done) = match app.setup.batch_progress {
-            Some((_, done)) => ("setup.fetch_progress", done),
-            None => ("setup.save_progress", 0),
+        let key = match progress.stage {
+            Some(SetupSaveStage::Metadata) => "setup.save_metadata",
+            Some(SetupSaveStage::Cover) => "setup.save_cover",
+            Some(SetupSaveStage::Saving) => "setup.save_progress",
+            None => "setup.save_waiting",
         };
-        progress_toast(
+        let text = progress
+            .error
+            .as_ref()
+            .map(|error| esc(&error.render(app.settings.language)))
+            .unwrap_or_else(|| {
+                f(
+                    app,
+                    key,
+                    &[(
+                        "progress",
+                        &batch_suffix(app, progress.current, progress.total),
+                    )],
+                )
+            });
+        stage_toast(
             html,
             "setup-save-toast",
-            &f(
-                app,
-                key,
-                &[
-                    ("done", &done.to_string()),
-                    ("saved", &progress.saved.to_string()),
-                    ("total", &progress.total.to_string()),
-                ],
-            ),
+            &text,
+            progress.error.is_some(),
+            true,
         );
     }
 }
@@ -492,6 +555,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
     if action == "setup-save" {
         if !app.setup.busy() {
             app.setup.queue_ready();
+            if app.setup.save_progress.is_some() {
+                app.toast = None;
+            }
             pump(app);
         }
         return true;
@@ -596,7 +662,6 @@ pub(crate) fn resolve(
     payload: &str,
 ) -> bool {
     if let Pending::SetupBatch(ids) = kind {
-        app.setup.batch_progress = None;
         #[derive(Deserialize)]
         struct Batch {
             items: Vec<Item>,
@@ -646,7 +711,11 @@ pub(crate) fn resolve(
             );
         }
         if let Some(warning) = warning {
-            show_toast(app, warning, true);
+            show_toast(
+                app,
+                Message::new("setup.save_error").arg("detail", warning.render(app.settings.language)),
+                true,
+            );
         }
         return true;
     }
@@ -700,6 +769,7 @@ pub(crate) fn resolve(
                         game: Game,
                         settings: Option<Settings>,
                         edit: Option<crate::models::GameEdit>,
+                        warning: Option<Message>,
                     }
                     let mut data: ResultData =
                         serde_json::from_str(payload).map_err(|error| error.to_string())?;
@@ -709,6 +779,12 @@ pub(crate) fn resolve(
                     let edit = data.edit.take().or_else(|| {
                         data.settings.as_mut().and_then(|settings| settings.game_edits.remove(id))
                     }).ok_or_else(|| "Missing game edit in setup response".to_owned())?;
+                    if let Some(warning) = &data.warning
+                        && let Some(progress) = &mut app.setup.save_progress
+                        && progress.failure.is_none()
+                    {
+                        progress.failure = Some(warning.clone());
+                    }
                     if let Some(game) = app.catalog.games.iter_mut().find(|game| game.id == *id) {
                         crate::playtime::replace_game(game, data.game);
                     }
@@ -729,7 +805,17 @@ pub(crate) fn resolve(
         }
     }
     match result {
-        Err(error) => app.setup.rows[index].error = Some(error),
+        Err(error) => {
+            if matches!(kind, Pending::SetupSave(_))
+                && let Some(progress) = &mut app.setup.save_progress
+            {
+                progress.error = Some(error.clone());
+                if progress.failure.is_none() {
+                    progress.failure = Some(error.clone());
+                }
+            }
+            app.setup.rows[index].error = Some(error);
+        }
         Ok(()) if matches!(kind, Pending::SetupSave(_)) => {
             if let Some(progress) = &mut app.setup.save_progress {
                 progress.saved += 1;

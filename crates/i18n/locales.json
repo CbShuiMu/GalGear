@@ -1,4 +1,109 @@
 {
+  "summary.progress_summarizing": {
+    "zh-CN": "正在生成前情提要…",
+    "ja-JP": "あらすじを生成中…",
+    "en-US": "Generating story recap…"
+  },
+  "summary.progress_preparing": {
+    "zh-CN": "正在准备 AI 分析…",
+    "ja-JP": "AI 分析を準備中…",
+    "en-US": "Preparing AI analysis…"
+  },
+  "setup.save_error": {
+    "zh-CN": "{detail}",
+    "ja-JP": "{detail}",
+    "en-US": "{detail}"
+  },
+  "setup.save_count": {
+    "zh-CN": "（{current}/{total}）",
+    "ja-JP": "（{current}/{total}）",
+    "en-US": " ({current}/{total})"
+  },
+  "setup.save_rematched": {
+    "zh-CN": "已更新游戏资料{progress}",
+    "ja-JP": "作品情報を更新しました{progress}",
+    "en-US": "Game details updated{progress}"
+  },
+  "setup.save_cover": {
+    "zh-CN": "正在下载封面…{progress}",
+    "ja-JP": "カバーをダウンロード中…{progress}",
+    "en-US": "Downloading cover…{progress}"
+  },
+  "setup.save_metadata": {
+    "zh-CN": "正在读取游戏资料…{progress}",
+    "ja-JP": "作品情報を取得中…{progress}",
+    "en-US": "Reading game details…{progress}"
+  },
+  "setup.save_waiting": {
+    "zh-CN": "正在准备导入…{progress}",
+    "ja-JP": "インポートを準備中…{progress}",
+    "en-US": "Preparing import…{progress}"
+  },
+  "summary.analysis_progress": {
+    "zh-CN": "AI 分析进度",
+    "ja-JP": "AI 分析の進捗",
+    "en-US": "AI analysis progress"
+  },
+  "summary.analysis_completed": {
+    "zh-CN": "AI 分析已完成",
+    "ja-JP": "AI 分析が完了しました",
+    "en-US": "AI analysis completed"
+  },
+  "summary.analysis_failed": {
+    "zh-CN": "AI 分析失败：{detail}",
+    "ja-JP": "AI 分析に失敗しました：{detail}",
+    "en-US": "AI analysis failed: {detail}"
+  },
+  "summary.stage_checking": {
+    "zh-CN": "正在检查资源与已有分析…",
+    "ja-JP": "リソースと既存の分析を確認中…",
+    "en-US": "Checking resources and analysis…"
+  },
+  "summary.stage_resources": {
+    "zh-CN": "正在识别并提取游戏资源…",
+    "ja-JP": "ゲームリソースを識別・抽出中…",
+    "en-US": "Extracting game resources…"
+  },
+  "summary.stage_scripts": {
+    "zh-CN": "正在读取剧情脚本…",
+    "ja-JP": "シナリオスクリプトを読み取り中…",
+    "en-US": "Reading story scripts…"
+  },
+  "summary.stage_save": {
+    "zh-CN": "正在定位存档对应剧情…",
+    "ja-JP": "セーブのシーンを特定中…",
+    "en-US": "Locating the saved story…"
+  },
+  "summary.stage_route": {
+    "zh-CN": "正在分析分支与路线…",
+    "ja-JP": "分岐とルートを分析中…",
+    "en-US": "Analyzing branches and routes…"
+  },
+  "summary.stage_recap": {
+    "zh-CN": "正在生成前情提要…",
+    "ja-JP": "あらすじを生成中…",
+    "en-US": "Generating story recap…"
+  },
+  "summary.stage_publishing": {
+    "zh-CN": "正在校验并保存分析结果…",
+    "ja-JP": "分析結果を検証・保存中…",
+    "en-US": "Checking and saving analysis…"
+  },
+  "summary.stage_running": {
+    "zh-CN": "进行中",
+    "ja-JP": "処理中",
+    "en-US": "In progress"
+  },
+  "summary.stage_finalizing": {
+    "zh-CN": "正在确认分析结果…",
+    "ja-JP": "分析結果を確認中…",
+    "en-US": "Confirming the analysis result…"
+  },
+  "summary.stage_completed": {
+    "zh-CN": "已完成",
+    "ja-JP": "完了",
+    "en-US": "Completed"
+  },
   "diagnostics.webview_exited": {
     "zh-CN": "界面引擎（Microsoft Edge WebView2）已异常退出，当前窗口无法继续使用。后台任务可能仍在运行，请等待正在进行的写入完成后，从托盘退出 GalGear 再重新打开。未保存的界面编辑可能丢失。若反复出现，请更新或修复 WebView2，并提供本次运行日志及 Windows 应用程序错误记录。",
     "ja-JP": "画面エンジン（Microsoft Edge WebView2）が異常終了したため、このウィンドウは使用できません。バックグラウンド処理が続いている可能性があります。書き込みの完了を待ち、トレイから GalGear を終了して再起動してください。未保存の編集は失われる場合があります。繰り返す場合は WebView2 の更新または修復を行い、実行ログと Windows のアプリケーションエラー記録をお送りください。",
@@ -8,11 +113,6 @@
     "zh-CN": "数据源请求过于频繁，请在 {seconds} 秒后重试。",
     "ja-JP": "リクエストが多すぎます。{seconds} 秒後に再試行してください。",
     "en-US": "Too many requests. Retry after {seconds} seconds."
-  },
-  "setup.fetch_progress": {
-    "zh-CN": "正在准备资料与封面 {done}/{total}",
-    "ja-JP": "作品情報とカバーを準備中 {done}/{total}",
-    "en-US": "Preparing details and covers {done}/{total}"
   },
   "setup.stale": {
     "zh-CN": "游戏资料或目录已变化，请重新确认后保存。",
@@ -958,6 +1058,11 @@
     "zh-CN": "启动游戏失败：{detail}",
     "ja-JP": "ゲームを起動できません: {detail}",
     "en-US": "Unable to launch game: {detail}"
+  },
+  "error.launch_cancelled": {
+    "zh-CN": "已取消管理员授权，游戏未启动。",
+    "ja-JP": "管理者権限の許可がキャンセルされたため、ゲームを起動しませんでした。",
+    "en-US": "Administrator permission was cancelled. The game was not started."
   },
   "error.open_folder": {
     "zh-CN": "打开文件夹失败：{detail}",
@@ -2399,11 +2504,6 @@
     "ja-JP": "上書き",
     "en-US": "Overwrite"
   },
-  "runtime.confirm": {
-    "zh-CN": "无法确定游戏是否运行。确认继续启动？",
-    "ja-JP": "ゲームの実行状態を確認できません。起動しますか？",
-    "en-US": "The game's running state is unknown. Launch anyway?"
-  },
   "runtime.running": {
     "zh-CN": "运行中",
     "ja-JP": "実行中",
@@ -3225,14 +3325,14 @@
     "en-US": "Fetching and saving…"
   },
   "setup.save_progress": {
-    "zh-CN": "正在保存 {saved}/{total}",
-    "ja-JP": "保存中 {saved}/{total}",
-    "en-US": "Saving {saved}/{total}"
+    "zh-CN": "正在保存到游戏库…{progress}",
+    "ja-JP": "ライブラリに保存中…{progress}",
+    "en-US": "Saving to library…{progress}"
   },
   "setup.save_complete": {
-    "zh-CN": "保存完成 {saved}/{total}",
-    "ja-JP": "保存完了 {saved}/{total}",
-    "en-US": "Saved {saved}/{total}"
+    "zh-CN": "已添加到游戏库{progress}",
+    "ja-JP": "ライブラリに追加しました{progress}",
+    "en-US": "Added to library{progress}"
   },
   "setup.save_failed": {
     "zh-CN": "已保存 {saved}/{total} · 失败 {failed}",

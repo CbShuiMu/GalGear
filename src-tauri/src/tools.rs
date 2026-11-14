@@ -9,13 +9,20 @@ use std::{collections::BTreeMap, path::Path, path::PathBuf, sync::Mutex};
 use tauri::{Emitter, Manager, State};
 
 #[cfg(windows)]
+mod game_process;
+#[cfg(windows)]
+use game_process::Child as GameProcess;
+#[cfg(not(windows))]
+type GameProcess = std::process::Child;
+
+#[cfg(windows)]
 use crate::bundled_tools::{MagpieProcess, start_magpie};
 #[cfg(not(windows))]
 type MagpieProcess = std::process::Child;
 
 #[derive(Default)]
 pub(crate) struct RuntimeState {
-    running: Mutex<BTreeMap<String, std::process::Child>>,
+    running: Mutex<BTreeMap<String, GameProcess>>,
     observer: std::sync::Arc<runtime::Monitor>,
     magpie: Mutex<Option<MagpieProcess>>,
     shutting_down: std::sync::atomic::AtomicBool,
@@ -156,23 +163,23 @@ pub(crate) fn open_game_folder(id: String, state: State<'_, AppState>) -> Result
     crate::folders::open(Path::new(&game.folder))
 }
 
+/// 按指定模式或游戏默认配置启动。Windows 普通启动默认请求管理员权限。
+/// 检测到仍在运行的游戏时拒绝重复启动；转区权限遵循所选 Locale Emulator 配置。
 #[tauri::command]
 pub(crate) async fn launch_game(
     id: String,
     mode: Option<String>,
-    confirmed_unknown: Option<bool>,
     app: tauri::AppHandle,
 ) -> Result<(), Message> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        launch_game_at(id, mode, confirmed_unknown, state, &app)
+        launch_game_at(id, mode, state, &app)
     }).await.map_err(|e| Message::detail("error.launch", e))?
 }
 
 fn launch_game_at(
     id: String,
     mode: Option<String>,
-    confirmed_unknown: Option<bool>,
     state: State<'_, AppState>,
     app: &tauri::AppHandle,
 ) -> Result<(), Message> {
@@ -181,9 +188,6 @@ fn launch_game_at(
     let status = state.tools.observer.detect(game.executable.as_deref());
     if status == runtime::Status::Running {
         return Err(Message::new("error.already_running"));
-    }
-    if status == runtime::Status::Unknown && !confirmed_unknown.unwrap_or(false) {
-        return Err(Message::new("runtime.confirm"));
     }
     let executable = game
         .executable
@@ -226,7 +230,16 @@ fn launch_game_at(
         command.arg(&executable);
     }
     let directory = edit.working_directory.as_deref().unwrap_or(&game.folder);
-    let child = command.args(&edit.arguments).current_dir(directory).spawn()
+    command.args(&edit.arguments).current_dir(directory);
+    #[cfg(windows)]
+    let child = if locale {
+        // Locale Emulator 自行按所选配置提权，保留显式非管理员配置的语义。
+        GameProcess::from(command.spawn().map_err(|e| Message::detail("error.launch", e))?)
+    } else {
+        game_process::spawn(&command)?
+    };
+    #[cfg(not(windows))]
+    let child = command.spawn()
         .map_err(|e| Message::detail("error.launch", e))?;
     if let Err(error) = state.tools.observer.launched(Path::new(&executable), &child) {
         log::warn!("runtime_tracking_failed game_id={id}: {error}");

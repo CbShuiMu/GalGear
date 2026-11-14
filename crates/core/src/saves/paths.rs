@@ -1,6 +1,38 @@
 //! 存档路径中的变量只在根位置展开；游戏包中的同名占位目录不是用户目录。
 use std::path::{Path, PathBuf};
 
+/// AI 搜索跳过分发包、补丁和备份目录；不限制用户手动指定的路径。
+pub(super) fn excluded_directory(path: &Path) -> bool {
+    let name = path.file_name().unwrap_or_default().to_string_lossy();
+    let normalized = super::key(&name);
+    name.to_ascii_lowercase().starts_with(".galgear-")
+        || matches!(
+            normalized.as_str(),
+            "patch" | "patches" | "backup" | "backups" | "allsave" | "allcg"
+        )
+        || [
+            "全cg",
+            "全存档",
+            "全存檔",
+            "全开存档",
+            "全開存檔",
+            "100存档",
+            "100存檔",
+            "fullsave",
+            "fullcg",
+            "completesave",
+            "100save",
+            "savebackup",
+            "savedatabackup",
+            "备份",
+            "備份",
+            "バックアップ",
+            "フルコンプ",
+        ]
+        .iter()
+        .any(|marker| normalized.contains(marker))
+}
+
 pub(super) fn has_placeholder(path: &Path) -> bool {
     path.to_string_lossy().split(['/', '\\']).any(|part| {
         (part.starts_with("$(") && part.ends_with(')'))

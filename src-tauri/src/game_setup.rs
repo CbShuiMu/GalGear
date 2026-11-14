@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use tauri::{Manager, State};
 
 mod batch;
+mod progress;
 mod scheduler;
 pub(crate) use scheduler::Service;
 
@@ -23,6 +24,7 @@ pub struct ResultData {
 pub struct SetupResult {
     game: Game,
     edit: galgear_core::GameEdit,
+    warning: Option<Message>,
 }
 
 #[derive(Serialize)]
@@ -157,7 +159,7 @@ pub async fn complete_game_setup(
     url: String,
     executable: String,
     confirmed: bool,
-    state: State<'_, AppState>,
+    request_id: Option<u32>,
     app: tauri::AppHandle,
 ) -> Result<SetupResult, Message> {
     complete(
@@ -169,7 +171,7 @@ pub async fn complete_game_setup(
             confirmed,
             rematch: false,
         },
-        state,
+        request_id.unwrap_or_default(),
         app,
     )
     .await
@@ -182,7 +184,7 @@ pub(crate) async fn rematch_game_metadata(
     source: String,
     url: String,
     confirmed: bool,
-    state: State<'_, AppState>,
+    request_id: Option<u32>,
     app: tauri::AppHandle,
 ) -> Result<SetupResult, Message> {
     complete(
@@ -194,7 +196,7 @@ pub(crate) async fn rematch_game_metadata(
             confirmed,
             rematch: true,
         },
-        state,
+        request_id.unwrap_or_default(),
         app,
     )
     .await
@@ -223,9 +225,11 @@ pub(crate) async fn complete_game_setup_batch(
 
 async fn complete(
     input: SetupInput,
-    state: State<'_, AppState>,
+    request_id: u32,
     app: tauri::AppHandle,
 ) -> Result<SetupResult, Message> {
+    let state = app.state::<AppState>();
+    let progress = progress::Reporter::new(app.clone(), request_id, 1);
     let SetupInput {
         id,
         source,
@@ -240,18 +244,22 @@ async fn complete(
     let credentials = data_sources::credentials_for(&state, &source).await?;
     let cache = state.store.path.with_file_name("covers");
     let handle = app.clone();
+    let fetching = progress.clone();
     let (metadata, cover) = tauri::async_runtime::spawn_blocking(move || {
+        fetching.stage(progress::Stage::Metadata, 1);
         let metadata = galgear_core::data_sources::metadata(&domain, &url, &credentials)?;
         let cover = if rematch {
             // 内容寻址缓存不覆盖旧封面文件；无图或下载失败时仍保留原图。
             match galgear_core::data_sources::covers(&domain, &url, &credentials) {
                 Ok(covers) => covers.first().map(|cover| {
+                    fetching.stage(progress::Stage::Cover, 1);
                     crate::covers::download_source_cover(&cover.image_url, &url, &cache)
                         .map(|cover| (cover.data, cover.path, None))
                 }),
                 Err(error) => Some(Err(error)),
             }
         } else if game.cover.is_none() && metadata.cover_url.is_some() {
+            fetching.stage(progress::Stage::Cover, 1);
             Some(crate::covers::download_game_cover(
                 &handle.state::<AppState>(),
                 &game,
@@ -260,14 +268,23 @@ async fn complete(
         } else {
             None
         };
+        if let Some(Err(error)) = &cover {
+            fetching.failed(error, 1);
+        }
         Ok::<_, Message>((metadata, cover))
     })
     .await
     .map_err(|error| Message::detail("error.network", error))??;
     // 资料配置由 preferences 序列化写入，磁盘持久化不占用异步执行器。
     tauri::async_runtime::spawn_blocking(move || {
+        progress.stage(progress::Stage::Saving, 1);
         let state = app.state::<AppState>();
         let mut game = find_game(&state, &id)?;
+        let warning = match &cover {
+            Some(Ok((_, _, warning))) => warning.clone(),
+            Some(Err(error)) => Some(error.clone()),
+            None => None,
+        };
         let settings = preferences::update(&state, |settings| {
             let edit = if rematch {
                 game_setup::prepare_rematch(&game, settings.game_edits.get(&id), &source, metadata)?
@@ -300,6 +317,7 @@ async fn complete(
         Ok(SetupResult {
             game: persist_game(&state, game)?,
             edit,
+            warning,
         })
     })
     .await

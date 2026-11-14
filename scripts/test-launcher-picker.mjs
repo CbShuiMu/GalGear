@@ -58,20 +58,21 @@ const candidates = ['game.exe', 'patch.exe'].map(name => ({path:`F:/Fixture/${na
 
 test('configuration path reuses the picker, preselects the current EXE and saves without launching', async () => {
   const app = await fixture();
-  assert.match(app.html, /<button[^>]*data-action="launcher-edit"[^>]*title="F:\/Fixture\/game.exe"[^>]*>game.exe<\/button>/);
+  assert.match(app.html, /<span class="configuration-executable" role="button" tabindex="0" aria-disabled="false"[^>]*data-action="launcher-edit"[^>]*title="F:\/Fixture\/game.exe">game.exe<\/span>/);
   app.ui.dispatch('launcher-edit', app.game.id);
   app.ui.dispatch('launcher-edit', app.game.id);
   assert.match(app.html, /正在查找启动程序/);
+  assert.match(app.html, /<span class="configuration-executable" role="button" tabindex="-1" aria-disabled="true"/);
   assert.deepEqual(app.reply('list_game_executables', candidates), {id:app.game.id});
   assert.match(app.html, /data-value="F:\/Fixture\/game.exe" aria-pressed="true"/);
   app.ui.dispatch('launcher-select', candidates[1].path);
-  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/button>/);
+  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/span>/);
   app.ui.dispatch('launcher-save', '');
-  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/button>/);
+  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/span>/);
   const settings = {...app.settings, game_edits:{fixture:{...app.settings.game_edits.fixture, executable:candidates[1].path}}};
   assert.deepEqual(app.reply('confirm_game_executable', {game:{...app.game, executable:candidates[1].path}, settings, runtime:'stopped'}), {id:app.game.id, executable:candidates[1].path});
   assert.doesNotMatch(app.html, /class="launcher-list"/);
-  assert.match(app.html, /class="configuration-executable"[^>]*>patch.exe<\/button>/);
+  assert.match(app.html, /class="configuration-executable"[^>]*>patch.exe<\/span>/);
   assert.match(app.html, /--test/);
   assert.match(app.html, /F:\/Tools\/wrapper.exe/);
   assert.equal(app.requests.some(request => request.command === 'launch_game'), false);
@@ -85,7 +86,7 @@ test('one candidate still requires confirmation and cancelling keeps the current
   assert.equal(app.pending.length, 0);
   app.ui.dispatch('launcher-close', '');
   assert.doesNotMatch(app.html, /class="launcher-list"/);
-  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/button>/);
+  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/span>/);
   assert.equal(app.requests.some(request => request.command === 'confirm_game_executable'), false);
 });
 
@@ -98,7 +99,7 @@ test('save failures preserve the old path and allow retrying the selected EXE', 
   app.reply('confirm_game_executable', {key:'error.operation', args:{}}, false);
   assert.match(app.html, /role="alert"/);
   assert.match(app.html, /data-value="F:\/Fixture\/patch.exe" aria-pressed="true"/);
-  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/button>/);
+  assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/span>/);
   app.ui.dispatch('launcher-save', '');
   assert.deepEqual(app.pending[0].payload, {id:app.game.id, executable:candidates[1].path});
   assert.equal(app.requests.some(request => request.command === 'launch_game'), false);
@@ -115,6 +116,6 @@ test('empty, malformed or failed candidate lists can be closed and cannot save t
     assert.equal(app.pending.length, 0);
     app.ui.dispatch('launcher-close', '');
     assert.doesNotMatch(app.html, /class="launcher-list"/);
-    assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/button>/);
+    assert.match(app.html, /class="configuration-executable"[^>]*>game.exe<\/span>/);
   }
 });

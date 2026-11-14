@@ -330,7 +330,7 @@
   gap: 5px;
 }
 
-.app-shell[data-theme] :is(.back-library, .credit-link, .folder-breadcrumbs button) {
+.app-shell[data-theme] :is(.credit-link, .folder-breadcrumbs button) {
   padding: 4px 10px;
 }
 

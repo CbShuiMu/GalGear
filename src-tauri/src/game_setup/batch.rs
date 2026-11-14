@@ -1,4 +1,5 @@
 //! 批量准备资料与封面，所有网络工作完成后合并提交一次。
+use super::progress::{Reporter, Stage};
 use super::{SetupInput, SetupResult};
 use crate::{
     covers,
@@ -7,7 +8,7 @@ use crate::{
 use galgear_core::{Game, GameEdit, catalog, game_setup, providers};
 use galgear_i18n::Message;
 use serde::Serialize;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 #[derive(Serialize)]
 pub(crate) struct BatchResult {
@@ -56,14 +57,21 @@ pub(super) async fn run(
         .map_err(|error| Message::detail("error.network", error))??;
     let settings = std::sync::Arc::new(snapshot(&state)?);
     let total = inputs.len();
+    let progress = Reporter::new(app.clone(), request_id, total);
     let mut jobs = tokio::task::JoinSet::new();
-    for input in inputs {
+    for (index, input) in inputs.into_iter().enumerate() {
         let handle = app.clone();
         let client = client.clone();
         let settings = settings.clone();
+        let progress = progress.clone();
         jobs.spawn(async move {
             let id = input.id.clone();
-            (id, prepare(input, handle, client, settings).await)
+            let result =
+                prepare(input, handle, client, settings, progress.clone(), index + 1).await;
+            if let Err(error) = &result {
+                progress.failed(error, index + 1);
+            }
+            (id, result)
         });
     }
     let mut ready = Vec::new();
@@ -77,17 +85,16 @@ pub(super) async fn run(
                 result: Err(error),
             }),
         }
-        let _ = app.emit(
-            "setup-save-progress",
-            serde_json::json!({
-                "requestId": request_id, "done": ready.len() + items.len(), "total": total
-            }),
-        );
     }
     let handle = app.clone();
-    tauri::async_runtime::spawn_blocking(move || commit(&handle.state::<AppState>(), ready, items))
-        .await
-        .map_err(|error| Message::detail("error.operation", error))?
+    tauri::async_runtime::spawn_blocking(move || {
+        if !ready.is_empty() {
+            progress.stage(Stage::Saving, total);
+        }
+        commit(&handle.state::<AppState>(), ready, items)
+    })
+    .await
+    .map_err(|error| Message::detail("error.operation", error))?
 }
 
 async fn prepare(
@@ -95,6 +102,8 @@ async fn prepare(
     app: tauri::AppHandle,
     client: reqwest::blocking::Client,
     settings: std::sync::Arc<galgear_core::Settings>,
+    progress: Reporter,
+    current: usize,
 ) -> Result<Prepared, Message> {
     let state = app.state::<AppState>();
     let original = find_game(&state, &input.id)?;
@@ -105,9 +114,11 @@ async fn prepare(
     let url = input.url.clone();
     let executable = input.executable.clone();
     let confirmed = input.confirmed;
+    let fetching = progress.clone();
     let metadata = state
         .setup_service
         .run(source.clone(), false, move || {
+            fetching.stage(Stage::Metadata, current);
             game_setup::validate(&source, &url, &executable, confirmed)?;
             let credentials = crate::data_sources::load_credentials(&path, &source)?;
             galgear_core::data_sources::metadata_with_client(&client, &domain, &url, &credentials)
@@ -125,10 +136,12 @@ async fn prepare(
         let handle = app.clone();
         let game = original.clone();
         let details = metadata.clone();
+        let downloading = progress.clone();
         Some(
             state
                 .setup_service
                 .run(format!("image:{host}"), true, move || {
+                    downloading.stage(Stage::Cover, current);
                     let downloaded =
                         covers::download_game_cover(&handle.state::<AppState>(), &game, &details)?;
                     let mut rendered = game.clone();
@@ -154,6 +167,9 @@ async fn prepare(
     } else {
         None
     };
+    if let Some(Err(error)) = &cover {
+        progress.failed(error, current);
+    }
     Ok(Prepared {
         input,
         original,
@@ -242,6 +258,11 @@ fn apply(
         &input.executable,
         metadata,
     )?;
+    let warning = match &cover {
+        Some(Ok(cover)) => cover.warning.clone(),
+        Some(Err(error)) => Some(error.clone()),
+        None => None,
+    };
     if current.cover == original.cover {
         match cover {
             Some(Ok(cover)) => {
@@ -261,6 +282,7 @@ fn apply(
     Ok(SetupResult {
         game: current.clone(),
         edit,
+        warning,
     })
 }
 

@@ -3,6 +3,34 @@ use galgear_i18n::{Language, Message};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[derive(Clone, Copy, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum AnalysisStageStatus {
+    Running,
+    Completed,
+}
+
+#[derive(Clone, Deserialize)]
+pub(crate) struct AnalysisStage {
+    pub(crate) stage: String,
+    pub(crate) status: AnalysisStageStatus,
+}
+
+#[derive(Default, Deserialize)]
+pub(crate) struct AnalysisProgress {
+    pub(crate) sequence: u32,
+    pub(crate) stages: Vec<AnalysisStage>,
+    #[serde(default)]
+    pub(crate) current_stage: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct AnalysisProgressEvent {
+    pub(crate) request_id: u32,
+    pub(crate) game_id: String,
+    pub(crate) progress: AnalysisProgress,
+}
+
 #[derive(Clone, Deserialize)]
 pub(crate) struct LibraryFolderFailure {
     pub(crate) path: String,
@@ -509,4 +537,24 @@ pub(crate) struct SkillUpdateResult {
     pub commit: String,
     pub changed: bool,
     pub available: bool,
+}
+/// 后台导入的实际执行阶段；初始等待由 UI 单独表示。
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SetupSaveStage {
+    Metadata,
+    Cover,
+    Saving,
+}
+
+/// 请求编号及单调序号用于拒绝已结束任务或乱序的阶段事件。
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SetupSaveProgress {
+    pub(crate) request_id: u32,
+    pub(crate) sequence: u64,
+    pub(crate) stage: Option<SetupSaveStage>,
+    pub(crate) current: usize,
+    pub(crate) total: usize,
+    pub(crate) error: Option<Message>,
 }

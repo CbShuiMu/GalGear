@@ -10,7 +10,17 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
+
+fn report(app: &AppHandle, request_id: u32, game_id: &str, progress: &ai_summary::Progress) {
+    // 窗口可能已关闭；进度通知失败不能中断正在保存的分析结果。
+    let _ = app.emit(
+        "ai-summary-progress",
+        serde_json::json!({
+            "request_id": request_id, "game_id": game_id, "progress": progress
+        }),
+    );
+}
 
 #[derive(Default)]
 pub(crate) struct Jobs(Arc<Mutex<BTreeSet<String>>>);
@@ -47,6 +57,8 @@ fn runtime_home(state: &AppState) -> Result<(PathBuf, crate::skill_package::Leas
 pub async fn set_ai_summary(
     id: String,
     enabled: bool,
+    request_id: Option<u32>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Settings, Message> {
     let game = find_game(&state, &id)?;
@@ -58,7 +70,9 @@ pub async fn set_ai_summary(
         tauri::async_runtime::spawn_blocking(move || {
             let _guard = guard;
             let _resources = resources;
-            ai_summary::prepare(&game, &settings, &config, &home)
+            ai_summary::prepare_with_progress(&game, &settings, &config, &home, &|progress| {
+                report(&app, request_id.unwrap_or(0), &game.id, progress)
+            })
         })
         .await
         .map_err(|_| Message::new("error.operation"))??;
@@ -72,6 +86,8 @@ pub async fn set_ai_summary(
 #[tauri::command]
 pub async fn summarize_game(
     id: String,
+    request_id: Option<u32>,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<ai_summary::Summary, Message> {
     let game = find_game(&state, &id)?;
@@ -82,7 +98,9 @@ pub async fn summarize_game(
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
         let _resources = resources;
-        ai_summary::summarize(&game, &settings, &config, &home)
+        ai_summary::summarize_with_progress(&game, &settings, &config, &home, &|progress| {
+            report(&app, request_id.unwrap_or(0), &game.id, progress)
+        })
     })
     .await
     .map_err(|_| Message::new("error.operation"))?

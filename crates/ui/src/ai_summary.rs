@@ -1,6 +1,6 @@
 use crate::{
     models::{Game, Settings},
-    requests::{Pending, issue},
+    requests::{Pending, issue as issue_request},
     state::{App, show_toast},
     view::t,
     widgets::{button, esc},
@@ -10,12 +10,35 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{collections::BTreeMap, fmt::Write};
 
+pub(crate) mod progress;
+
+fn issue(app: &mut App, kind: Pending, command: &str, mut payload: serde_json::Value) {
+    let request_id = app.requests.next_id();
+    progress::begin(app, &kind, request_id);
+    if matches!(kind, Pending::SummarySetup(..) | Pending::Summary(_)) {
+        payload["requestId"] = request_id.into();
+    }
+    issue_request(app, kind, command, payload);
+}
+
+fn show_analysis_error(app: &mut App, error: Message) {
+    show_toast(
+        app,
+        Message::detail(
+            "summary.analysis_failed",
+            error.render(app.settings.language),
+        ),
+        true,
+    );
+}
+
 #[derive(Default)]
 pub(crate) struct State {
     open: Option<String>,
     result: Option<ResultData>,
     error: Option<Message>,
     completed_setup: BTreeMap<String, (u32, bool)>,
+    progress: BTreeMap<String, progress::Notice>,
 }
 
 fn setup_completed(app: &mut App, game: &str, enabled: bool) {
@@ -133,7 +156,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str, _value: &str) -> bool {
 pub(crate) fn resolve(
     app: &mut App,
     kind: &Pending,
-    _request: u32,
+    request: u32,
     success: bool,
     payload: &str,
 ) -> bool {
@@ -148,19 +171,9 @@ pub(crate) fn resolve(
                             .is_some_and(|edit| edit.ai_summary == *enabled) =>
                     {
                         setup_completed(app, game, *enabled);
-                        let message = if *enabled {
-                            let title = app
-                                .catalog
-                                .games
-                                .iter()
-                                .find(|entry| entry.id == *game)
-                                .map(|entry| entry.title.as_str())
-                                .unwrap_or(game);
-                            Message::new("summary.ready").arg("game", title)
-                        } else {
-                            Message::new("notice.saved")
-                        };
-                        show_toast(app, message, false);
+                        if !enabled {
+                            show_toast(app, Message::new("notice.saved"), false);
+                        }
                         if *enabled && app.summary.open.as_deref() == Some(game) {
                             app.summary.error = None;
                             issue(
@@ -178,26 +191,43 @@ pub(crate) fn resolve(
                             );
                         }
                     }
-                    _ => show_toast(app, Message::new("ai.invalid_response"), true),
+                    _ => {
+                        progress::finish(app, request);
+                        show_analysis_error(app, Message::new("ai.invalid_response"));
+                    }
                 }
             } else {
-                show_toast(app, Message::from_error(payload), true);
+                progress::finish(app, request);
+                show_analysis_error(app, Message::from_error(payload));
             }
         }
         Pending::Summary(id) => {
-            if app.summary.open.as_deref() != Some(id) {
-                return true;
-            }
-            if success {
+            progress::finish(app, request);
+            let result = if success {
                 match serde_json::from_str::<ResultData>(payload) {
-                    Ok(result) if result.game_id == *id => app.summary.result = Some(result),
-                    _ => app.summary.error = Some(Message::new("ai.invalid_response")),
+                    Ok(result) if result.game_id == *id => Ok(result),
+                    _ => Err(Message::new("ai.invalid_response")),
                 }
             } else {
-                app.summary.error = Some(Message::from_error(payload));
+                Err(Message::from_error(payload))
+            };
+            match result {
+                Ok(result) => {
+                    show_toast(app, Message::new("summary.analysis_completed"), false);
+                    if app.summary.open.as_deref() == Some(id) {
+                        app.summary.result = Some(result);
+                    }
+                }
+                Err(error) => {
+                    show_analysis_error(app, error.clone());
+                    if app.summary.open.as_deref() == Some(id) {
+                        app.summary.error = Some(error);
+                    }
+                }
             }
         }
         Pending::RouteMapPrepare(_) | Pending::RouteMap(_) => {
+            progress::finish(app, request);
             let message = if success {
                 Message::new(if matches!(kind, Pending::RouteMapPrepare(_)) {
                     "route.ready"

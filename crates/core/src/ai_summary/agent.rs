@@ -35,7 +35,13 @@ fn command(home: &Path) -> Result<Command, Message> {
     Err(Message::new("summary.tools_missing"))
 }
 
-fn invoke(home: &Path, work: &Path, payload: Value, parse: bool) -> Result<Value, Message> {
+fn invoke(
+    home: &Path,
+    work: &Path,
+    payload: Value,
+    parse: bool,
+    mut progress: Option<&mut super::progress::Reporter<'_>>,
+) -> Result<Value, Message> {
     let output = tempfile::NamedTempFile::new_in(work).map_err(io)?;
     let errors = tempfile::NamedTempFile::new_in(work).map_err(io)?;
     let mut command = command(home)?;
@@ -92,8 +98,16 @@ fn invoke(home: &Path, work: &Path, payload: Value, parse: bool) -> Result<Value
         PREPARATION_TIMEOUT_SECONDS
     });
     let status = loop {
+        if let Some(progress) = progress.as_deref_mut() {
+            progress.poll(work);
+        }
         match child.try_wait() {
-            Ok(Some(status)) => break status,
+            Ok(Some(status)) => {
+                if let Some(progress) = progress.as_deref_mut() {
+                    progress.poll(work);
+                }
+                break status;
+            }
             Ok(None) => {}
             Err(error) => {
                 let _ = child.kill();
@@ -208,15 +222,20 @@ fn validate_preparation_result(result: &Value) -> Result<(), Message> {
 
 pub fn prepare(home: &Path, work: &Path, config: Value) -> Result<Value, Message> {
     fs::create_dir_all(work).map_err(io)?;
-    let result = invoke(home, work, config, false)?;
+    let result = invoke(home, work, config, false, None)?;
     validate_preparation_result(&result)?;
     Ok(result)
 }
 
 /// 执行 Skill 静态分析；结果使用独立契约，不能冒充已验证的存档解析器。
-pub(super) fn analyze(home: &Path, work: &Path, config: Value) -> Result<Value, Message> {
+pub(super) fn analyze(
+    home: &Path,
+    work: &Path,
+    config: Value,
+    progress: &mut super::progress::Reporter<'_>,
+) -> Result<Value, Message> {
     fs::create_dir_all(work).map_err(io)?;
-    invoke(home, work, config, false)
+    invoke(home, work, config, false, Some(progress))
 }
 
 pub fn parse(home: &Path, directory: &Path, path: &Path) -> Result<super::sandbox::Facts, Message> {
@@ -248,7 +267,7 @@ pub fn parse(home: &Path, directory: &Path, path: &Path) -> Result<super::sandbo
         .collect();
     let request = json!({"program":program,"data":STANDARD.encode(data),"verify_save":true,"metadata":{"name":path.file_name().and_then(|s|s.to_str()),"path":crate::config::display_path(path),"dialogue":dialogue}});
     let facts: super::sandbox::Facts =
-        serde_json::from_value(invoke(home, directory, request, true)?)
+        serde_json::from_value(invoke(home, directory, request, true, None)?)
             .map_err(|e| Message::detail("summary.invalid_program", e))?;
     if facts
         .source

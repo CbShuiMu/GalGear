@@ -39,8 +39,10 @@ test('startup prompts for GalGear updates, counts components, and installs only 
   assert(!requests.some(r=>r.command==='check_skill_update'));
   ui.dispatch('check-skill-update','');ui.dispatch('check-skill-update','');
   assert.equal(requests.filter(r=>r.command==='check_skill_update').length,1);
+  assert.match(html, /<aside class="network-popup"[^>]*><span class="notification-progress-icon" aria-hidden="true"><\/span>/);
   assert.match(html,/正在检查并更新 Skill/);
   reply('check_skill_update',{available:true,changed:true,commit:'b'.repeat(40)});
+  assert.doesNotMatch(html, /class="notification-progress-icon"/);
   assert.match(html,/bbbbbbbb/);assert.match(html,/Skill 已更新/);
   assert.match(html,/class="update-count"[^>]*>1<\/span>/);
   ui.dispatch('check-update','');

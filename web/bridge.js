@@ -1,5 +1,6 @@
 import {syncLibrarySize, installLibrarySize} from "./library-size.js";
 import {installSetupScroll, syncSetupSpacers} from './setup-scroll.js';
+import {reconcileStageToast} from './stage-toast.js';
 import {isCardScrollbar, libraryCardClickTarget} from "./library-card.js";
 import { installLibraryReorder } from "./library-reorder.js";
 import {detailTagClickTarget, installDetailTagReorder} from './detail-tag-reorder.js';
@@ -99,6 +100,10 @@ function reconcile(current, next) {
   }
   // Home owns these temporary image layers so ordinary renders cannot cut a fade short.
   if (current.matches('.home-backdrop')) return;
+  if (current.matches('.stage-toast-text')) {
+    reconcileStageToast(current, next);
+    return;
+  }
   reconcileChildren(current, next);
   if (current instanceof HTMLSelectElement && current.value !== next.value) current.value = next.value;
 }
@@ -640,7 +645,7 @@ document.addEventListener('click', event => {
     document.documentElement.style.setProperty('--theme-y', `${event.clientY || element.getBoundingClientRect().y + element.clientHeight / 2}px`);
   }
   if (document.querySelector('.choice-popup') && !event.target.closest('.choice-popup,.choice-trigger')) ui.dispatch('choice-close', '');
-  if (!element || element.disabled) return;
+  if (!element || element.disabled || element.getAttribute('aria-disabled') === 'true') return;
   event.preventDefault();
   const addMenu = element.closest('.add-menu');
   if (addMenu) setAddMenuExpanded(addMenu, false);
@@ -744,7 +749,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!wasmReady || event.isComposing || event.keyCode === 229) return;
-  if (event.target.matches('.setup-path') && ['Enter', ' '].includes(event.key)
+  if (event.target.matches('.setup-path, .configuration-executable') && ['Enter', ' '].includes(event.key)
       && !event.ctrlKey && !event.metaKey && !event.altKey) {
     event.preventDefault();
     if (!event.repeat && event.target.getAttribute('aria-disabled') !== 'true') {
@@ -1070,6 +1075,7 @@ try {
   window.GalGearDiagnostics?.ready();
   if (window.__TAURI__?.event) {
     await window.__TAURI__.event.listen('library-devices-changed', () => ui.library_devices_changed());
+    await window.__TAURI__.event.listen('ai-summary-progress', event => ui.ai_summary_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('setup-save-progress', event => ui.setup_save_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('scan-progress', event => ui.scan_progress(JSON.stringify(event.payload)));
     await window.__TAURI__.event.listen('game-enriched', event => ui.game_enriched(JSON.stringify(event.payload)));

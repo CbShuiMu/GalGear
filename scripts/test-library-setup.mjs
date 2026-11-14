@@ -171,7 +171,7 @@ test('600 automatic searches keep three slots, advance after failures and retry 
   games.forEach(game => { app.settings.game_edits[game.id] = {setup_pending: true}; });
   app.finishScan(games);
   app.ui.dispatch('setup-auto', '');
-  assert.match(app.html, /id="setup-scrape-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon"><svg/);
+  assert.match(app.html, /id="setup-scrape-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon" aria-hidden="true"><\/span>/);
   assert.match(app.html, /正在刮削 0\/600/);
   let failed = 0;
   for (let completed = 1; completed <= 600; completed++) {
@@ -234,18 +234,18 @@ test('batch confirmation accepts a single-game edit response', async () => {
   app.ui.dispatch('setup-auto', '');
   app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
   app.ui.dispatch('setup-save', '');
-  assert.match(app.html, /id="setup-save-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon"><svg/);
-  assert.match(app.html, /正在保存 0\/1/);
+  assert.match(app.html, /id="setup-save-toast" class="toast save-ai-toast stage-toast"[^>]*><span class="stage-toast-symbol"><span class="notification-progress-icon" aria-hidden="true"><\/span>/);
+  assert.match(app.html, /正在准备导入…/);
   app.reply('complete_game_setup', {
     game: game(), edit: {setup_confirmed: true, setup_pending: false, launcher_pending: true},
   });
   assert.doesNotMatch(app.html, /id="setup-title"/);
   assert.match(app.html, /id="home-game-new"/);
-  assert.doesNotMatch(app.html, /id="setup-save-toast"/);
-  assert.match(app.html, /保存完成 1\/1/);
+  assert.doesNotMatch(app.html, /id="setup-save-toast"[^>]*>[\s\S]*?notification-progress-icon/);
+  assert.match(app.html, /已添加到游戏库/);
 });
 
-test('save progress counts only successful replies with a fixed batch total and resets on retry', async () => {
+test('save progress follows backend stages with a fixed batch total and resets on retry', async () => {
   const app = await emptyHome();
   const games = Array.from({length: 6}, (_, i) => game(`save-${i}`));
   app.addFolder();
@@ -258,37 +258,108 @@ test('save progress counts only successful replies with a fixed batch total and 
     app.reply('search_metadata', i < 5 ? [{title: 'Matched', url: `https://vndb.org/v${i + 1}`}] : []);
   }
   app.ui.dispatch('setup-save', '');
-  assert.match(app.html, /正在准备资料与封面 0\/5/);
+  assert.match(app.html, /正在准备导入…（0\/5）/);
   app.ui.dispatch('setup-save', '');
   const batch = app.requests.find(request => request.command === 'complete_game_setup_batch');
   assert.equal(app.requests.filter(request => request.command === 'complete_game_setup_batch').length, 1);
   assert.equal(batch.payload.inputs.length, 5);
-  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id + 1, done: 5, total: 5}));
-  assert.match(app.html, /正在准备资料与封面 0\/5/);
-  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, done: 4, total: 5}));
-  assert.match(app.html, /正在准备资料与封面 4\/5/);
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id + 1, sequence: 1, stage: "cover", current: 5, total: 5}));
+  assert.match(app.html, /正在准备导入…（0\/5）/);
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 2, stage: "cover", current: 4, total: 5}));
+  assert.match(app.html, /正在下载封面…（4\/5）/);
+  const latest = app.html;
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 1, stage: 'metadata', current: 1, total: 5}));
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 3, stage: 'saving', current: 5, total: 6}));
+  app.ui.setup_save_progress('{bad json');
+  assert.equal(app.html, latest);
   assert.equal((app.html.match(/data-setup-game=/g) ?? []).length, 6);
   app.reply('complete_game_setup_batch', {items: batch.payload.inputs.map((input, index) => ({
     id: input.id,
-    result: index === 1 || index === 3 ? {Err: {key: 'error.network'}} : {Ok: {
+    result: index === 1 || index === 3 ? {Err: {key: 'error.network', args: {detail: 'fixture offline'}}} : {Ok: {
       game: games.find(game => game.id === input.id),
       edit: {setup_confirmed: true, setup_pending: false, launcher_pending: true},
     }},
   })).reverse(), warning: null});
-  assert.doesNotMatch(app.html, /id="setup-save-toast"/);
-  assert.match(app.html, /已保存 3\/5 · 失败 2/);
+  assert.doesNotMatch(app.html, /id="setup-save-toast"[^>]*>[\s\S]*?notification-progress-icon/);
+  assert.match(app.html, /class="toast save-ai-toast stage-toast error"/);
+  assert.match(app.html, /fixture offline/);
   assert.equal((app.html.match(/data-setup-game=/g) ?? []).length, 3);
   app.ui.dispatch('setup-save', '');
   const retry = app.requests.find(request => request.command === 'complete_game_setup_batch');
   assert.equal(retry.payload.inputs.length, 2);
-  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, done: 5, total: 5}));
-  assert.match(app.html, /正在准备资料与封面 0\/2/);
+  app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 3, stage: "saving", current: 5, total: 5}));
+  assert.match(app.html, /正在准备导入…（0\/2）/);
   app.reply('complete_game_setup_batch', {items: retry.payload.inputs.map(input => ({
     id: input.id, result: {Ok: {game: games.find(game => game.id === input.id), edit: {setup_confirmed: true}}},
   }))});
-  assert.doesNotMatch(app.html, /id="setup-save-toast"/);
-  assert.match(app.html, /保存完成 2\/2/);
+  assert.doesNotMatch(app.html, /id="setup-save-toast"[^>]*>[\s\S]*?notification-progress-icon/);
+  assert.match(app.html, /已添加到游戏库（2\/2）/);
   assert.equal((app.html.match(/data-setup-game=/g) ?? []).length, 1);
+});
+
+test('single import can skip cover, waits for persistence, and ignores progress after success', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.dispatch('setup-auto', '');
+  app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
+  app.ui.dispatch('setup-save', '');
+  const request = app.requests.find(request => request.command === 'complete_game_setup');
+  assert.equal(request.payload.requestId, request.id);
+  const progress = (sequence, stage, error = null) => app.ui.setup_save_progress(JSON.stringify({
+    requestId: request.id, sequence, stage, error, current: 1, total: 1,
+  }));
+  progress(1, 'metadata');
+  assert.match(app.html, /正在读取游戏资料…/);
+  progress(2, 'saving');
+  assert.match(app.html, /正在保存到游戏库…/);
+  assert.doesNotMatch(app.html, /正在下载封面|已添加到游戏库/);
+  app.reply('complete_game_setup', {game: game(), edit: {setup_confirmed: true}});
+  assert.match(app.html, /已添加到游戏库/);
+  const completed = app.html;
+  progress(99, 'cover');
+  assert.equal(app.html, completed);
+});
+
+test('a real cover failure is visible immediately and retained after the library is saved', async () => {
+  const app = await emptyHome();
+  app.addFolder();
+  app.settings.game_edits.new = {setup_pending: true};
+  app.finishScan([game()]);
+  app.ui.dispatch('setup-auto', '');
+  app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
+  app.ui.dispatch('setup-save', '');
+  const request = app.requests.find(request => request.command === 'complete_game_setup');
+  const error = {key: 'error.network', args: {detail: '<cover offline>'}};
+  app.ui.setup_save_progress(JSON.stringify({requestId: request.id, sequence: 1, current: 1, total: 1, error}));
+  assert.match(app.html, /role="alert"[\s\S]*data-immediate="true"[\s\S]*&lt;cover offline&gt;/);
+  app.reply('complete_game_setup', {game: {...game(), metadata_warning: error}, edit: {setup_confirmed: true}});
+  assert.match(app.html, /&lt;cover offline&gt;/);
+  assert.doesNotMatch(app.html, /已添加到游戏库/);
+});
+
+test('result warnings survive a missing progress event while old game warnings do not fail a new import', async () => {
+  for (const currentWarning of [false, true]) {
+    const app = await emptyHome();
+    app.addFolder();
+    app.settings.game_edits.new = {setup_pending: true};
+    app.finishScan([game()]);
+    app.ui.dispatch('setup-auto', '');
+    app.reply('search_metadata', [{title: 'Matched', url: 'https://vndb.org/v1'}]);
+    app.ui.dispatch('setup-save', '');
+    app.reply('complete_game_setup', {
+      game: {...game(), metadata_warning: {key: 'error.network', args: {detail: 'old warning'}}},
+      edit: {setup_confirmed: true},
+      warning: currentWarning ? {key: 'error.network', args: {detail: 'current cover failure'}} : null,
+    });
+    if (currentWarning) {
+      assert.match(app.html, /current cover failure/);
+      assert.doesNotMatch(app.html, /已添加到游戏库/);
+    } else {
+      assert.match(app.html, /已添加到游戏库/);
+    }
+  }
 });
 
 test('automatic search preserves current edited text and confirms a single translated result', async () => {
@@ -418,6 +489,25 @@ test('custom order is the last sort option', async () => {
   assert.equal(options.at(-1), '[&quot;sort&quot;,&quot;custom&quot;]');
 });
 
+for (const mode of ['normal', 'locale']) {
+  test(`detail starts in ${mode} mode when the runtime status is unknown`, async () => {
+    const app = await emptyHome();
+    app.settings.game_edits.new = {setup_confirmed: true, launch_mode: mode};
+    app.ui.library_devices_changed();
+    app.finishScan([game()]);
+    app.ui.dispatch('game-detail', 'new');
+    app.ui.runtime_updated(JSON.stringify({new: 'unknown'}));
+
+    app.ui.dispatch('launch', 'new');
+    assert.deepEqual(app.reply('launch_game', null), {id: 'new', mode});
+    assert.doesNotMatch(app.html, /data-action="confirm-action"/);
+
+    app.ui.runtime_updated(JSON.stringify({new: 'running'}));
+    app.ui.dispatch('launch', 'new');
+    assert.equal(app.requests.some(request => request.command === 'launch_game'), false);
+  });
+}
+
 test('first launch saves the sole executable without a picker and uses its fresh runtime status', async () => {
   const app = await emptyHome();
   const executable = 'F:/Fixture/new/only.exe';
@@ -437,7 +527,7 @@ test('first launch saves the sole executable without a picker and uses its fresh
     game: {...game(), executable}, settings: app.settings, runtime: 'stopped',
   }), {id: 'new', executable});
   assert.doesNotMatch(app.html, /launcher-title/);
-  assert.deepEqual(app.reply('launch_game', null), {id: 'new', mode: 'normal', confirmedUnknown: false});
+  assert.deepEqual(app.reply('launch_game', null), {id: 'new', mode: 'normal'});
 
   app.ui.dispatch('launch', 'new');
   assert.equal(app.requests.some(request => request.command === 'list_game_executables'), false);
@@ -478,7 +568,7 @@ test('large setup renders a bounded scroll window and scan progress accepts coun
   app.addFolder();
   app.ui.scan_progress(JSON.stringify({folders_scanned: 13, completed: 12, total: 600}));
   assert.match(app.html, /12\/600/);
-  assert.match(app.html, /id="library-import-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon"><svg/);
+  assert.match(app.html, /id="library-import-toast" class="toast save-ai-toast"[^>]*><span class="notification-progress-icon" aria-hidden="true"><\/span>/);
   assert.doesNotMatch(app.html, /<progress|class="import-progress"/);
   app.ui.scan_progress(JSON.stringify({folders_scanned: 14, completed: 13, total: 600}));
   assert.match(app.html, /13\/600/);

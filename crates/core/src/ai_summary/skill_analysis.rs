@@ -3,6 +3,7 @@ use super::{
     Setup, Summary, agent, cache, hash, invalid, io, now, read, resources, route_graph, route_html,
     write_json,
 };
+use super::{Stage, StageStatus, progress::Reporter};
 use crate::{Game, Settings};
 use galgear_i18n::Message;
 use serde::{Deserialize, Serialize};
@@ -122,8 +123,10 @@ pub(super) fn prepare(
     settings: &Settings,
     config: &Path,
     home: &Path,
+    progress: &mut Reporter<'_>,
 ) -> Result<Setup, Message> {
     if let Ok(record) = load(game, settings, true) {
+        progress.stage(Stage::Checking, StageStatus::Completed);
         return Ok(setup(game, settings, &record.result, true));
     }
     let (provider, model, token) = super::provider(settings, config)?;
@@ -141,6 +144,8 @@ pub(super) fn prepare(
     let inventory = resources::source_inventory(&root)?;
     let saves = super::preparation_save_inputs(game, settings)?;
     let candidates = serde_json::to_value(&saves.candidates).map_err(io)?;
+    progress.stage(Stage::Checking, StageStatus::Completed);
+    progress.stage(Stage::Resources, StageStatus::Running);
     let result = agent::analyze(
         home,
         &work,
@@ -151,9 +156,11 @@ pub(super) fn prepare(
             "skill":crate::config::display_path(&home.join("Galgear-GalgameReverse-Skill/GalgameResourceExtract")),
             "work":crate::config::display_path(&work),"inventory":inventory,
             "required_saves":saves.required_saves,"save_candidates":candidates,
-            "runtime_limit_seconds":900,"max_turns":60,"graph_contract":route_graph::RULES
+            "runtime_limit_seconds":900,"max_turns":90,"graph_contract":route_graph::RULES
         }),
+        progress,
     )?;
+    progress.stage(Stage::Publishing, StageStatus::Running);
     let graph = validate(&result)?;
     if inventory != resources::source_inventory(&root)?
         || candidates
@@ -195,6 +202,7 @@ pub(super) fn prepare(
         route_html::render(&graph, &game.title, settings.language)?,
     )
     .map_err(io)?;
+    progress.stage(Stage::Publishing, StageStatus::Completed);
     Ok(setup(game, settings, &record.result, false))
 }
 
@@ -203,14 +211,16 @@ pub(super) fn summarize(
     settings: &Settings,
     config: &Path,
     home: &Path,
+    progress: &mut Reporter<'_>,
 ) -> Result<Summary, Message> {
     let (record, cached) = match load(game, settings, true) {
         Ok(record) => (record, true),
         Err(_) => {
-            prepare(game, settings, config, home)?;
+            prepare(game, settings, config, home, progress)?;
             (load(game, settings, true)?, false)
         }
     };
+    progress.stage(Stage::Checking, StageStatus::Completed);
     let result = &record.result;
     let mut warnings: Vec<String> =
         serde_json::from_value(result["limitations"].clone()).map_err(io)?;
@@ -239,10 +249,12 @@ pub(super) fn summarize(
             .ok_or_else(invalid)?
             .into(),
     };
+    progress.stage(Stage::Publishing, StageStatus::Running);
     write_json(
         &cache(game, settings.language).join("latest-summary.json"),
         &summary,
     )?;
+    progress.stage(Stage::Publishing, StageStatus::Completed);
     Ok(summary)
 }
 

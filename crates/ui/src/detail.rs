@@ -167,7 +167,22 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         .get(&game.id)
         .map(String::as_str)
         .unwrap_or("unknown");
-    write!(html,r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}" data-detail-origin="{}" data-detail-game="{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button id="close-detail" class="back-library" data-action="close-detail">{}<span>{}</span></button><div class="detail-edit-actions">"#,if app.detail.editing && !app.detail.editing_configuration{"editing"}else{""},esc(&game.id),esc(&app.page),esc(&game.id),icon("arrow"),t(app,match app.page.as_str() { "home" => "detail.back_home", "collections" => "detail.back_collections", _ => "detail.back" })).unwrap();
+    let back_label_key = match app.page.as_str() {
+        "home" => "detail.back_home",
+        "collections" => "detail.back_collections",
+        _ => "detail.back",
+    };
+    let back_label = esc(t(app, back_label_key));
+    write!(
+        html,
+        r#"<div class="detail-overlay reference-detail {}" data-render-key="detail-{}" data-detail-origin="{}" data-detail-game="{}"><section class="detail-panel" aria-labelledby="detail-title"><div class="detail-scroll" data-render-key="detail-scroll"><div class="detail-back-row"><button type="button" id="close-detail" class="detail-back-button" data-action="close-detail" aria-label="{back_label}" title="{back_label}">{}</button><div class="detail-edit-actions">"#,
+        if app.detail.editing && !app.detail.editing_configuration { "editing" } else { "" },
+        esc(&game.id),
+        esc(&app.page),
+        esc(&game.id),
+        icon("arrow"),
+    )
+    .unwrap();
     if app.detail.editing && !app.detail.editing_configuration {
         html.push_str(&button(
             "detail-rematch",
@@ -357,13 +372,6 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         ));
     }
     html.push_str("</span></div></section></div></div>");
-    if app.detail.editor.is_none()
-        && app.detail.confirmation.as_ref().is_none_or(|(action, _)| {
-            !matches!(action.as_str(), "snapshot-delete" | "detail-tag-remove")
-        })
-    {
-        features::confirmation(html, app);
-    }
     reading(html, app, game);
     saves_card(html, app, game, &edit);
     local_patches::render(html, app, game);
@@ -516,11 +524,17 @@ fn configuration(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
     }
     html.push_str("<dl class=\"configuration-summary\">");
     let executable = game.executable.as_deref().unwrap_or_default();
-    write!(html, r#"<div><dt>{}</dt><dd><button type="button" class="configuration-executable" data-action="launcher-edit" data-value="{}" title="{}" {}>{}</button></dd></div>"#,
-        t(app, "detail.executable"), esc(&game.id), esc(executable),
-        if app.busy() || !game.available { "disabled" } else { "" },
+    let disabled = app.busy() || !game.available;
+    write!(
+        html,
+        r#"<div><dt>{}</dt><dd><span class="configuration-executable" role="button" tabindex="{}" aria-disabled="{disabled}" aria-haspopup="dialog" data-action="launcher-edit" data-value="{}" title="{}">{}</span></dd></div>"#,
+        t(app, "detail.executable"),
+        if disabled { -1 } else { 0 },
+        esc(&game.id),
+        esc(executable),
         esc(value(app, file_name(executable))),
-    ).unwrap();
+    )
+    .unwrap();
     let arguments = edit.arguments.join(" ");
     for (label, text) in [
         ("edit.args", arguments.as_str()),

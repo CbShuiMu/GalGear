@@ -25,10 +25,15 @@ pub struct Monitor {
 }
 
 impl Monitor {
-    /// 在 spawn 后立即登记启动句柄。即使启动器已退出，也保留其身份以寻找后继进程。
-    pub fn launched(&self, executable: &Path, child: &std::process::Child) -> Result<(), String> {
+    /// 启动后立即登记可查询 PID 和创建时间的进程句柄，兼容普通及管理员启动。
+    /// 即使启动器已退出，也保留其身份以寻找后继进程。
+    pub fn launched(
+        &self,
+        executable: &Path,
+        child: &impl std::os::windows::io::AsHandle,
+    ) -> Result<(), String> {
         let path = std::fs::canonicalize(executable).map_err(|e| e.to_string())?;
-        let identity = child_identity(child)?;
+        let identity = child_identity(child.as_handle())?;
         let mut sessions = self.sessions.lock().map_err(|e| e.to_string())?;
         sessions.insert(path, Session::new(identity, Instant::now()));
         Ok(())

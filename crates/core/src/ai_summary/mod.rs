@@ -4,6 +4,7 @@ mod background_identity;
 mod context;
 #[cfg(windows)]
 mod process;
+mod progress;
 mod report;
 mod resources;
 mod route_graph;
@@ -12,6 +13,7 @@ mod route_map;
 mod sandbox;
 mod skill_analysis;
 
+pub use progress::{Progress, Stage, StageProgress, StageStatus};
 pub use route_map::route_map;
 
 use crate::{Game, Settings, ai, data_sources, saves};
@@ -847,10 +849,24 @@ pub fn prepare(
     config: &Path,
     home: &Path,
 ) -> Result<Setup, Message> {
+    prepare_with_progress(game, settings, config, home, &|_| {})
+}
+
+/// 准备分析并同步回报阶段快照；回调应快速返回，最终成功以返回值为准。
+pub fn prepare_with_progress(
+    game: &Game,
+    settings: &Settings,
+    config: &Path,
+    home: &Path,
+    notify: &dyn Fn(&Progress),
+) -> Result<Setup, Message> {
+    let mut progress = progress::Reporter::new(notify);
+    progress.stage(Stage::Checking, StageStatus::Running);
     // 已有严格缓存继续保持离线重启语义；新模式不能强迫这些用户再次联网。
     if !skill_analysis::exists(game, settings)
         && let Ok(m) = manifest(game, settings.language)
     {
+        progress.stage(Stage::Checking, StageStatus::Completed);
         return Ok(Setup {
             reused: true,
             directory: crate::config::display_path(&cache(game, settings.language)),
@@ -858,7 +874,7 @@ pub fn prepare(
             dialogue_count: m.dialogue_count,
         });
     }
-    skill_analysis::prepare(game, settings, config, home)
+    skill_analysis::prepare(game, settings, config, home, &mut progress)
 }
 
 /// 修复既有严格解析器缓存；新分析使用面向交付的 Skill 工作流。
@@ -1156,6 +1172,19 @@ pub fn summarize(
     config: &Path,
     home: &Path,
 ) -> Result<Summary, Message> {
+    summarize_with_progress(game, settings, config, home, &|_| {})
+}
+
+/// 生成提要并回报实际阶段；缓存命中不会模拟 AI 工作阶段。
+pub fn summarize_with_progress(
+    game: &Game,
+    settings: &Settings,
+    config: &Path,
+    home: &Path,
+    notify: &dyn Fn(&Progress),
+) -> Result<Summary, Message> {
+    let mut progress = progress::Reporter::new(notify);
+    progress.stage(Stage::Checking, StageStatus::Running);
     if skill_analysis::exists(game, settings) {
         if !settings
             .game_edits
@@ -1164,8 +1193,10 @@ pub fn summarize(
         {
             return Err(Message::new("summary.disabled"));
         }
-        return skill_analysis::summarize(game, settings, config, home);
+        return skill_analysis::summarize(game, settings, config, home, &mut progress);
     }
+    progress.stage(Stage::Checking, StageStatus::Completed);
+    progress.stage(Stage::Recap, StageStatus::Running);
     summarize_attempt(game, settings, config, home, true)
 }
 

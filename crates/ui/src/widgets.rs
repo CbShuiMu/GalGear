@@ -82,12 +82,9 @@ pub(crate) fn brand() -> &'static str {
     r#"<svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 8c-12-12-22 5-11 11C-4 20 6 37 16 31c-3 17 17 17 16 4 13 9 24-7 12-14C50 8 33 1 28 14Z" fill="currentColor" transform="translate(-2 2) scale(.92)"/><circle cx="24" cy="24" r="5" fill="white"/><path d="m20 24 3 3 6-7" stroke="white" stroke-width="2"/></svg>"#
 }
 
-/// 渲染进行中通知使用的刷新图标。
-pub(crate) fn progress_icon() -> String {
-    format!(
-        r#"<span class="notification-progress-icon">{}</span>"#,
-        icon("refresh")
-    )
+/// 渲染进行中通知使用的装饰性圆环，任务状态由通知正文播报。
+pub(crate) fn progress_icon() -> &'static str {
+    r#"<span class="notification-progress-icon" aria-hidden="true"></span>"#
 }
 
 /// 渲染随任务状态显示的通知，正文由调用方转义。
@@ -98,6 +95,25 @@ pub(crate) fn progress_toast(html: &mut String, id: &str, message_html: &str) {
         progress_icon()
     )
     .unwrap();
+}
+
+/// 阶段通知复用同一 DOM 节点及图标槽，只有正文参与阶段切换；正文须已转义。
+pub(crate) fn stage_toast(
+    html: &mut String,
+    id: &str,
+    message_html: &str,
+    error: bool,
+    running: bool,
+) {
+    let status_icon = if error {
+        icon("error")
+    } else if running {
+        progress_icon().into()
+    } else {
+        icon("check")
+    };
+    write!(html, r#"<div id="{id}" class="toast save-ai-toast stage-toast{}" role="{}" aria-atomic="true"><span class="stage-toast-symbol">{status_icon}</span><span class="stage-toast-text" data-immediate="{error}" title="{message_html}"><span class="stage-toast-current">{message_html}</span></span></div>"#,
+        if error { " error" } else { "" }, if error { "alert" } else { "status" }).unwrap();
 }
 
 pub(crate) fn button(

@@ -61,11 +61,18 @@ fn process_times(handle: HANDLE) -> Result<(u64, bool), String> {
     ))
 }
 
-pub(super) fn child_identity(child: &std::process::Child) -> Result<Identity, String> {
+pub(super) fn child_identity(
+    child: std::os::windows::io::BorrowedHandle<'_>,
+) -> Result<Identity, String> {
     use std::os::windows::io::AsRawHandle;
-    // Child 句柄即使在启动器瞬间退出后仍能查询创建时间，避免下一轮轮询丢失根进程。
+    // SAFETY: 借用的进程句柄在本次查询期间有效，不转移或释放所有权。
+    let pid = unsafe { GetProcessId(child.as_raw_handle()) };
+    if pid == 0 {
+        return Err(std::io::Error::last_os_error().to_string());
+    }
+    // 保留句柄即使在启动器瞬间退出后仍能查询创建时间，避免下一轮轮询丢失根进程。
     Ok(Identity {
-        pid: child.id(),
+        pid,
         created: process_times(child.as_raw_handle())?.0,
     })
 }
