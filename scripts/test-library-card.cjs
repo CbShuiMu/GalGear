@@ -13,7 +13,8 @@ const tagHitTest = tagSource.slice(tagSource.indexOf('export function detailTagC
 function fixture() {
   const calls = [];
   let click;
-  const face = {dataset: {action:'game-detail', value:'game'}, closest: () => null};
+  const actionElement = (action, value) => ({dataset: {action, value}, closest: () => null, getAttribute: () => null});
+  const face = actionElement('game-detail', 'game');
   const card = {querySelector: () => face};
   const tags = {
     offsetWidth:145, clientWidth:137, offsetHeight:100, clientHeight:100, scrollHeight:200, scrollWidth:137,
@@ -31,8 +32,8 @@ function fixture() {
     suppress() { vm.runInContext('suppressCardClickUntil = 500', context); },
     click(region, coordinates = {}) {
       const action = region === 'title' || region === 'cover' ? face
-        : region === 'favorite' ? {dataset: {action:'collection-picker',value:'game'},closest: () => null} : null;
-      const tagLabel = {dataset: {action: 'detail-tag', value: '学园'}, closest: () => null};
+        : region === 'favorite' ? actionElement('collection-picker', 'game') : null;
+      const tagLabel = actionElement('detail-tag', '学园');
       const chip = {querySelector: () => tagLabel};
       const target = {closest: selector => {
         if (selector === '.hero-tags .detail-tag-chip:not(.tag-input-chip)' && region.startsWith('tag-')) return chip;

@@ -4,7 +4,7 @@ const {test} = require('node:test');
 const vm = require('node:vm');
 
 const source = readFileSync('web/setup-scroll.js', 'utf8')
-  .replace(/^import .*\n/, '').replaceAll('export function', 'function');
+  .replace(/^import [^\r\n]*\r?\n/, '').replaceAll('export function', 'function');
 
 test('reused spacers update height without writing HTML style attributes', () => {
   const context = vm.createContext({});
