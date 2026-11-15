@@ -124,6 +124,8 @@ An optional **AI story recap** is available. Configure an API token and model fo
 
 An **AI route map** opens a generated map of branches and endings in your default browser. The interactive map works offline and lets you expand branches, zoom, and pan. Route maps always use DeepSeek, which must be configured separately. The feature analyzes the full dialogue and may reveal later story events and endings.
 
+During analysis, the notification in the bottom-right corner shows the current stage and remains visible as you switch pages.
+
 These features are experimental. Save and script support varies by game, and generated summaries and routes may be inaccurate. When enabled, the dialogue, save information, and game metadata needed for analysis are sent to the corresponding AI service. API usage is billed to your own account. See [AI settings](docs/ai-settings.md) and [Story recaps](docs/ai-summary.md) for details (in Chinese).
 
 </details>
