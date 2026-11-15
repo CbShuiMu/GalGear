@@ -1,4 +1,9 @@
 {
+  "progress.numbered_stage": {
+    "zh-CN": "{current}/{total} · {message}",
+    "ja-JP": "{current}/{total} · {message}",
+    "en-US": "{current}/{total} · {message}"
+  },
   "summary.progress_summarizing": {
     "zh-CN": "正在生成前情提要…",
     "ja-JP": "あらすじを生成中…",
@@ -15,9 +20,9 @@
     "en-US": "{detail}"
   },
   "setup.save_count": {
-    "zh-CN": "（{current}/{total}）",
-    "ja-JP": "（{current}/{total}）",
-    "en-US": " ({current}/{total})"
+    "zh-CN": "（游戏 {current}/{total}）",
+    "ja-JP": "（ゲーム {current}/{total}）",
+    "en-US": " (game {current}/{total})"
   },
   "setup.save_rematched": {
     "zh-CN": "已更新游戏资料{progress}",

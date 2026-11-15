@@ -73,6 +73,33 @@ class ResourceDiscoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'payload extent'):
             host.ARCHIVE_TOOLS['scene_members'](archive)
 
+    def test_pfs_extract_preserves_literal_brackets_and_reports_cli_error(self):
+        archive = self.root / '[Vendor] 日本語 [patch]' / 'story.pfs.099'
+        archive.parent.mkdir()
+        archive.write_bytes(b'pf8' + bytes(128))
+        executable = self.root / 'tools/pfs-rs/pfs-rs.exe'
+        executable.parent.mkdir(parents=True)
+        executable.touch()
+        expected = str(archive).replace('[Vendor]', '[[]Vendor[]]').replace('[patch]', '[[]patch[]]')
+        def run(argv, **kwargs):
+            if argv[1] == 'list':
+                self.assertEqual(argv[2], str(archive))
+                return mock.Mock(returncode=0, stdout=b'script/scene.ast\n', stderr=b'')
+            self.assertEqual(argv[2], expected)
+            target = pathlib.Path(argv[3]) / 'script/scene.ast'
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b'localized scene')
+            return mock.Mock(returncode=0, stderr=b'')
+        with mock.patch.object(host.subprocess, 'run', side_effect=run):
+            result = self.agent.run_specialized_archive(archive, 'pfs', dict(command='x', filter='*.ast'))
+        self.assertEqual(self.agent.path('work', result['sample_output']).read_bytes(), b'localized scene')
+        self.agent.skill_run_cache.clear()
+        with mock.patch.object(host.subprocess, 'run', side_effect=[
+                mock.Mock(returncode=0, stdout=b'script/scene.ast\n'),
+                mock.Mock(returncode=2, stderr=b'Invalid archive header')]):
+            with self.assertRaisesRegex(ValueError, r'exit 2.*Invalid archive header'):
+                self.agent.run_specialized_archive(archive, 'pfs', dict(command='x', filter='*.ast'))
+
     def test_specialized_archive_rejects_unsafe_names_before_extraction(self):
         for names in (['../outside'], ['C:/outside'], ['abc', 'ABC'], ['dir/CON.txt']):
             with self.subTest(names=names), self.assertRaises(ValueError):

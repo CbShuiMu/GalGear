@@ -29,6 +29,10 @@ class AnalysisTests(unittest.TestCase):
         self.agent=ANALYSIS['AnalysisAgent'](self.config,API)
         self.recap_requests=[]
         def summary(messages,available,**kwargs):
+            if kwargs.get('phase')=='route_text_review':
+                return dict(message=dict(tool_calls=[dict(function=dict(name='review_route_text',arguments='{"issues":[]}'))]))
+            if kwargs.get('phase')=='text_quality_review':
+                return dict(message=dict(tool_calls=[dict(function=dict(name='review_readability',arguments='{"readable":true,"reason":"fixture"}'))]))
             self.recap_requests.append(messages)
             return dict(message=dict(tool_calls=[dict(function=dict(arguments=json.dumps(dict(
                 recap='根据存档之前的脚本片段，伙伴们在港口商量行程，并确认出发前的准备。当前重建只依据这一小段剧情。',
@@ -42,7 +46,7 @@ class AnalysisTests(unittest.TestCase):
         self.agent.recap_context=dict(save_input=str(self.save/'slot.dat'),records=['港口准备'],anchor='港口准备')
         return dict(recap='伙伴们在港口商量出发前的准备，交流了目的地与各自的顾虑。'*4,
             current_progress='当前场景仍在港口。根据存档文本推测，他们正在确认旅程安排，还没有开始下一阶段。',
-            script_language='zh-CN',graph=dict(nodes=[dict(id='s',label='开始',kind='start',evidence='O1')],edges=[],uncertainties=['候选位置']),
+            script_language='zh-CN',graph=dict(characters=[],nodes=[dict(id='s',label='开始',kind='start',evidence='O1')],edges=[],uncertainties=['候选位置']),
             evidence_refs=['O1'],save_position=dict(root='save',path='slot.dat',level='candidate',locator='caption',explanation='候选'),
             scope=dict(dialogue_count=5,flow_basis=dict(kind='script_control_flow',ref='O1',locator='fixture calls')),limitations=['未加载游戏'])
 
@@ -61,6 +65,15 @@ class AnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Input changed'): self.agent.finish(value)
         self.assertFalse((self.agent.work/'analysis-result.json').exists())
 
+    def test_archive_document_can_be_read_after_implicit_cli_setup(self):
+        (self.skill/'commands').mkdir()
+        (self.skill/'commands/garbro.md').write_text('CLI instructions',encoding='utf-8')
+        (self.game/'archive.bin').write_bytes(b'fixture')
+        with patch.object(self.agent.host,'archive_backend',return_value='garbro-mod'), patch.object(self.agent.host,'_dispatch',return_value={}):
+            self.agent.dispatch('run_skill',dict(command='l',archive='archive.bin'))
+        value=self.agent.dispatch('read_text',dict(root='skill',path='commands/garbro.md'))
+        self.assertEqual(value['text'],'CLI instructions')
+
     def test_last_filename_cannot_be_submitted_as_an_ending(self):
         value=self.result()
         value['graph']['nodes'][0]['kind']='ending'
@@ -73,14 +86,17 @@ class AnalysisTests(unittest.TestCase):
         value['save_position']['level']='static_consistent'
         with self.assertRaisesRegex(ValueError,'precise locator'): self.agent.finish(value)
 
-    def test_long_linear_catalog_requires_grouping_but_shared_options_survive(self):
+    def test_long_linear_catalog_warns_without_blocking_and_shared_options_survive(self):
         value=self.result()
         value['graph']['nodes'] += [dict(id='n'+str(i),label='场景',kind='scene',evidence='O1') for i in range(10)]
         value['graph']['edges']=[dict(**{'from':a,'to':b},label='',inferred=True,evidence='O1')
             for a,b in zip(['s']+['n'+str(i) for i in range(9)],['n'+str(i) for i in range(10)])]
-        with self.assertRaisesRegex(ValueError,'consecutive linear'):self.agent.finish(value)
+        self.agent.finish(value)
+        self.assertTrue(any('Long narration chain' in item for item in self.agent.done['graph']['uncertainties']))
+        self.assertEqual(len(self.agent.done['graph']['nodes']),11)
         value['graph']['nodes']=value['graph']['nodes'][:2]
         value['graph']['edges']=[dict(**{'from':'s','to':'n0'},kind='choice',label=label,inferred=False,evidence='O1') for label in ['答应','拒绝']]
+        self.agent.emit('fixture-index.json',dict(records=[dict(name='menu',known_options=[dict(variants=['答应']),dict(variants=['拒绝'])])]))
         self.agent.finish(value)
         self.assertEqual(len(self.agent.done['graph']['edges']),2)
 
@@ -95,7 +111,7 @@ class AnalysisTests(unittest.TestCase):
     def test_repeated_menu_text_at_different_locations_cannot_be_merged(self):
         value=self.result()
         self.agent.emit('fixture-index.json',dict(records=[dict(input='scene.ast',menu_locations=['/block1','/block2'])]))
-        value['graph']['nodes'].append(dict(id='c',label='选择',kind='choice',evidence='O1'))
+        value['graph']['nodes'].append(dict(id='c',label='选择',kind='choice',decision_kind='condition',evidence='O1'))
         with self.assertRaisesRegex(ValueError,'2 distinct menu locations'):self.agent.finish(value)
 
     def test_finish_tool_can_express_supported_grand_unlock_contract(self):
@@ -133,14 +149,13 @@ class AnalysisTests(unittest.TestCase):
         self.agent.finish(value)
         self.assertEqual(len(self.agent.done['graph']['edges']),1)
 
-    def test_conditional_fork_cannot_be_hidden_in_a_story_segment(self):
+    def test_conditional_fork_is_normalized_without_an_extra_model_round(self):
         value=self.result()
         value['graph']['nodes'] += [dict(id=i,kind='scene',label=label,evidence='O1') for i,label in [('gate','后续剧情和结局'),('a','继续旅程'),('b','告别')]]
         value['graph']['edges']=[dict(**{'from':'gate','to':target},kind='flow',label=label,condition=label,inferred=False,evidence='O1') for target,label in [('a','条件满足'),('b','条件未满足')]]
-        with self.assertRaisesRegex(ValueError,'separate decision'):self.agent.finish(value)
-        value['graph']['nodes'][1].update(kind='choice',label='是否满足旅程继续的条件')
         self.agent.finish(value)
         self.assertEqual(self.agent.done['graph']['nodes'][1]['kind'],'choice')
+        self.assertEqual(self.agent.done['graph']['nodes'][1]['decision_kind'],'condition')
 
     def test_save_marker_cannot_point_back_from_a_disconnected_root(self):
         value=self.result()
@@ -149,6 +164,26 @@ class AnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'must be reachable'):self.agent.finish(value)
         value['graph']['edges'][0].update({'from':'s','to':'sv'})
         self.agent.finish(value)
+
+    def test_player_menu_cannot_disguise_clicks_as_automatic_flow(self):
+        value=self.result()
+        value['graph']['nodes'].append(dict(id='menu',kind='choice',decision_kind='player',label='选择目的地',evidence='actual UI return value'))
+        value['graph']['edges']=[dict(**{'from':'menu','to':'s'},kind='flow',label='destination=1',inferred=False,evidence='UI dispatch')]
+        with self.assertRaisesRegex(ValueError,'Player menu edges'):self.agent.submit_route(value)
+
+    def test_unknown_save_prefers_newest_numbered_candidate_without_promoting_its_role(self):
+        for name in ('global.dat','slot12.dat','slot01.dat'):(self.save/name).write_bytes(b'unknown')
+        self.agent.save_candidates=[dict(root='save',path=name,kind='unknown',modified=stamp) for name,stamp in [('global.dat',30),('slot12.dat',20),('slot01.dat',10)]]
+        selected=self.agent.initial_candidates()[0]
+        self.assertEqual(selected['path'],'slot12.dat')
+        self.assertEqual(selected['kind'],'unknown')
+
+    def test_save_tools_remain_available_before_route_checkpoint(self):
+        names={t['function']['name'] for t in self.agent.phase_tools()}
+        self.assertIn('select_recap_context',names)
+        self.assertIn('finish_analysis',names)
+        self.assertIsNone(self.agent.route_draft)
+        self.assertEqual(self.agent.dispatch('read_bytes',dict(root='save',path='slot.dat',offset=0,length=12))['hex'],b'fixture save'.hex())
 
     def test_unresolved_file_order_cannot_be_declared_known_execution(self):
         value=self.result()
@@ -211,6 +246,14 @@ class AnalysisTests(unittest.TestCase):
         value=self.agent.query(dict(indexes=['index.json'],source='def extract(data, metadata):\n return {k:v["value"] for k,v in metadata["documents"].items()}'))
         self.assertEqual(json.loads((self.agent.work/value['output']).read_text('utf-8')),{'a/x':'甲','b/x':'乙'})
 
+    def test_large_script_set_is_not_dropped_to_fit_an_arbitrary_count(self):
+        directory=self.game/'large';directory.mkdir()
+        for index in range(4100):(directory/f'{index}.txt').write_text('fixture text','utf-8')
+        result=self.agent.batch(dict(root='game',path='large',pattern='*.txt',reader='text'))
+        self.assertEqual((result['selected'],result['succeeded'],result['failed']),(4100,4100,0))
+        batch=json.loads((self.agent.work/result['index']).read_text('utf-8'))
+        self.assertEqual(len(batch['records']),4100)
+
     def test_batch_retains_partial_failures_and_native_input_hashes(self):
         (self.game/'good.txt').write_text('消息',encoding='utf-8')
         (self.game/'bad.txt').write_bytes(b'\xff\x01')
@@ -238,6 +281,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn('港口准备',json.dumps(self.recap_requests,ensure_ascii=False))
 
     def test_caption_context_stops_inside_record_before_future_text(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
         self.agent.emit('save.json',dict(caption='当前句子'))
         self.agent.emit('script.json',dict(rows=[dict(text='先前句子'),dict(parts=['当前句子','FUTURE IN SAME BLOCK']),dict(text='FUTURE NEXT BLOCK')]))
         for number,root,file in [(1,'save','save.json'),(2,'work','script.json')]:
@@ -250,6 +294,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertIn('先前句子',text)
 
     def test_coordinate_window_never_includes_later_rows(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
         self.agent.emit('save.json',dict(line=10))
         self.agent.emit('script.json',dict(rows=[dict(source_line=9,text='before'),dict(source_line=10,text='at'),dict(source_line=11,text='future')]))
         self.agent.emit('s.json',dict(input_root='save',records=[dict(output='save.json',input=str(self.save/'slot.dat'),sha256='save')]))
@@ -277,6 +322,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertNotEqual(first['records'][0]['sha256'],third['records'][0]['sha256'])
 
     def test_historical_bookmark_cannot_replace_decoded_latest_slot(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
         self.agent.emit('save.json',dict(caption='当前句子'))
         self.agent.emit('script.json',dict(rows=['当前句子']))
         self.agent.emit('s.json',dict(input_root='save',records=[dict(output='save.json',input=str(self.save/'old.dat'),sha256='old')]))
@@ -287,6 +333,7 @@ class AnalysisTests(unittest.TestCase):
             self.agent.dispatch('select_recap_context',dict(save_file='save.json',save_pointer='/caption',script_file='script.json',script_pointer='/rows',explanation='old bookmark'))
 
     def test_recap_source_names_resolve_without_opaque_json_paths(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
         self.agent.emit('save.json',dict(caption='当前句子'))
         self.agent.emit('script.json',dict(rows=['先前消息','当前句子','未来消息']))
         self.agent.emit('s.json',dict(input_root='save',records=[dict(output='save.json',input=str(self.save/'slot.dat'),name='slot.dat',sha256='save')]))
@@ -330,6 +377,128 @@ class AnalysisTests(unittest.TestCase):
             ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
         self.assertEqual(call.call_count,1)
 
+    def test_format_research_uses_reasoning_and_recap_stays_nonthinking(self):
+        from unittest.mock import Mock
+        call=Mock(return_value=dict(message=dict(content='ok')))
+        with patch.dict(self.agent.api['TRANSPORT'],complete=call):
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
+            self.agent.format_research=True
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
+            with patch.object(self.agent,'batch',return_value=dict(succeeded=1)):
+                self.agent.dispatch('read_resources',dict(root='work',path='story'))
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[],phase='format_review')
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[],phase='recap')
+        self.assertEqual([c.args[0]['reasoning_effort'] for c in call.call_args_list],['low','max','max','max','low'])
+        self.assertTrue(call.call_args_list[-2].args[0]['thinking_enabled'])
+        self.assertNotIn('required_tool',call.call_args_list[-2].args[0])
+        self.assertFalse(call.call_args_list[-1].args[0]['thinking_enabled'])
+
+    def test_successful_native_story_read_raises_effort_before_first_route_draft(self):
+        from unittest.mock import Mock
+        call=Mock(return_value=dict(message=dict(content='ok')))
+        with patch.dict(self.agent.api['TRANSPORT'],complete=call):
+            with patch.object(self.agent,'batch',return_value=dict(succeeded=0)):
+                self.agent.dispatch('read_resources',dict(root='game',path='story'))
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
+            with patch.object(self.agent,'batch',return_value=dict(succeeded=1)):
+                self.agent.dispatch('read_resources',dict(root='save',path='slot.dat'))
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
+            with patch.object(self.agent,'batch',return_value=dict(succeeded=1)):
+                self.agent.dispatch('read_resources',dict(root='game',path='story'))
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
+        self.assertFalse(self.agent.delivery_started)
+        self.assertEqual([c.args[0]['reasoning_effort'] for c in call.call_args_list],['low','low','max'])
+
+    def test_route_revision_uses_more_reasoning_without_extra_review_calls(self):
+        from unittest.mock import Mock
+        call=Mock(return_value=dict(message=dict(content='ok')))
+        self.agent.submit_route(self.result())
+        with patch.dict(self.agent.api['TRANSPORT'],complete=call):
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[])
+            ANALYSIS['AnalysisAgent'].complete(self.agent,[],[],phase='recap')
+        self.assertEqual([c.args[0]['reasoning_effort'] for c in call.call_args_list],['max','low'])
+        self.assertEqual(call.call_count,2)
+
+    def test_flat_route_and_existing_evidence_citations_do_not_require_retransmission(self):
+        args=self.result()
+        args.update(args.pop('graph'))
+        args.pop('evidence_refs')
+        self.agent.finish(args)
+        self.assertEqual(self.agent.done['evidence_refs'],['O1'])
+        self.assertEqual(self.agent.done['graph']['nodes'][0]['id'],'s')
+
+    def test_reference_accepts_existing_root_paths_and_lists_directory(self):
+        (self.skill/'engine').mkdir()
+        doc=self.skill/'engine/example.md'
+        doc.write_text('format reference',encoding='utf-8')
+        for name in (str(doc),self.skill.name+'/engine/example.md','skill/engine/example.md'):
+            result=self.agent.dispatch('read_reference',dict(path=name))
+            self.assertEqual(result['text'],'format reference')
+        result=self.agent.dispatch('read_reference',{})
+        self.assertTrue(any(row['name']=='engine' for row in result['entries']))
+
+    def test_programmatic_route_uses_same_validation_and_can_finish_from_checkpoint(self):
+        payload=self.result()
+        position=payload.pop('save_position')
+        self.agent.emit('query-route.json',payload)
+        result=self.agent.dispatch('submit_route',dict(route_file='query-route.json'))
+        self.assertTrue(result['accepted'])
+        self.agent.finish(dict(save_position=position))
+        self.assertEqual(self.agent.done['graph'],payload['graph'])
+        payload['graph']['edges']=[dict(**{'from':'s','to':'missing'},label='go',evidence='O1',inferred=True)]
+        self.agent.emit('query-route.json',payload)
+        with self.assertRaisesRegex(ValueError,'known endpoints'):
+            self.agent.submit_route(dict(route_file='query-route.json'))
+        with self.assertRaisesRegex(ValueError,'outside allowed root'):
+            self.agent.submit_route(dict(route_file='../outside.json'))
+
+    def test_fresh_format_review_reruns_patch_without_claiming_analysis_success(self):
+        source='def analyze(inputs, metadata):\n return {"result": inputs["archive"][1:].hex()}'
+        (self.game/'archive.bin').write_bytes(b'\x03ABC')
+        args=dict(inputs=[dict(id='archive',root='game',path='archive.bin')],source=source)
+        result=self.agent.dispatch('run_format_program',args)
+        self.agent.observations['O1']=dict(tool='read_reference',result=dict(member='fixture.cs',text='The first byte is size; following bytes are the member.'),error=None)
+        edit=dict(old='return {"result": inputs["archive"][1:].hex()}',new='return {"files":{"story.txt":inputs["archive"][1:]}}')
+        from unittest.mock import Mock
+        self.agent.complete=Mock(return_value=dict(message=dict(tool_calls=[dict(function=dict(name='review_result',arguments=json.dumps(dict(findings='Emit the decoded payload.',edits=[edit]))))])))
+        repaired=self.agent.review_format(args,result)
+        self.assertEqual((self.agent.work/repaired['output']/'story.txt').read_bytes(),b'ABC')
+        self.assertEqual(self.agent.complete.call_args.kwargs['phase'],'format_review')
+        self.assertIsNone(self.agent.done)
+        self.assertTrue((self.agent.work/'format-review-1.json').is_file())
+        self.agent.complete=Mock(return_value=dict(message=dict(content=json.dumps(dict(findings='Emit payload.',edits=[edit])))))
+        direct=self.agent.review_format(args,result)
+        self.assertEqual((self.agent.work/direct['output']/'story.txt').read_bytes(),b'ABC')
+        broken=dict(findings='The offset is wrong.',edits=[dict(old=edit['old'],new='return unknown_value')])
+        self.agent.complete=Mock(return_value=dict(message=dict(content=json.dumps(broken))))
+        rejected=self.agent.review_format(args,result)
+        self.assertIn('unknown_value',rejected['review_error'])
+        self.assertEqual(rejected['review']['findings'],'The offset is wrong.')
+        self.assertEqual(rejected['program'],result['program'])
+        oversized=dict(findings='Needs a full rewrite.',edits=[dict(old=edit['old'],new='x'*601)])
+        self.agent.complete=Mock(return_value=dict(message=dict(content=json.dumps(oversized))))
+        rejected=self.agent.review_format(args,result)
+        self.assertIn('no automatic patch',rejected['review_error'])
+        self.assertEqual(rejected['review']['findings'],'Needs a full rewrite.')
+
+    def test_successful_custom_extraction_does_not_trigger_model_review(self):
+        result=dict(count=1,program='fixture.py',inputs=[])
+        with patch.dict(ANALYSIS['FORMATS'],run_program=lambda agent,args:dict(result)), patch.object(
+                self.agent,'review_format',side_effect=lambda args,value:value) as review:
+            self.agent.dispatch('run_format_program',{})
+            self.agent.dispatch('run_format_program',{})
+        self.assertEqual(review.call_count,0)
+        self.assertTrue(self.agent.format_research)
+        self.assertIsNone(self.agent.done)
+
+    def test_exploratory_probes_do_not_force_review_or_spend_model_requests(self):
+        result=dict(count=0,program='fixture.py',inputs=[])
+        with patch.dict(ANALYSIS['FORMATS'],run_program=lambda agent,args:dict(result)), patch.object(self.agent,'review_format') as review:
+            for _ in range(8):self.agent.dispatch('run_format_program',{})
+        review.assert_not_called()
+        self.assertEqual(self.agent.requests,0)
+
     def test_cold_tool_cannot_read_previous_work_or_escape_root(self):
         with self.assertRaisesRegex(ValueError,'another preparation cache'):
             self.agent.host.path('game','.galgear-ai-summary/old/result.json')
@@ -337,6 +506,7 @@ class AnalysisTests(unittest.TestCase):
             self.agent.query(dict(files=['../secret.json'],source='def extract(data, metadata): return {}'))
 
     def test_custom_readers_bind_caption_to_native_ordinal_without_future_text(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
         (self.save/'slot.dat').write_bytes('当前句子'.encode('utf-16-le'))
         (self.game/'script.bin').write_bytes('先前消息\n当前句子\n未来消息'.encode('utf-16-le'))
         source='def extract(data, metadata):\n return {"rows": [{"id": i, "text": text} for i, text in enumerate(data.decode("utf-16-le").split("\\n"))]}'
@@ -353,6 +523,18 @@ class AnalysisTests(unittest.TestCase):
         repeated=self.agent.batch(dict(root='game',paths=['script.bin'],reader='custom',options=dict(source=source)))
         self.assertEqual(repeated['reused'],1)
 
+    def test_custom_save_integer_cannot_be_guessed_as_script_index(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
+        self.agent.batch(dict(root='save',paths=['slot.dat'],reader='custom',
+            options=dict(source='def extract(data, metadata): return {"cursor":1}')))
+        (self.game/'script.bin').write_bytes(b'earlier\ncurrent\nfuture')
+        self.agent.batch(dict(root='game',paths=['script.bin'],reader='custom',
+            options=dict(source='def extract(data, metadata): return {"rows":data.decode("ascii").split("\\n")}')))
+        with self.assertRaisesRegex(ValueError,'not a verified script coordinate'):
+            self.agent.dispatch('select_recap_context',dict(save_file='slot.dat',save_pointer='/value/cursor',
+                script_file='script.bin',script_pointer='/value/rows',explanation='Assumed integer index'))
+        self.assertIsNone(self.agent.recap_context)
+
     def test_custom_reader_can_reuse_inspection_but_not_different_input(self):
         args=dict(root='save',path='slot.dat',source='def extract(data, metadata): return {"caption":data.decode("ascii")}')
         self.agent.observations['O1']=dict(tool='inspect_data',arguments=args,error=None)
@@ -364,6 +546,14 @@ class AnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Unavailable name'):
             self.agent.batch(dict(root='save',paths=['slot.dat'],reader='custom',options=dict(source='def extract(data, metadata): return open("secret")')))
 
+    def test_large_custom_batch_keeps_one_worker_memory_limit(self):
+        names=['scene-'+str(i)+'.bin' for i in range(128)]
+        for name in names:(self.game/name).write_bytes(b'fixture script')
+        result=self.agent.batch(dict(root='game',paths=names,reader='custom',
+            options=dict(source='def extract(data, metadata):\n return {"text":data.decode("ascii")}')))
+        self.assertEqual(result['succeeded'],128)
+        self.assertEqual(result['failed'],0)
+
     def test_custom_context_cannot_be_promoted_to_active_engine_state(self):
         value=self.result()
         self.agent.recap_context['custom_decoder']=True
@@ -371,6 +561,79 @@ class AnalysisTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'only support candidate'):self.agent.finish(value)
         value['save_position']['level']='candidate'
         self.agent.finish(value)
+
+    def test_translation_alignment_requires_scene_unique_source_quote_and_cuts_future(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
+        from unittest.mock import Mock
+        self.agent.emit('save.json',dict(scene='chapter01',caption='请把行李放在上面。'))
+        self.agent.emit('script.json',dict(rows=[dict(text='On the train.'),dict(text='Put your bag on the rack.',future='NOT YET'),dict(text='A later event.')]))
+        self.agent.emit('s-index.json',dict(input_root='save',records=[dict(output='save.json',input=str(self.save/'slot.dat'),name='slot.dat',sha256='save')]))
+        self.agent.emit('t-index.json',dict(input_root='game',records=[dict(output='script.json',input=str(self.game/'chapter01.bin'),name='chapter01.bin',sha256='script')]))
+        self.agent.batches=['s-index.json','t-index.json']
+        args=dict(save_file='slot.dat',save_pointer='/caption',script_file='chapter01.bin',script_pointer='/rows',
+            translation_scene_pointer='/scene',translation_text_field='text',explanation='Same scene, translated caption candidate.')
+        def response(matches):
+            return dict(message=dict(tool_calls=[dict(function=dict(name='align_caption',arguments=json.dumps(dict(matches=matches,reason='Translation-equivalent luggage instruction.'))))]))
+        hit=dict(first=1,last=1,last_text='Put your bag on the rack.')
+        for matches in [[],[hit,hit],[dict(hit,last_text='invented')],[dict(hit,first=-4)]]:
+            self.agent.translation_verdicts={}
+            self.agent.complete=Mock(return_value=response(matches))
+            with self.assertRaises(ValueError):self.agent.dispatch('select_recap_context',args)
+            self.assertIsNone(self.agent.recap_context)
+        self.agent.complete=Mock(return_value=response([]))
+        self.agent.translation_verdicts={}
+        with self.assertRaisesRegex(ValueError,'Independent review: Translation-equivalent luggage instruction.*base or patched'):
+            self.agent.dispatch('select_recap_context',args)
+        with self.assertRaisesRegex(ValueError,'base or patched'):
+            self.agent.dispatch('select_recap_context',args)
+        self.assertEqual(self.agent.complete.call_count,1)
+        self.agent.translation_verdicts={}
+        self.agent.complete=Mock(return_value=response([hit]))
+        self.agent.emit('save.json',dict(scene='different_scene',caption='请把行李放在上面。'))
+        with self.assertRaisesRegex(ValueError,'scene identifier'):self.agent.dispatch('select_recap_context',args)
+        self.agent.complete.assert_not_called()
+        self.agent.emit('save.json',dict(scene='chapter01',caption='请把行李放在上面。'))
+        self.agent.dispatch('select_recap_context',args)
+        context=self.agent.recap_context
+        self.assertEqual(context['translation_alignment']['level'],'translation_candidate')
+        self.assertEqual(context['anchor'],'请把行李放在上面。')
+        self.assertNotIn('A later event',json.dumps(context))
+        self.assertNotIn('NOT YET',json.dumps(context))
+        self.assertEqual(self.agent.complete.call_args.kwargs['phase'],'anchor_review')
+
+    def test_translation_candidate_cannot_be_promoted_to_active_state(self):
+        value=self.result()
+        self.agent.recap_context['translation_alignment']={'level':'translation_candidate'}
+        value['save_position']['level']='decoded_active'
+        with self.assertRaisesRegex(ValueError,'only support candidate'):self.agent.finish(value)
+
+    def test_translation_finds_saved_scene_without_guessed_indexes_or_text_wrappers(self):
+        from unittest.mock import Mock
+        self.agent.emit('save.json',dict(caption='请把行李放上去。',identifiers=[dict(text='other'),dict(text='chapter01')]))
+        self.agent.emit('script.json',dict(rows=['On the train.','Put your bag on the rack.','Future event.']))
+        self.agent.emit('s-index.json',dict(input_root='save',records=[dict(output='save.json',input=str(self.save/'slot.dat'),name='slot.dat',sha256='save')]))
+        self.agent.emit('t-index.json',dict(input_root='game',records=[dict(output='script.json',input=str(self.game/'chapter01.bin'),name='chapter01.bin',sha256='script')]))
+        self.agent.batches=['s-index.json','t-index.json']
+        verdict=dict(matches=[dict(first=1,last=1,last_text='Put your bag on the rack.')],reason='Same instruction.')
+        self.agent.complete=Mock(return_value=dict(message=dict(tool_calls=[dict(function=dict(name='align_caption',arguments=json.dumps(verdict)))])))
+        args=dict(save_file='slot.dat',save_pointer='/caption',script_file='chapter01.bin',script_pointer='/rows',explanation='caption')
+        for pointer in (None,'/identifiers/0/text','/identifiers/999'):
+            with self.subTest(pointer=pointer):
+                if pointer:args['translation_scene_pointer']=pointer
+                result=self.agent.dispatch('select_recap_context',args)
+                self.assertEqual(result['record_index'],1)
+                self.assertEqual(self.agent.recap_context['selection']['translation_scene_pointer'],'/identifiers/1/text')
+                self.assertNotIn('Future event',json.dumps(self.agent.recap_context))
+        self.assertEqual(self.agent.complete.call_count,1)
+
+    def test_recap_does_not_receive_authors_alignment_story_or_character_guesses(self):
+        self.agent.recap_context=dict(anchor='当前台词',records=[dict(text='当前台词')],record_index=2,
+            selection=dict(explanation='UNVERIFIED_CHARACTER and FUTURE_PLOT'),
+            translation_alignment=dict(reason='MODEL_GUESS'))
+        ANALYSIS['RECAP']['summarize'](self.agent)
+        sent=json.loads(self.recap_requests[-1][-1]['content'])['context']
+        self.assertEqual(set(sent),{'anchor','records','record_index'})
+        self.assertNotIn('UNVERIFIED_CHARACTER',json.dumps(sent))
 
     def test_route_checkpoint_survives_missing_recap_and_can_finish_without_resending_graph(self):
         value=self.result()
@@ -391,6 +654,66 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(self.agent.complete.call_count,2)
         self.assertIn('Cannot bind the save caption',(self.agent.work/'conversation.json').read_text('utf-8'))
         self.assertEqual(json.loads((self.agent.work/'session.json').read_text())['status'],'failed')
+
+    def test_paged_source_and_helpers_reach_model_without_generic_preview(self):
+        from unittest.mock import Mock
+        source=dict(member='source.cs',text='source body\n'*1600,
+                    dependencies=[dict(member='helper.cs',text='helper implementation\n'*1200)])
+        call=dict(role='assistant',tool_calls=[dict(id='read',type='function',function=dict(
+            name='read_reference',arguments=json.dumps(dict(path='source.zip',member='source.cs'))))])
+        self.agent.dispatch=Mock(return_value=source)
+        self.agent.complete=Mock(side_effect=[dict(message=call),dict(message=dict(role='assistant',content='pending')),
+                                             dict(message=dict(role='assistant',content='pending'))])
+        with self.assertRaisesRegex(RuntimeError,'no progress'):self.agent.run()
+        delivered=next(json.loads(m['content'])['result'] for m in self.agent.messages if m.get('tool_call_id')=='read')
+        self.assertEqual(delivered,source)
+
+    def test_progress_keeps_completed_stages_in_atomic_snapshot(self):
+        self.agent.report_progress(dict(stage='resources',status='running'))
+        self.agent.observations['O1']=dict(tool='run_skill',error=None)
+        self.agent.report_progress(dict(stage='resources',status='completed',evidence_refs=['O1']))
+        self.agent.report_progress(dict(stage='scripts',status='running'))
+        self.agent.report_progress(dict(stage='scripts',status='running'))
+        snapshot=json.loads((self.agent.work/'progress.json').read_text('utf-8'))
+        self.assertEqual(snapshot,dict(sequence=3,current_stage='scripts',stages=[dict(stage='resources',status='completed'),dict(stage='scripts',status='running')]))
+        self.agent.report_progress(dict(stage='resources',status='running'))
+        self.assertEqual(self.agent.progress_current,'resources')
+
+    def test_failed_tools_and_unvalidated_milestones_cannot_claim_completion(self):
+        self.agent.observations['O1']=dict(tool='read_resources',error='failed',result=dict(succeeded=0))
+        for stage in ('resources','scripts','save','route','recap'):
+            with self.assertRaises(ValueError):
+                self.agent.report_progress(dict(stage=stage,status='completed',evidence_refs=['O1']))
+        self.assertFalse((self.agent.work/'progress.json').exists())
+        with self.assertRaises(ValueError):
+            self.agent.report_progress(dict(stage='publish_everything',status='completed'))
+
+    def test_progress_only_replies_do_not_extend_work_budget_or_create_evidence(self):
+        from unittest.mock import Mock
+        message=dict(role='assistant',tool_calls=[dict(id='progress',type='function',function=dict(name='report_progress',
+            arguments=json.dumps(dict(stage='resources',status='running'))))])
+        self.agent.complete=Mock(return_value=dict(message=message))
+        with self.assertRaisesRegex(RuntimeError,'no progress'):self.agent.run()
+        self.assertEqual(self.agent.complete.call_count,2)
+        self.assertEqual(self.agent.observations,{})
+        for index,message in enumerate(self.agent.messages):
+            calls=message.get('tool_calls') or []
+            for offset,call in enumerate(calls,1):
+                reply=self.agent.messages[index+offset]
+                self.assertEqual(reply['role'],'tool')
+                self.assertEqual(reply['tool_call_id'],call['id'])
+
+    def test_recap_failure_does_not_complete_recap_stage(self):
+        value=self.result()
+        def failed(*args,**kwargs):
+            if kwargs.get('phase')=='route_text_review':
+                return dict(message=dict(tool_calls=[dict(function=dict(name='review_route_text',arguments='{"issues":[]}'))]))
+            raise RuntimeError('offline')
+        self.agent.complete=failed
+        with self.assertRaisesRegex(RuntimeError,'offline'):self.agent.finish(value)
+        self.assertEqual(self.agent.progress_stages['route'],'completed')
+        self.assertEqual(self.agent.progress_stages['recap'],'running')
+        self.assertIsNone(self.agent.done)
 
     def test_identical_failed_calls_stop_instead_of_consuming_entire_budget(self):
         from unittest.mock import Mock
@@ -429,6 +752,7 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual([c.kwargs['max_tokens'] for c in call.call_args_list],[16000,32000])
 
     def test_recap_ignores_only_outer_whitespace_and_still_cuts_at_anchor(self):
+        self.agent.route_draft={}  # 本组测试从已完成路线检查后的存档阶段开始。
         self.agent.emit('save.json',dict(caption='当前句子\r\n\r\n'))
         self.agent.emit('script.json',dict(rows=['先前消息',dict(parts=['当前句子','未来消息'])]))
         self.agent.emit('s.json',dict(input_root='save',records=[dict(output='save.json',input=str(self.save/'slot.dat'),name='slot.dat',sha256='save')]))
@@ -461,7 +785,7 @@ class AnalysisTests(unittest.TestCase):
             self.agent.emit(index,dict(input_root='work',records=[dict(input=name,name=name,output=name+'.json',
                 menu_locations=['/choice'],known_options=[dict(pointer='/choice/0',variants=[text])])]))
         self.agent.batches=['original.json','localized.json']
-        value['graph']['nodes'].append(dict(id='c',label='是否出发',kind='choice',evidence='O1'))
+        value['graph']['nodes'].append(dict(id='c',label='是否出发',kind='choice',decision_kind='condition',evidence='O1'))
         value['graph']['edges']=[dict(**{'from':'s','to':'c'},label='出发',kind='choice',inferred=False,evidence='O1')]
         with self.assertRaisesRegex(ValueError,'2 distinct menu'):self.agent.submit_route(value)
         value['scope'].update(script_indexes=['localized.json'],resource_selection='Localized overlay supplies the displayed text; original was inspected only for structure.')

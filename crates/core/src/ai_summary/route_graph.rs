@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 pub(super) const RULES: &str = r#"Return ONLY compact JSON, never SVG or layout coordinates:
 {"nodes":[{"id":"n1","label":"short scene/choice/ending label","kind":"scene","evidence":"source:position"}],"edges":[{"from":"n1","to":"n2","label":"choice or condition","inferred":true,"evidence":"source:position; missing condition"}],"uncertainties":["missing branch evidence"]}.
-Use 1..64 nodes, at most 128 edges and 16 uncertainties, at most 24000 UTF-8 bytes overall. Node kinds: start, scene, choice, save, ending, extra, grand. IDs: 1..32 ASCII letters/digits/_/-. Labels: at most 80 characters; evidence: at most 240 characters; uncertainties: at most 240 characters. Every edge must reference existing unique node IDs. Preserve supported branches/endings; group minor scenes if necessary and disclose omitted detail. Do not invent save points. A candidate byte pattern, function name, source adjacency or dialogue inference cannot prove a connection: set inferred=true. Evidence is mandatory for nodes and edges. Do not connect disconnected evidence merely to make a tree. Missing choices/conditions must remain in uncertainties. Use requested language for node titles and uncertainties. Edge labels for choices MUST preserve the verbatim option text in the analyzed script language; never combine multiple options with / into one edge. Keep each option as one edge, even when targets are identical. Shared targets use the SAME node ID. Put filenames, byte offsets and raw flags in evidence/optional pc, not visible titles. Edges may add kind: flow|choice|unlock|reference, pc:string, condition:string. Unlock edges MUST have kind=unlock and a human-readable condition stating prerequisites, and originate at the prerequisite ending. EXTRA/after-story nodes use kind=extra and attach below their prerequisite ending. GRAND/true endings use kind=grand; inspect title/menu dispatch and persistent flags to identify cross-playthrough entry, never infer unlocks from filenames. Back jumps keep the same target ID; renderer creates reference nodes, never duplicate a subtree. Group ordinary linear scenes between choices, not the choices themselves. Preserve each known choice and ending. Check every ending's reachability from start nodes; investigate missing entry once, and explicitly disclose unresolved entries instead of inventing edges. Use official ending names when known."#;
+Use 1..256 nodes, at most 512 edges and 16 uncertainties, at most 262144 UTF-8 bytes overall. Node kinds: start, scene, choice, save, ending, extra, grand. IDs: 1..32 ASCII letters/digits/_/-. Labels: at most 80 characters; evidence: at most 240 characters; uncertainties: at most 240 characters. Every edge must reference existing unique node IDs. Preserve supported branches/endings; group minor scenes if necessary and disclose omitted detail. Do not invent save points. A candidate byte pattern, function name, source adjacency or dialogue inference cannot prove a connection: set inferred=true. Evidence is mandatory for nodes and edges. Do not connect disconnected evidence merely to make a tree. Missing choices/conditions must remain in uncertainties. Use requested language for node titles and uncertainties. Edge labels for choices MUST preserve the verbatim option text in the analyzed script language; never combine multiple options with / into one edge. Keep each option as one edge, even when targets are identical. Shared targets use the SAME node ID. Put filenames, byte offsets and raw flags in evidence/optional pc, not visible titles. Edges may add kind: flow|choice|unlock|reference, pc:string, condition:string. Unlock edges MUST have kind=unlock and a human-readable condition stating prerequisites, and originate at the prerequisite ending. EXTRA/after-story nodes use kind=extra and attach below their prerequisite ending. GRAND/true endings use kind=grand; inspect title/menu dispatch and persistent flags to identify cross-playthrough entry, never infer unlocks from filenames. Back jumps keep the same target ID; renderer creates reference nodes, never duplicate a subtree. Group ordinary linear scenes between choices, not the choices themselves. Preserve each known choice and ending. Check every ending's reachability from start nodes; investigate missing entry once, and explicitly disclose unresolved entries instead of inventing edges. Use official ending names when known."#;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub(super) struct Graph {
@@ -63,10 +63,10 @@ impl Graph {
     pub(super) fn validate(&self) -> Result<(), Message> {
         let mut ids = BTreeSet::new();
         let valid = !self.nodes.is_empty()
-            && self.nodes.len() <= 64
-            && self.edges.len() <= 128
+            && self.nodes.len() <= 256
+            && self.edges.len() <= 512
             && self.uncertainties.len() <= 16
-            && serde_json::to_vec(self).map_err(super::io)?.len() <= 24_000
+            && serde_json::to_vec(self).map_err(super::io)?.len() <= 262_144
             && self.nodes.iter().all(|node| {
                 !node.id.is_empty()
                     && node.id.len() <= 32
@@ -99,7 +99,7 @@ impl Graph {
         if !valid {
             return Err(Message::detail(
                 "route.invalid_analysis",
-                "Graph needs unique IDs and existing edge endpoints, evidence, bounded text, 1..64 nodes, <=128 edges, <=16 uncertainties and <=24000 UTF-8 bytes. Correct only invalid fields; preserve evidence.",
+                "Graph needs unique IDs and existing edge endpoints, evidence, bounded text, 1..256 nodes, <=512 edges, <=16 uncertainties and <=262144 UTF-8 bytes. Correct only invalid fields; preserve evidence.",
             ));
         }
         Ok(())
@@ -297,6 +297,32 @@ mod tests {
         let mut graph = fixture();
         graph.edges[0].evidence.clear();
         assert!(graph.validate().is_err());
+    }
+
+    #[test]
+    fn preserves_repeated_map_decisions_beyond_the_old_compact_graph_limit() {
+        let nodes: Vec<_> = (0..100)
+            .map(|index| {
+                serde_json::json!({
+                    "id":format!("map_{index}"), "label":format!("地图选择 {index}"),
+                    "kind":if index==0 {"start"} else {"choice"}, "evidence":"script menu"
+                })
+            })
+            .collect();
+        let edges: Vec<_> = (0..99)
+            .map(|index| {
+                serde_json::json!({
+                    "from":format!("map_{index}"), "to":format!("map_{}", index+1),
+                    "label":"一緒に行く", "kind":"choice", "inferred":false,
+                    "evidence":"script menu option"
+                })
+            })
+            .collect();
+        let graph: Graph = serde_json::from_value(serde_json::json!({
+            "nodes":nodes,"edges":edges,"uncertainties":[]
+        }))
+        .unwrap();
+        assert!(graph.validate().is_ok());
     }
 
     #[test]

@@ -29,6 +29,15 @@ fn fingerprint() -> String {
     let mut sha = Sha256::new();
     for bytes in [
         include_bytes!("analysis_agent.py").as_slice(),
+        include_bytes!("analysis_formats.py").as_slice(),
+        include_bytes!("analysis_native.py").as_slice(),
+        include_bytes!("analysis_sources.py").as_slice(),
+        include_bytes!("analysis_images.py").as_slice(),
+        include_bytes!("analysis_route_evidence.py").as_slice(),
+        include_bytes!("analysis_text_quality.py").as_slice(),
+        include_bytes!("analysis_text_probe.py").as_slice(),
+        include_bytes!("image-ocr.ps1").as_slice(),
+        include_bytes!("reference-primitives.ps1").as_slice(),
         include_bytes!("analysis_reads.py").as_slice(),
         include_bytes!("analysis_recap.py").as_slice(),
         include_bytes!("route_graph.rs").as_slice(),
@@ -152,11 +161,12 @@ pub(super) fn prepare(
         json!({
             "mode":"skill_analysis", "provider":provider,"model":model,"token":token,
             "title":game.title,"language":settings.language.code(),
+            "configured_executable":game.executable,
             "game":crate::config::display_path(&root), "save":saves.save,
             "skill":crate::config::display_path(&home.join("Galgear-GalgameReverse-Skill/GalgameResourceExtract")),
             "work":crate::config::display_path(&work),"inventory":inventory,
             "required_saves":saves.required_saves,"save_candidates":candidates,
-            "runtime_limit_seconds":900,"max_turns":90,"graph_contract":route_graph::RULES
+            "runtime_limit_seconds":1200,"max_turns":160,"graph_contract":route_graph::RULES
         }),
         progress,
     )?;

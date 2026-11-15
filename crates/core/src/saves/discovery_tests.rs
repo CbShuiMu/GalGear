@@ -19,6 +19,104 @@ fn write_at(folder: &Path, name: &str, seconds: u64) {
 }
 
 #[test]
+fn localized_game_discovers_literal_helper_paths_without_executing_scripts() {
+    let temp = tempfile::tempdir().unwrap();
+    let game_dir = temp.path().join("[Vendor] Translation");
+    fs::create_dir_all(&game_dir).unwrap();
+    let roaming = temp.path().join("Roaming");
+    let local = temp.path().join("Local");
+    let roots = [
+        ("roaming".into(), roaming.clone()),
+        ("local".into(), local.clone()),
+    ];
+    let saves = roaming.join("別のメーカー").join("作品７");
+    let other = local.join("Studio").join("Story 12");
+    write_at(&saves, "save0002.dat", 2000);
+    write_at(&other, "slot.sav", 1000);
+    let game = manual_game(
+        &game_dir.join("game.exe"),
+        "Different localized title".into(),
+    )
+    .unwrap();
+    let text =
+        "@echo off\r\nexplorer \"%APPDATA%\\別のメーカー\\作品７\"\r\ndel SHOULD_NOT_EXECUTE\r\n";
+    for bytes in [
+        text.as_bytes().to_vec(),
+        encoding_rs::SHIFT_JIS.encode(text).0.into_owned(),
+        [
+            vec![0xff, 0xfe],
+            text.encode_utf16().flat_map(u16::to_le_bytes).collect(),
+        ]
+        .concat(),
+    ] {
+        fs::write(game_dir.join("open.cmd"), bytes).unwrap();
+        let report = discover_in(&game, None, &roots);
+        assert_eq!(report.locations.len(), 1);
+        assert_eq!(report.locations[0].path, display_path(&saves));
+        assert_eq!(report.locations[0].confidence, "confirmed");
+    }
+    fs::write(
+        game_dir.join("open-local.bat"),
+        "explorer.exe \"%localappdata%\\Studio\\Story 12\"",
+    )
+    .unwrap();
+    assert_eq!(discover_in(&game, None, &roots).locations.len(), 2);
+    let edit = GameEdit {
+        save_path: Some(display_path(&other)),
+        ..Default::default()
+    };
+    let report = discover_in(&game, Some(&edit), &roots);
+    assert_eq!(report.locations.len(), 1);
+    assert_eq!(report.locations[0].path, display_path(&other));
+}
+
+#[test]
+fn helper_paths_reject_commands_traversal_unknown_variables_and_root_directories() {
+    let temp = tempfile::tempdir().unwrap();
+    let game_dir = temp.path().join("Installation");
+    fs::create_dir_all(&game_dir).unwrap();
+    let roaming = temp.path().join("Roaming");
+    write_at(&roaming, "slot.sav", 1000);
+    write_at(&roaming.join("Unrelated"), "slot.sav", 1000);
+    write_at(&temp.path().join("Outside"), "slot.sav", 1000);
+    let game = manual_game(&game_dir.join("game.exe"), "Translation".into()).unwrap();
+    for line in [
+        "explorer \"%APPDATA%\\..\\Outside\"",
+        "explorer \"%APPDATA%\\\"",
+        "explorer \"%APPDATA%\\.\"",
+        "explorer \"%APPDATA%\\Unrelated\" & calc",
+        "rem explorer \"%APPDATA%\\Unrelated\"",
+        "explorer \"%APPDATA%\\%PRODUCT%\"",
+        "explorer \"%APPDATA%\\!PRODUCT!\"",
+        "explorer \"%UNKNOWN%\\Unrelated\"",
+        "explorer \"%APPDATA%\\Unrelated\" > output.txt",
+    ] {
+        fs::write(game_dir.join("helper.bat"), line).unwrap();
+        assert!(
+            discover_in(&game, None, &[("roaming".into(), roaming.clone())])
+                .locations
+                .is_empty(),
+            "{line}"
+        );
+    }
+}
+
+#[test]
+fn fullwidth_title_matching_preserves_sequel_numbers() {
+    let temp = tempfile::tempdir().unwrap();
+    let game_dir = temp.path().join("Installation");
+    fs::create_dir_all(&game_dir).unwrap();
+    let roaming = temp.path().join("Roaming");
+    let current = roaming.join("Vendor").join("Ｓｔｏｒｙ７");
+    write_at(&current, "slot.sav", 2000);
+    write_at(&roaming.join("Vendor/Story8"), "slot.sav", 9000);
+    let game = manual_game(&game_dir.join("game.exe"), "Story7".into()).unwrap();
+    let report = discover_in(&game, None, &[("roaming".into(), roaming)]);
+    assert_eq!(report.locations.len(), 1);
+    assert_eq!(report.locations[0].path, display_path(&current));
+}
+
+#[test]
 fn fhd_edition_finds_player_saves_and_recovers_an_old_ai_placeholder_selection() {
     let temp = tempfile::tempdir().unwrap();
     let game_dir = temp.path().join("狙われた女神天使エンゼルティアーFHD版");

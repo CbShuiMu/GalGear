@@ -1,5 +1,6 @@
 //! Stateless HTML primitives and formatting.
 use crate::icons;
+use galgear_i18n::{Language, format_text};
 use std::fmt::Write;
 
 pub(crate) fn esc(value: &str) -> String {
@@ -116,6 +117,24 @@ pub(crate) fn stage_toast(
         if error { " error" } else { "" }, if error { "alert" } else { "status" }).unwrap();
 }
 
+/// 为原始提示文字添加流程阶段编号，并统一转义供通知正文与 title 使用。
+pub(crate) fn numbered_stage_text(
+    language: Language,
+    current: usize,
+    total: usize,
+    message: &str,
+) -> String {
+    esc(&format_text(
+        language,
+        "progress.numbered_stage",
+        &[
+            ("current", &current.to_string()),
+            ("total", &total.to_string()),
+            ("message", message),
+        ],
+    ))
+}
+
 pub(crate) fn button(
     action: &str,
     value: &str,
@@ -195,5 +214,15 @@ mod tests {
     #[test]
     fn filenames_are_html_escaped() {
         assert_eq!(esc("游戏\"<img>&'"), "游戏&quot;&lt;img&gt;&amp;&#39;");
+    }
+
+    #[test]
+    fn numbered_stage_preserves_the_position_and_escapes_text_in_every_language() {
+        for language in [Language::Chinese, Language::Japanese, Language::English] {
+            assert_eq!(
+                numbered_stage_text(language, 2, 7, "\"<test>&"),
+                "2/7 · &quot;&lt;test&gt;&amp;"
+            );
+        }
     }
 }

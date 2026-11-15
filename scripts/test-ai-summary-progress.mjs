@@ -67,7 +67,7 @@ test('progress stays in the bottom-right stack, survives navigation and ignores 
   const stages = [{stage:'resources',status:'completed'},{stage:'scripts',status:'running'}];
   app.progress(id,2,stages);
   assert.doesNotMatch(app.html,/识别并提取游戏资源|<ol/);
-  assert.match(app.html,/stage-toast-current">正在读取剧情脚本…<\/span>/);
+  assert.match(app.html,/stage-toast-current">3\/7 · 正在读取剧情脚本…<\/span>/);
   const current = app.html;
   app.progress(id,1,[]);
   app.progress(id,3,[], 'another-game');
@@ -84,9 +84,9 @@ test('progress stays in the bottom-right stack, survives navigation and ignores 
   assert.equal(app.notice,false);
 });
 
-test('automatic route generation keeps the same stages until the real command finishes', async () => {
+test('automatic route generation uses its own stage number and cannot inherit an active analysis stage', async () => {
   const app = await fixture(), id = app.start();
-  app.progress(id,4,[{stage:'resources',status:'completed'},{stage:'route',status:'completed'}]);
+  app.progress(id,4,[{stage:'resources',status:'running'},{stage:'route',status:'completed'}]);
   app.settings.game_edits.fixture.ai_summary = true;
   app.complete(id,true,app.settings);
   const route = app.pending.at(-1);
@@ -94,6 +94,7 @@ test('automatic route generation keeps the same stages until the real command fi
   assert.ok(app.notice);
   assert.equal(app.html.match(/class="ai-analysis-notices"/g).length,1);
   assert.doesNotMatch(app.html,/识别并提取游戏资源/);
+  assert.match(app.html,/stage-toast-current">1\/1 · 正在生成AI路线图…<\/span>/);
   app.progress(id,20,[{stage:'recap',status:'running'}]);
   assert.doesNotMatch(app.html,/生成前情提要<\/span>/);
   app.complete(route.id,true,null);
@@ -104,8 +105,12 @@ test('automatic route generation keeps the same stages until the real command fi
 test('only the latest active stage is shown, including a return to an earlier stage', async () => {
   const app = await fixture(), id = app.start();
   app.progress(id,3,[{stage:'resources',status:'running'},{stage:'scripts',status:'running'}], 'fixture', 'resources');
-  assert.match(app.html, /stage-toast-current">正在识别并提取游戏资源…<\/span>/);
-  app.progress(id,4,[{stage:'resources',status:'completed'},{stage:'scripts',status:'completed'}]);
+  assert.match(app.html, /stage-toast-current">2\/7 · 正在识别并提取游戏资源…<\/span>/);
+  app.progress(id,4,[{stage:'resources',status:'completed'},{stage:'scripts',status:'running'}]);
+  assert.match(app.html, /stage-toast-current">3\/7 · 正在读取剧情脚本…<\/span>/);
+  app.progress(id,5,[{stage:'resources',status:'running'},{stage:'scripts',status:'completed'}]);
+  assert.match(app.html, /stage-toast-current">2\/7 · 正在识别并提取游戏资源…<\/span>/);
+  app.progress(id,6,[{stage:'resources',status:'completed'},{stage:'scripts',status:'completed'}]);
   assert.match(app.html, /stage-toast-current">正在确认分析结果…/);
   assert.ok(app.notice, 'completed stages do not finish a pending command');
 });

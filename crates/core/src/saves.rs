@@ -1,5 +1,6 @@
 //! Read-only, bounded save discovery. A matching name is evidence, not certainty.
 pub mod ai_find;
+mod helper_paths;
 mod kirikiri;
 mod loose;
 pub mod observation;
@@ -141,8 +142,16 @@ fn saved_games_folder() -> Option<PathBuf> {
 
 fn key(value: &str) -> String {
     value
-        .to_lowercase()
         .chars()
+        // 只折叠全角 ASCII，保留续作数字和版本名，不做模糊标题匹配。
+        .map(|c| {
+            if ('\u{ff01}'..='\u{ff5e}').contains(&c) {
+                char::from_u32(c as u32 - 0xfee0).unwrap_or(c)
+            } else {
+                c
+            }
+        })
+        .flat_map(char::to_lowercase)
         .filter(|c| c.is_alphanumeric())
         .collect()
 }
@@ -347,6 +356,7 @@ pub fn discover_in(
         }
     }
     // Explicit engine configuration provides useful evidence even before first launch.
+    helper_paths::discover(folder, roots, &mut report);
     let mut configured = Vec::new();
     let mut configured_base = None;
     for name in ["SETUP.INI", "setup.ini", "angeltear.xml", "config.ini"] {

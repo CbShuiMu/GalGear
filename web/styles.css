@@ -118,8 +118,8 @@
 
 .startup-overlay{z-index:220}.startup-dialog{max-width:540px}.startup-languages{display:grid;gap:16px;margin-top:24px}.startup-languages .button{width:100%}.startup-languages .field-help{margin:6px 0 0;text-align:center}
 
-/* Task stages share a fixed text viewport, so neither the frame nor spinner moves. */
-.toast.stage-toast{width:25em;max-width:100%;flex:none}
+/* The current text sets the width; the outgoing absolute layer cannot keep it expanded. */
+.toast.stage-toast{width:max-content;max-width:100%;flex:none}
 .stage-toast-symbol{display:flex;align-items:center;justify-content:center;width:20px;height:20px;flex:none}
 .stage-toast-symbol>.icon{width:20px;height:20px}
 .stage-toast-text{position:relative;display:block;flex:1;height:1.6em;overflow:hidden}

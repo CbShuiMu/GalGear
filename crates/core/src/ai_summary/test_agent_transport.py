@@ -93,6 +93,22 @@ class CompletionTransportTests(unittest.TestCase):
         self.assertNotIn('max_tokens', payload)
         self.assertNotIn('thinking', payload)
 
+    def test_named_tool_is_forced_only_for_valid_non_thinking_request(self):
+        self.config.update(required_tool='finish',thinking_enabled=False)
+        opener,_=self.response()
+        self.complete(opener)
+        payload=json.loads(opener.open.call_args.args[0].data)
+        self.assertEqual(payload['tool_choice'],dict(type='function',function=dict(name='finish')))
+        self.assertEqual(payload['thinking'],dict(type='disabled'))
+        self.assertEqual(payload['temperature'],0)
+        for changes in [dict(thinking_enabled=True),dict(required_tool='missing')]:
+            with self.subTest(changes=changes):
+                self.config.update(required_tool='finish',thinking_enabled=False)
+                self.config.update(changes)
+                opener,_=self.response()
+                with self.assertRaises(transport.CompletionError):self.complete(opener)
+                opener.open.assert_not_called()
+
     def test_plain_stop_response_can_omit_usage_and_use_header_request_id(self):
         message = dict(role='assistant', content='Ready')
         opener, response = self.response(body=dict(choices=[dict(finish_reason='stop', message=message)]))

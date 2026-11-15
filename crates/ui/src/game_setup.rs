@@ -6,7 +6,7 @@ use crate::{
     requests::{Pending, issue},
     state::{App, show_toast},
     view::{f, t},
-    widgets::{button, esc, icon, progress_toast, stage_toast},
+    widgets::{button, esc, icon, numbered_stage_text, progress_toast, stage_toast},
 };
 use galgear_i18n::{Message, format_text};
 use serde::Deserialize;
@@ -490,25 +490,30 @@ pub(crate) fn render_progress(html: &mut String, app: &App) {
         );
     }
     if let Some(progress) = &app.setup.save_progress {
-        let key = match progress.stage {
-            Some(SetupSaveStage::Metadata) => "setup.save_metadata",
-            Some(SetupSaveStage::Cover) => "setup.save_cover",
-            Some(SetupSaveStage::Saving) => "setup.save_progress",
-            None => "setup.save_waiting",
+        // 编号对应流程位置。已有封面或无图时直接从 1/3 跳至 3/3，不补播下载。
+        let (key, stage_number) = match progress.stage {
+            Some(SetupSaveStage::Metadata) => ("setup.save_metadata", Some(1)),
+            Some(SetupSaveStage::Cover) => ("setup.save_cover", Some(2)),
+            Some(SetupSaveStage::Saving) => ("setup.save_progress", Some(3)),
+            None => ("setup.save_waiting", None),
         };
         let text = progress
             .error
             .as_ref()
             .map(|error| esc(&error.render(app.settings.language)))
             .unwrap_or_else(|| {
-                f(
-                    app,
+                let message = format_text(
+                    app.settings.language,
                     key,
                     &[(
                         "progress",
                         &batch_suffix(app, progress.current, progress.total),
                     )],
-                )
+                );
+                match stage_number {
+                    Some(current) => numbered_stage_text(app.settings.language, current, 3, &message),
+                    None => esc(&message),
+                }
             });
         stage_toast(
             html,

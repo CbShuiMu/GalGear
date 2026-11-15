@@ -15,6 +15,11 @@ BACKENDS = {
 MAX_SPECIALIZED_ARCHIVE = 256 * 1024 * 1024
 
 
+def literal_glob_path(path):
+    """pfs-rs extract accepts a glob; preserve every literal path character."""
+    return re.sub(r'[\[\]*?]', lambda match: '[' + match[0] + ']', str(path))
+
+
 def selection_error(category, message, **facts):
     """Keep resource discovery blockers distinct from parser/format failures."""
     error = ValueError(message)

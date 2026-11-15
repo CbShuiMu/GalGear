@@ -9,6 +9,7 @@ import runpy
 BASE = Path(__file__).parent
 READERS = runpy.run_path(str(BASE / 'agent_skill_readers.py'))
 TYPED = runpy.run_path(str(BASE / 'typed_evidence.py'))
+TEXT_PROBE = runpy.run_path(str(BASE / 'analysis_text_probe.py'))
 MAX_BYTES = 32 * 1024 * 1024
 
 
@@ -40,9 +41,10 @@ def query_worker(config, api):
 def reader_options(data, reader, options):
     """以实际容器规范化参数，使 auto 与等价的显式读取共享本轮结果。"""
     options = dict(options or {})
+    probe_unknown=options.pop('probe_unknown',False)
     reader = (READERS['script_reader'](data[:4096]) or READERS['save_reader'](data)
               or ('structured' if data[:4] in (b'PSB\0', b'mdf\0') or READERS['text_container'](data)
-                  else 'text')) if reader == 'auto' else reader
+                  else 'probe' if probe_unknown else 'text')) if reader == 'auto' else reader
     if reader == 'structured' and not options.get('document'):
         document = READERS['text_container'](data)
         if document is None:
@@ -146,7 +148,7 @@ def anchor_hints(value):
     return hints[:32]
 
 
-def read_one(skill, path, reader='auto', options=None, api=None):
+def read_one(skill, path, reader='auto', options=None, api=None, *, memory_limited=False):
     data = path.read_bytes()
     if not 0 < len(data) <= MAX_BYTES:
         raise ValueError('Input must be 1..32 MiB')
@@ -171,9 +173,17 @@ def read_one(skill, path, reader='auto', options=None, api=None):
             raise ValueError('custom requires options.source: def extract(data, metadata) returning JSON')
         # 模型解码仍在限时的只读工作进程内，来源身份由宿主补充，不能由程序授予验证等级。
         value = api['parser_worker'](dict(program=options['source'], data=base64.b64encode(data).decode(),
-            metadata=dict(source=path.name, size=len(data))))
+            metadata=dict(source=path.name, size=len(data))),limit_memory=not memory_limited)
         result = dict(value=value, decoder_sha256=hashlib.sha256(options['source'].encode()).hexdigest(),
             limitation='Model-authored decoding is candidate evidence, not validated engine state. Preserve native IDs and record order.')
+        result['choice_texts'] = structured_choices(value)
+        result['scene_dialogue'] = structured_dialogue(value)
+        result['anchor_hints'] = anchor_hints(value)
+    elif reader == 'probe':
+        result=dict(value=TEXT_PROBE['probe'](data),limitation='Unstructured byte candidates only; not decoded engine state.')
+        result['anchor_hints']=[dict(pointer=f'/value/views/{i}/text_candidates/{j}/text',value=row['text'],
+            encoding=row['encoding'],view_codec=view['codec'],level='candidate')
+            for i,view in reversed(list(enumerate(result['value']['views']))) for j,row in enumerate(view['text_candidates'])][:24]
     elif reader == 'text':
         encoding = (options or {}).get('encoding', 'utf-8-sig')
         result = dict(text=data.decode(encoding), encoding=encoding)
@@ -188,12 +198,15 @@ def read_one(skill, path, reader='auto', options=None, api=None):
 
 def worker(config, api=None):
     """One disposable process reads a bounded batch without per-file startup."""
+    if api is not None:
+        # Windows Job 嵌套有上限；同一批次只设置一次，不能按文件重复创建/绑定 Job。
+        api['limit_worker_memory']()
     skill = Path(config['skill']).resolve()
     output = Path(config['output']).resolve()
     output.mkdir(parents=True, exist_ok=True)
     items = config['items']
-    if not isinstance(items, list) or not 1 <= len(items) <= 512:
-        raise ValueError('Batch must contain 1..512 explicit files')
+    if not isinstance(items, list) or not items:
+        raise ValueError('Batch must contain explicit files')
     records, total = [], 0
     cache = config.get('cache', {})
     for item in items:
@@ -211,7 +224,7 @@ def worker(config, api=None):
                     raise ValueError('Input changed during reading')
                 records.append(dict(previous, name=item['name'], reused=True))
                 continue
-            result = read_one(skill, path, reader, options, api)
+            result = read_one(skill, path, reader, options, api, memory_limited=api is not None)
             encoded = json.dumps(result, ensure_ascii=False, allow_nan=False).encode('utf-8')
             total += len(encoded)
             if len(encoded) > MAX_BYTES or total > 256 * 1024 * 1024:

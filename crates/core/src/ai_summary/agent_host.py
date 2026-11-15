@@ -1,6 +1,7 @@
 """Tool host with read-only fixed Skill probes and independently verified parsers."""
 import ast
 import base64
+import binascii
 import builtins
 import codecs
 import collections
@@ -26,7 +27,7 @@ import urllib.error
 import urllib.request
 import zlib
 
-MODULES = {m.__name__: m for m in (base64, codecs, collections, hashlib, json, math, re, struct, zlib)}
+MODULES = {m.__name__: m for m in (base64, binascii, codecs, collections, hashlib, json, math, re, struct, zlib)}
 CONTRACT_VERSION = 4
 SKILL_PROBE = runpy.run_path(str(pathlib.Path(__file__).with_name('agent_skill_probe.py')))
 SKILL_READERS = runpy.run_path(str(pathlib.Path(__file__).with_name('agent_skill_readers.py')))
@@ -155,6 +156,8 @@ ATTRIBUTES.update(('view', 'capabilities', 'adler32_xor_prefix_lengths'))
 ATTRIBUTES.update(('parse_document', 'replay_field', 'read_structured_field'))
 ATTRIBUTES.add('label_index')
 ATTRIBUTES.add('adler32')
+ATTRIBUTES.update(('hexlify','unhexlify','a2b_base64','b2a_base64'))
+ATTRIBUTES.update(('OrderedDict','move_to_end','fromkeys'))
 ATTRIBUTES.update(('isupper', 'islower', 'istitle', 'isspace', 'isdecimal', 'isnumeric', 'casefold',
                    'removeprefix', 'removesuffix', 'rindex', 'bit_length', 'bit_count'))
 BUILTINS.update({name: getattr(builtins, name) for name in ('UnicodeError', 'UnicodeDecodeError', 'UnicodeEncodeError', 'OverflowError', 'ZeroDivisionError')})
@@ -188,10 +191,25 @@ SPEAKER_PROOFS = dict(
         'After a nonempty scoped helper passes, update the transcript parser to use its verified records, including narration, and retest the SAME sample. Only then batch the helper and transcript. An empty speakers={} helper is analysis, not a completed message binding.'])
 
 
+class _DiagnosticTypeName(ast.NodeTransformer):
+    """兼容常见的只读类型诊断，不暴露类型对象、类创建或任意反射能力。"""
+    def visit_Attribute(self, node):
+        node=self.generic_visit(node)
+        if (node.attr=='__name__' and isinstance(node.value,ast.Call)
+                and isinstance(node.value.func,ast.Name) and node.value.func.id=='type'
+                and len(node.value.args)==1 and not node.value.keywords):
+            return ast.copy_location(ast.Call(func=ast.Name(id='value_type_name',ctx=ast.Load()),
+                args=node.value.args,keywords=[]),node)
+        return node
+
+
+BUILTINS['value_type_name']=lambda value: type(value).__name__
+
+
 def validate_program(source):
     if len(source.encode()) > 128000:
         raise ValueError("Program exceeds 128KB")
-    tree = ast.parse(source)
+    tree = ast.fix_missing_locations(_DiagnosticTypeName().visit(ast.parse(source)))
     for node in ast.walk(tree):
         if (isinstance(node, ast.While) and isinstance(node.test, ast.Compare)
                 and isinstance(node.test.left, ast.Name) and len(node.test.comparators) == 1
@@ -219,7 +237,8 @@ def validate_program(source):
         if isinstance(node, ast.Attribute) and node.attr not in ATTRIBUTES:
             raise ValueError("Unavailable attribute: " + node.attr + " at line " + str(node.lineno) + ". Use isinstance(value, list/dict) or str(error); type(value).__name__ and runtime introspection are unavailable.")
         if isinstance(node, (ast.ClassDef, ast.Global, ast.Nonlocal, ast.AsyncFunctionDef, ast.Await)):
-            raise ValueError("Parser must be a pure synchronous function")
+            raise ValueError("Parser must be a pure synchronous function: " + type(node).__name__ + " at line " + str(node.lineno)
+                             + ". Use plain functions and list/dict state instead of classes, global or nonlocal state.")
     return tree
 
 
@@ -248,9 +267,8 @@ def limit_worker_memory():
         raise RuntimeError("Cannot apply parser memory limit")
 
 
-def parser_worker(payload):
-    limit_worker_memory()
-    source = payload['program']
+def execute_pure(source, entry, *arguments):
+    """执行经同一 AST/导入白名单检查的模型程序；I/O 始终由调用方管理。"""
     tree = validate_program(source)
     def limited_import(name, *args, **kwargs):
         if name not in MODULES:
@@ -265,15 +283,8 @@ def parser_worker(payload):
         print(message, file=sys.stderr)
     environment = {'__builtins__': dict(BUILTINS, __import__=limited_import, print=parser_print)}
     exec(compile(tree, '<model-authored-parser>', 'exec'), environment)
-    data = base64.b64decode(payload['data'])
-    # Keep the verifier's transcript separate from mutable adapter input. An
-    # adapter must never be able to forge a coordinate attestation by editing it.
-    trusted_metadata = payload.get('metadata', {})
-    # 查询进程本身就是隔离副本；只有后续仍要独立验证的存档才需要再复制。
-    metadata = (json.loads(json.dumps(trusted_metadata, ensure_ascii=False))
-                if payload.get('verify_save') else trusted_metadata)
     try:
-        value = environment['extract'](data, metadata)
+        return environment[entry](*arguments)
     except Exception as error:
         trace, location = error.__traceback__, ''
         while trace is not None:
@@ -282,6 +293,19 @@ def parser_worker(payload):
             trace = trace.tb_next
         detail = str(error).strip() or 'No error message was supplied; inspect the failing expression.'
         raise RuntimeError(type(error).__name__ + location + ': ' + detail[:3800]) from None
+
+
+def parser_worker(payload, *, limit_memory=True):
+    if limit_memory:
+        limit_worker_memory()
+    data = base64.b64decode(payload['data'])
+    # Keep the verifier's transcript separate from mutable adapter input. An
+    # adapter must never be able to forge a coordinate attestation by editing it.
+    trusted_metadata = payload.get('metadata', {})
+    # 查询进程本身就是隔离副本；只有后续仍要独立验证的存档才需要再复制。
+    metadata = (json.loads(json.dumps(trusted_metadata, ensure_ascii=False))
+                if payload.get('verify_save') else trusted_metadata)
+    value = execute_pure(payload['program'], 'extract', data, metadata)
     if payload.get('verify_save'):
         value = EVIDENCE['save_facts'](data, value, trusted_metadata['dialogue'])
     text = json.dumps(value, ensure_ascii=False)
@@ -1280,18 +1304,20 @@ class Agent:
                     commands = ([str(executable), str(archive), *batch] for batch in ARCHIVE_TOOLS['argv_batches'](matches))
                     cwd = payload
                 else:
-                    argv = ([str(executable), 'extract', str(archive), str(payload), '--quiet'] if backend == 'pfs' else
+                    argv = ([str(executable), 'extract', ARCHIVE_TOOLS['literal_glob_path'](archive), str(payload), '--quiet'] if backend == 'pfs' else
                             [str(executable), 'unpack', str(input_archive), str(payload)])
                     if key_source:
                         argv.extend(['--angou', str(key_source)])
                     commands, cwd = [argv], None
                 deadline = time.monotonic() + 90
                 for argv in commands:
-                    result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                             cwd=cwd, timeout=max(0.1, deadline-time.monotonic()), creationflags=flags)
                     if result.returncode:
                         hint = ' Supply the matching installed executable as key_source if the package requires it.' if backend == 'siglus' and not key_source else ''
-                        raise ValueError(f'{backend} CLI could not decode this archive; do not repeat unchanged extraction.' + hint)
+                        diagnostic = result.stderr.decode('utf-8', 'replace')[-2000:].strip()
+                        raise ValueError(f'{backend} CLI could not decode this archive (exit {result.returncode}); '
+                                         'do not repeat unchanged extraction.' + hint + ' CLI diagnostic: ' + diagnostic)
                 if self.file_fingerprint(archive) != stamp or (key_source and self.file_fingerprint(key_source) != key_stamp):
                     raise ValueError('Archive or key source changed during extraction')
                 for name in matches:
@@ -4008,10 +4034,12 @@ if __name__ == '__main__':
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
     try:
-        if '--analysis-query' in sys.argv:
+        if '--format-program' in sys.argv:
+            limit_worker_memory()
+            result = runpy.run_path(str(pathlib.Path(__file__).with_name('analysis_formats.py')))['worker'](json.load(sys.stdin), globals())
+        elif '--analysis-query' in sys.argv:
             result = runpy.run_path(str(pathlib.Path(__file__).with_name('analysis_reads.py')))['query_worker'](json.load(sys.stdin), globals())
         elif '--analysis-read' in sys.argv:
-            limit_worker_memory()
             result = runpy.run_path(str(pathlib.Path(__file__).with_name('analysis_reads.py')))['worker'](json.load(sys.stdin), globals())
         elif '--skill-reader' in sys.argv:
             result = SKILL_READERS['worker'](json.load(sys.stdin))

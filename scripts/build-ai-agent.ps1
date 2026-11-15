@@ -17,10 +17,10 @@ if ($PythonExecutable) {
 }
 $selectedPython = $null
 foreach ($candidate in ($pythonCandidates | Select-Object -Unique)) {
-    & $candidate -c 'import sys; sys.exit(1) if sys.version_info < (3, 12) else None; import PyInstaller' 2>$null
+    & $candidate -c 'import sys; sys.exit(1) if sys.version_info < (3, 12) else None; import PyInstaller, pefile; from cryptography.hazmat.decrepit.ciphers.algorithms import Blowfish' 2>$null
     if ($LASTEXITCODE -eq 0) { $selectedPython = $candidate; break }
 }
-if (-not $selectedPython) { throw 'AI host requires Python >= 3.12 with PyInstaller. Use -PythonExecutable to select it.' }
+if (-not $selectedPython) { throw 'AI host requires Python >= 3.12 with PyInstaller, pefile and cryptography (including decrepit Blowfish). Use -PythonExecutable to select it.' }
 Write-Host "Building AI host with $selectedPython"
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $agentSource = Join-Path $taskRoot 'crates\core\src\ai_summary\agent_host.py'
@@ -37,7 +37,12 @@ Get-ChildItem -LiteralPath $runtimeDirectory -File |
     ForEach-Object { $pyInstallerArgs += @('--add-data', "$($_.FullName);.") }
 $pyInstallerArgs += @('--hidden-import', 'bz2', '--hidden-import', 'lzma', '--hidden-import', 'argparse',
     '--hidden-import', 'copy', '--hidden-import', 'datetime', '--hidden-import', 'difflib',
-    '--hidden-import', 'functools', '--name', 'GalGear.AiAgent', '--distpath', $agentOutput,
+    '--hidden-import', 'functools', '--hidden-import', 'mmap', '--hidden-import', 'pefile',
+    '--hidden-import', 'cryptography.hazmat.primitives.ciphers',
+    '--hidden-import', 'cryptography.hazmat.decrepit.ciphers.algorithms',
+    '--name', 'GalGear.AiAgent', '--distpath', $agentOutput,
     '--workpath', $agentBuild, '--specpath', $agentBuild, $agentSource)
 & $selectedPython -m PyInstaller @pyInstallerArgs
 if ($LASTEXITCODE -ne 0) { throw 'AI host build failed. Python and PyInstaller are required on the build machine.' }
+& $selectedPython (Join-Path $PSScriptRoot 'ai-agent-notices.py') $agentOutput
+if ($LASTEXITCODE -ne 0) { throw 'AI host dependency notices could not be packaged.' }

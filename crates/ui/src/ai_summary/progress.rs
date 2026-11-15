@@ -4,7 +4,7 @@ use crate::{
     requests::Pending,
     state::{APP, App},
     view::{paint, t},
-    widgets::{esc, stage_toast},
+    widgets::{esc, numbered_stage_text, stage_toast},
 };
 use std::fmt::Write;
 use wasm_bindgen::prelude::wasm_bindgen;
@@ -62,29 +62,34 @@ pub(super) fn finish(app: &mut App, request_id: u32) {
         .retain(|_, notice| notice.request_id != request_id);
 }
 
-fn stage_key(stage: &str) -> Option<&'static str> {
-    Some(match stage {
-        "checking" => "summary.stage_checking",
-        "resources" => "summary.stage_resources",
-        "scripts" => "summary.stage_scripts",
-        "save" => "summary.stage_save",
-        "route" => "summary.stage_route",
-        "recap" => "summary.stage_recap",
-        "publishing" => "summary.stage_publishing",
-        _ => return None,
-    })
+// 固定流程位置使缓存跳步、重试和返回早期阶段不会改变分母。
+const STAGES: [(&str, &str); 7] = [
+    ("checking", "summary.stage_checking"),
+    ("resources", "summary.stage_resources"),
+    ("scripts", "summary.stage_scripts"),
+    ("save", "summary.stage_save"),
+    ("route", "summary.stage_route"),
+    ("recap", "summary.stage_recap"),
+    ("publishing", "summary.stage_publishing"),
+];
+
+fn stage_info(stage: &str) -> Option<(usize, &'static str)> {
+    STAGES
+        .iter()
+        .enumerate()
+        .find_map(|(index, &(name, key))| (name == stage).then_some((index + 1, key)))
 }
 
 fn apply(app: &mut App, event: AnalysisProgressEvent) -> bool {
     let valid = matches!(app.requests.get(event.request_id),
         Some(Pending::SummarySetup(game, true) | Pending::Summary(game)) if game == &event.game_id);
     if !valid
-        || event.progress.stages.len() > 7
+        || event.progress.stages.len() > STAGES.len()
         || event
             .progress
             .stages
             .iter()
-            .any(|stage| stage_key(&stage.stage).is_none())
+            .any(|stage| stage_info(&stage.stage).is_none())
     {
         return false;
     }
@@ -130,8 +135,15 @@ pub(crate) fn render(html: &mut String, app: &App) {
             esc(&notice.title)
         )
         .unwrap();
-        let current_key = if notice.progress.stages.is_empty() {
-            notice.fallback
+        let route_task = matches!(
+            app.requests.get(notice.request_id),
+            Some(Pending::RouteMapPrepare(_) | Pending::RouteMap(_))
+        );
+        let (current_key, position) = if route_task {
+            // 分析完成后的路线图生成是独立命令，不能沿用上一请求的运行中阶段。
+            (notice.fallback, Some((1, 1)))
+        } else if notice.progress.stages.is_empty() {
+            (notice.fallback, None)
         } else {
             let current = notice
                 .progress
@@ -148,22 +160,22 @@ pub(crate) fn render(html: &mut String, app: &App) {
                         .iter()
                         .rfind(|stage| stage.status == AnalysisStageStatus::Running)
                 });
-            let fallback = if matches!(
-                app.requests.get(notice.request_id),
-                Some(Pending::RouteMapPrepare(_) | Pending::RouteMap(_))
-            ) {
-                notice.fallback
-            } else {
-                "summary.stage_finalizing"
-            };
-            current
-                .and_then(|stage| stage_key(&stage.stage))
-                .unwrap_or(fallback)
+            match current.and_then(|stage| stage_info(&stage.stage)) {
+                Some((number, key)) => (key, Some((number, STAGES.len()))),
+                None => ("summary.stage_finalizing", None),
+            }
+        };
+        let message = t(app, current_key);
+        let text = match position {
+            Some((current, total)) => {
+                numbered_stage_text(app.settings.language, current, total, message)
+            }
+            None => esc(message),
         };
         stage_toast(
             html,
             &format!("ai-analysis-stage-{}", esc(game)),
-            t(app, current_key),
+            &text,
             false,
             true,
         );

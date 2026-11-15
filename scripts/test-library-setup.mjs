@@ -258,15 +258,15 @@ test('save progress follows backend stages with a fixed batch total and resets o
     app.reply('search_metadata', i < 5 ? [{title: 'Matched', url: `https://vndb.org/v${i + 1}`}] : []);
   }
   app.ui.dispatch('setup-save', '');
-  assert.match(app.html, /正在准备导入…（0\/5）/);
+  assert.match(app.html, /正在准备导入…（游戏 0\/5）/);
   app.ui.dispatch('setup-save', '');
   const batch = app.requests.find(request => request.command === 'complete_game_setup_batch');
   assert.equal(app.requests.filter(request => request.command === 'complete_game_setup_batch').length, 1);
   assert.equal(batch.payload.inputs.length, 5);
   app.ui.setup_save_progress(JSON.stringify({requestId: batch.id + 1, sequence: 1, stage: "cover", current: 5, total: 5}));
-  assert.match(app.html, /正在准备导入…（0\/5）/);
+  assert.match(app.html, /正在准备导入…（游戏 0\/5）/);
   app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 2, stage: "cover", current: 4, total: 5}));
-  assert.match(app.html, /正在下载封面…（4\/5）/);
+  assert.match(app.html, /2\/3 · 正在下载封面…（游戏 4\/5）/);
   const latest = app.html;
   app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 1, stage: 'metadata', current: 1, total: 5}));
   app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 3, stage: 'saving', current: 5, total: 6}));
@@ -288,12 +288,12 @@ test('save progress follows backend stages with a fixed batch total and resets o
   const retry = app.requests.find(request => request.command === 'complete_game_setup_batch');
   assert.equal(retry.payload.inputs.length, 2);
   app.ui.setup_save_progress(JSON.stringify({requestId: batch.id, sequence: 3, stage: "saving", current: 5, total: 5}));
-  assert.match(app.html, /正在准备导入…（0\/2）/);
+  assert.match(app.html, /正在准备导入…（游戏 0\/2）/);
   app.reply('complete_game_setup_batch', {items: retry.payload.inputs.map(input => ({
     id: input.id, result: {Ok: {game: games.find(game => game.id === input.id), edit: {setup_confirmed: true}}},
   }))});
   assert.doesNotMatch(app.html, /id="setup-save-toast"[^>]*>[\s\S]*?notification-progress-icon/);
-  assert.match(app.html, /已添加到游戏库（2\/2）/);
+  assert.match(app.html, /已添加到游戏库（游戏 2\/2）/);
   assert.equal((app.html.match(/data-setup-game=/g) ?? []).length, 1);
 });
 
@@ -311,9 +311,9 @@ test('single import can skip cover, waits for persistence, and ignores progress 
     requestId: request.id, sequence, stage, error, current: 1, total: 1,
   }));
   progress(1, 'metadata');
-  assert.match(app.html, /正在读取游戏资料…/);
+  assert.match(app.html, /stage-toast-current">1\/3 · 正在读取游戏资料…<\/span>/);
   progress(2, 'saving');
-  assert.match(app.html, /正在保存到游戏库…/);
+  assert.match(app.html, /stage-toast-current">3\/3 · 正在保存到游戏库…<\/span>/);
   assert.doesNotMatch(app.html, /正在下载封面|已添加到游戏库/);
   app.reply('complete_game_setup', {game: game(), edit: {setup_confirmed: true}});
   assert.match(app.html, /已添加到游戏库/);
@@ -336,6 +336,7 @@ test('a real cover failure is visible immediately and retained after the library
   assert.match(app.html, /role="alert"[\s\S]*data-immediate="true"[\s\S]*&lt;cover offline&gt;/);
   app.reply('complete_game_setup', {game: {...game(), metadata_warning: error}, edit: {setup_confirmed: true}});
   assert.match(app.html, /&lt;cover offline&gt;/);
+  assert.doesNotMatch(app.html, /stage-toast-current">\d+\/\d+ ·/);
   assert.doesNotMatch(app.html, /已添加到游戏库/);
 });
 

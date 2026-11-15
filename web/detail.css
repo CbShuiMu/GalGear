@@ -390,5 +390,5 @@
     .game-tools-shortcuts .game-settings-button .icon,.game-tools-status,.game-tool-segment,.game-tools-reveal,.game-tools-buttons { transition: none; }
 }
 .ai-analysis-notices{display:flex;flex-direction:column;gap:12px;width:100%;max-height:65vh;overflow:auto;overscroll-behavior:contain;pointer-events:auto;align-items:flex-end}
-.ai-analysis-notice{width:25em;max-width:100%}
+.ai-analysis-notice{width:max-content;max-width:100%}
 .app-shell .ai-analysis-notice>.toast{position:static;transform:none;max-width:100%}

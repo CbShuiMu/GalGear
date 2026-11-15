@@ -172,6 +172,16 @@ def complete(config, messages, tools, max_tokens=12000, timeout=300):
         else:
             endpoint = 'https://api.openai.com/v1/chat/completions'
             payload.update(max_completion_tokens=max_tokens, tool_choice='auto')
+        required_tool = config.get('required_tool')
+        if required_tool is not None:
+            if (not isinstance(required_tool,str)
+                    or required_tool not in [item.get('function',{}).get('name') for item in tools]
+                    or config['provider']=='deepseek' and config.get('thinking_enabled',True)):
+                raise failure('configuration')
+            # DeepSeek 仅在非思考模式支持指定工具；局部审阅不能退化成无法应用的散文。
+            payload['tool_choice']=dict(type='function',function=dict(name=required_tool))
+            if config['provider']=='deepseek':
+                payload['temperature']=0
         try:
             encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode('utf-8')
             request = urllib.request.Request(endpoint, data=encoded, headers={
