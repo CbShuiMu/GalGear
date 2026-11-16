@@ -6,7 +6,7 @@
 
 **A Galgame manager with locale emulation, upscaling, patch search and management, metadata from multiple sources, and AI-assisted save discovery.**
 
-Windows x64 · Interface languages: 简体中文 / 日本語 / English
+Windows x64 / Linux x86_64 · Interface languages: 简体中文 / 日本語 / English
 
 [简体中文](README.md) · [日本語](README.ja.md) · [English](README.en.md)
 
@@ -16,14 +16,17 @@ QQ community and feedback group: 607755362
 
 </div>
 
-GalGear is a local Galgame manager for Windows. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
+GalGear is a local Galgame manager for Windows and Linux. Add your game folders to browse covers, find games, organize favorites, and launch games, with saves and patches managed in the same place.
 
 ## 🚀 Quick start
 
-Download the Windows x64 version from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest):
+Choose a download for your platform from [Releases](https://github.com/CbShuiMu/GalGear/releases/latest).
 
 - **Installer**: download the file ending in `_x64-setup.exe` and follow the installation prompts.
 - **Portable**: download the file ending in `-win64-portable.zip`, extract it, and run `GalGear.exe`.
+- **Linux x86_64**. Download the archive ending in `-linux-x86_64.tar.gz`, extract it, and run `./galgear`. The build uses system libraries including WebKitGTK 4.1 and has been tested on Ubuntu 24.04.
+
+Linux supports scanning and manually importing games, fetching metadata without an account, displaying covers, and launching Windows games through umu-run and Proton. Install umu-launcher before launching a game. Locale emulation, upscaling, font hooks, global screenshots, the AI host, and the built-in updater are currently Windows features. [Linux setup and launch guide (Chinese)](docs/linux.md).
 
 For your first launch:
 
@@ -34,6 +37,8 @@ Choose an interface language on the first run. GalGear sets the default metadata
 3. Open the game details, check the launch configuration, and launch the game. To enable automatic backups, first launch the game and create a save.
 
 ## ✨ Features
+
+The table includes Windows features. See [Linux platform coverage (Chinese)](docs/linux.md#当前边界).
 
 | Feature | Description |
 | --- | --- |

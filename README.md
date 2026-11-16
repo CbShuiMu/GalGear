@@ -6,7 +6,7 @@
 
 **专注于GalGame的管理器，转区超分，补丁搜索管理，多数据源刮削，AI存档搜索。**
 
-Windows x64 · 界面语言支持 简体中文 / 日本語 / English
+Windows x64 / Linux x86_64 · 界面语言支持 简体中文 / 日本語 / English
 
 [简体中文](README.md) · [日本語](README.ja.md) · [English](README.en.md)
 
@@ -16,14 +16,17 @@ Windows x64 · 界面语言支持 简体中文 / 日本語 / English
 
 </div>
 
-GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加进来，就能看封面、找游戏、整理收藏夹、启动游戏，也能在同一个地方管理存档和补丁。
+GalGear 是一个支持 Windows 与 Linux 的本地 Galgame 管理工具。把游戏目录加进来，就能看封面、找游戏、整理收藏夹、启动游戏，也能在同一个地方管理存档和补丁。
 
 ## 🚀 快速上手
 
-前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载 Windows x64 版本：
+前往 [Releases](https://github.com/CbShuiMu/GalGear/releases/latest) 下载对应平台的版本。
 
 - **安装版**：下载文件名以 `_x64-setup.exe` 结尾的安装包，按提示安装。
 - **便携版**：下载文件名以 `-win64-portable.zip` 结尾的压缩包，解压后运行 `GalGear.exe`。
+- **Linux x86_64**：下载文件名以 `-linux-x86_64.tar.gz` 结尾的压缩包，解压后运行 `./galgear`。需要 WebKitGTK 4.1 等系统依赖，已在 Ubuntu 24.04 验证。
+
+Linux 支持扫描和手动导入游戏、匿名刮削、显示封面，并通过 umu-run 和 Proton 启动 Windows 游戏。请先安装 umu-launcher。转区、超分、字体 Hook、全局截图、AI 宿主和内置更新器目前适用于 Windows。[Linux 安装与启动说明](docs/linux.md)。
 
 第一次打开，可以按这个顺序来：
 
@@ -34,6 +37,8 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 3. 打开游戏详情，检查启动配置，点击启动。（自动备份的开启需要启动游戏并进行一次存档）
 
 ## ✨ 功能介绍
+
+以下功能包含 Windows 版专用能力。Linux 的支持范围见[平台说明](docs/linux.md#当前边界)。
 
 | 功能 | 说明 |
 | --- | --- |
