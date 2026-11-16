@@ -5178,9 +5178,9 @@
     "en-US": " · Batch {completed}/{total}, {files} files extracted"
   },
   "media.title": {
-    "zh-CN": "CG 提取",
-    "ja-JP": "CG 抽出",
-    "en-US": "CG extraction"
+    "zh-CN": "提取资源",
+    "ja-JP": "リソースを抽出",
+    "en-US": "Extract resources"
   },
   "media.cg": {
     "zh-CN": "提取 CG",

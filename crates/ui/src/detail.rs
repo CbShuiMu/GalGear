@@ -230,7 +230,6 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
                 || crate::ai_summary::busy(app, &game.id),
         ));
     }
-    crate::media_extract::shortcuts(html, app, game);
     html.push_str(&button(
         if app.detail.editing && !app.detail.editing_configuration {
             "detail-save"
@@ -254,6 +253,7 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
         "primary detail-edit-toggle",
         app.busy(),
     ));
+    crate::media_extract::shortcuts(html, app, game);
     html.push_str(
         "</div></div><div class=\"detail-hero\"><div class=\"detail-cover poster poster-1\">",
     );

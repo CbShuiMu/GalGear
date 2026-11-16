@@ -59,10 +59,10 @@ async function fixture() {
   };
 }
 
-test('media entry stays before edit without AI preparation, and after route when enabled', async () => {
+test('Extract resources follows Edit with or without AI preparation', async () => {
   const app = await fixture();
-  assert.match(app.html, /media-tools-anchor/);
-  assert.ok(app.html.indexOf('media-tools-anchor') < app.html.indexOf('data-action="detail-edit"'));
+  assert.match(app.html, /class="icon-button media-tools-toggle" aria-label="提取资源" title="提取资源"/);
+  assert.ok(app.html.indexOf('data-action="detail-edit"') < app.html.indexOf('media-tools-anchor'));
   assert.doesNotMatch(app.html, /data-action="summary-run"|data-action="route-map-open"/);
   await app.ready();
   for (const action of ['summary-run','route-map-open','extract-cg','extract-audio']) {
@@ -72,8 +72,8 @@ test('media entry stays before edit without AI preparation, and after route when
     assert.match(tag, /title="[^"]+"/);
   }
   assert.ok(app.html.indexOf('data-action="summary-run"') < app.html.indexOf('data-action="route-map-open"'));
-  assert.ok(app.html.indexOf('data-action="route-map-open"') < app.html.indexOf('media-tools-anchor'));
-  assert.ok(app.html.indexOf('media-tools-anchor') < app.html.indexOf('data-action="detail-edit"'));
+  assert.ok(app.html.indexOf('data-action="route-map-open"') < app.html.indexOf('data-action="detail-edit"'));
+  assert.ok(app.html.indexOf('data-action="detail-edit"') < app.html.indexOf('media-tools-anchor'));
 });
 
 test('both media actions start without preparation and report missing AI configuration', async () => {
