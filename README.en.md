@@ -39,7 +39,7 @@ Choose an interface language on the first run. GalGear sets the default metadata
 | --- | --- |
 | Library | Manage multiple folders, search titles and aliases, sort, organize nested favorites, and drag and drop. At startup, GalGear shows the cached library while it checks paths in the background. Unavailable games stay in the library, and changes in drive or library folder availability trigger a background rescan. The home page follows library sorting and shows last played dates. In custom order, drag one or more games to move them, or use Alt with the left or right arrow key. In the library or a collection, hold Alt and scroll or press Up or Down to change card size. Under **Settings → Display & interaction**, choose Poster wall or Cover and title, and set the card size to Small, Medium, or Large. Cover and title shows up to two centered lines of text below each cover. |
 | Tags and metadata | Filter by staff tags such as voice actors, illustrators, and scenario writers, and combine tag filters. Metadata sources include 未萌 NextMoe, KunGal, VNDB, Bangumi, 月幕Gal, and 2DFan. Search covers independently or use local images. Thanks to these platforms. [ErogameScape metadata](docs/erogamescape.md) is also available. Tags can also filter by brand, developer, publisher, and staff. Use Studio search to find a brand directly. Press and hold a local tag in game details to drag it into order. Use **Rematch** while editing game details to select an entry and update the cover, tags, and metadata. Renaming a game can also sync those fields when a source finds a single new match. |
-| Bundled locale emulation and upscaling | Disabled by default. Enable Locale Emulator or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
+| Bundled locale emulation and upscaling | Disabled by default. Enable LocaleEmulatorPlus or Magpie real-time scaling as needed in the game configuration. Hover over or focus the settings gear in game details to reveal quick controls for locale emulation, upscaling, automatic backups, and AI analysis. Click the gear to open all settings. |
 | Covers and themes | Waifu2x denoises covers in the background and upscales home backgrounds to 4K. Customize themes, light/dark mode, language, and font size. [Cover enhancement](docs/cover-enhancement.md). |
 | Font Hook and floating panel | Press **Shift+T** while a library game is in the foreground to adjust fonts, size, width, spacing, and weight. Apply through a SimpleFontHook compatibility build, with optional charset emulation and text mapping. Results depend on the game engine. [Font panel](docs/font-tools.md). |
 | Screenshots | **Shift+S to capture → automatically copied to the clipboard → Ctrl+V to paste and share**. Also saves lossless PNGs at captured resolution, supports capture in Magpie mode, and shows the latest screenshot below the game details. |
@@ -124,7 +124,7 @@ An optional **AI story recap** is available. Configure an API token and model fo
 
 An **AI route map** opens a generated map of branches and endings in your default browser. The interactive map works offline and lets you expand branches, zoom, and pan. Route maps always use DeepSeek, which must be configured separately. The feature analyzes the full dialogue and may reveal later story events and endings.
 
-During analysis, the notification in the bottom-right corner shows the current stage and remains visible as you switch pages.
+During analysis, the notification in the bottom-right corner shows the current stage and remains visible as you switch pages. On Windows, the analysis host and its parsers run in a system sandbox and can read only the game and save files authorized for the current task.
 
 These features are experimental. Save and script support varies by game, and generated summaries and routes may be inaccurate. When enabled, the dialogue, save information, and game metadata needed for analysis are sent to the corresponding AI service. API usage is billed to your own account. See [AI settings](docs/ai-settings.md) and [Story recaps](docs/ai-summary.md) for details (in Chinese).
 
@@ -163,12 +163,12 @@ Account tokens, cookies, and cloud storage passwords are stored in the local Win
 
 ## 📌 Usage notes
 
-On Windows, a normal game launch requests administrator permission. For locale-emulated launches, permissions follow the selected Locale Emulator profile.
+On Windows, a normal game launch requests administrator permission. For locale-emulated launches, permissions follow the selected LocaleEmulatorPlus profile. On first use of the bundled LocaleEmulatorPlus, GalGear migrates any legacy locale profiles in the same folder. You can also select an external Locale Emulator in Settings.
 
 Permanently deleting a game entry deletes `cover.jpg` in its game folder. Confirming removal of a library also deletes that file for games removed with the library, including existing covers. Games in another library and manually added games keep their covers.
 
 - GalGear manages local EXE games that are already installed. It does not provide games or mount or install disc images.
-- Save detection does not support every engine; check the location before making your first backup. Locale Emulator and Magpie configuration paths can be changed under **Settings → Paths & backups**. Their behavior also depends on the game and your local environment.
+- Save detection does not support every engine; check the location before making your first backup. LocaleEmulatorPlus and Magpie configuration paths can be changed under **Settings → Paths & backups**. Their behavior also depends on the game and your local environment.
 - Resource downloads currently run one at a time, with no support for resuming interrupted downloads.
 
 To report a problem, include the application version, reproduction steps, and error message in [Issues](https://github.com/CbShuiMu/GalGear/issues). Remove personal information when sharing anything related to saves or accounts.
@@ -181,6 +181,7 @@ GalGear uses the following open-source tools for several of its features. Thanks
 
 - [SimpleFontHook — SuQiandYing](https://github.com/SuQiandYing/SimpleFontHook): the upstream font Hook implementation, licensed under MIT. The compatibility build preserves its [original notice](docs/licenses/SuQiandYing-MIT.txt).
 - [Microsoft Detours](https://github.com/microsoft/Detours): the API interception library used by the Hook, with its [Microsoft MIT license](docs/licenses/Detours-MIT.txt) retained.
+- [LocaleEmulatorPlus (LEP) — julixian](https://github.com/julixian/LocaleEmulatorPlus): the bundled locale tool, supporting x86/x64 emulation and propagation across architectures.
 - [Locale Emulator (LE)](https://github.com/xupefei/Locale-Emulator): launching games with an emulated locale.
 - [Magpie](https://github.com/Blinue/Magpie): real-time game image scaling and upscaling.
 - [waifu2x-ncnn-vulkan (waifu2x)](https://github.com/nihui/waifu2x-ncnn-vulkan): cover denoising and home background enhancement.

@@ -39,7 +39,7 @@ GalGear 是一个 Windows 上的本地 Galgame 管理工具。把游戏目录加
 | --- | --- |
 | 游戏管理 | 多目录管理、标题与别名搜索、排序、多层收藏夹、拖放和批量整理。启动时先显示上次缓存的游戏库，路径检查在后台进行。库目录离线时保留条目，磁盘或库目录的可访问状态变化后在后台重扫。首页沿用游戏库排序，并显示上次游玩日期。 支持拖动单个或多个游戏调整自定顺序，也可用 Alt 加左右方向键移动。 游戏库和收藏夹可用 Alt 加滚轮或 Alt 加上下方向键切换卡面尺寸。 在「设置 → 显示与交互」可切换海报墙或封面与标题，并选择小、中、大三档尺寸。封面与标题模式在封面下方居中显示最多两行游戏名。 |
 | 标签与资料 | 支持声优、画师、脚本等制作人员标签筛选，同时支持组合标签筛选，以及 未萌 NextMoe、KunGal、VNDB、Bangumi、月幕Gal、2DFan 资料；封面可单独搜索或选用本地图片。（感谢以上平台） 支持[批评空间资料查询](docs/erogamescape.md)。标签筛选同时支持品牌、开发商、发行商和制作人员，也可通过「制作组」直接搜索品牌。 详情页可长按拖动本地标签排序。详情编辑中可用「重新匹配」选定作品并更新封面、标签与资料。改名后找到唯一且不同的词条时也会同步相应内容。 |
-| 内置转区与超分 | 默认不勾选，可在游戏配置中按需开启 Locale Emulator 转区或 Magpie 实时缩放。 悬停或聚焦详情页齿轮可展开转区、超分、自动备份和 AI 分析开关，点击齿轮可打开完整配置。 |
+| 内置转区与超分 | 默认不勾选，可在游戏配置中按需开启 LocaleEmulatorPlus 转区或 Magpie 实时缩放。 悬停或聚焦详情页齿轮可展开转区、超分、自动备份和 AI 分析开关，点击齿轮可打开完整配置。 |
 | 封面与主题 | Waifu2x 后台去噪并超分4K 的首页背景；支持主题、明暗模式、语言与字号设置。[封面增强说明](docs/cover-enhancement.md)。 |
 | 字体 Hook 与悬浮面板 | 游戏前台默认按 **Shift+T** 打开原生悬浮面板，调整字体、字号、字宽、字距、行距与字重；通过 SimpleFontHook 兼容构建应用到游戏。支持字符集伪装与文字映射，实际效果取决于游戏引擎。[字体面板说明](docs/font-tools.md)。 |
 | 游戏截图 | **Shift+S 截图 → 自动复制到剪贴板 → Ctrl+V 粘贴分享**。同时保存原尺寸无损 PNG，支持 Magpie模式下截图和游戏详情下方最近截图预览。 |
@@ -131,7 +131,7 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 另外还有 **AI 路线图**，会在默认浏览器里打开生成的分支与结局图。交互式路线图可离线查看，支持展开分支、缩放和拖动。路线图固定使用 DeepSeek，需要另行配置 DeepSeek；它会分析完整台词，可能包含后续剧情和结局剧透。
 
-分析期间可在右下角查看当前阶段，切换页面后仍可查看。
+分析期间可在右下角查看当前阶段，切换页面后仍可查看。Windows 下的分析宿主与解析工具在系统沙盒内运行，只能读取本次任务授权的游戏和存档文件。
 
 这部分还在实验中，能否读取存档和脚本取决于具体游戏，无法保证每款都能用，生成的总结和路线也可能有误。启用时，分析所需的游戏台词、存档信息和作品资料会发给相应的 AI 服务，调用费用由你的 API 账号承担。更详细的用法见 [AI 设置](docs/ai-settings.md) 和 [前情提要说明](docs/ai-summary.md)。
 
@@ -172,12 +172,12 @@ GalGear 会寻找游戏目录、AppData 和“文档”等位置里的存档，�
 
 ## 📌 使用须知
 
-Windows 下普通启动游戏时会请求管理员权限。转区启动的权限由所选 Locale Emulator 配置决定。
+Windows 下普通启动游戏时会请求管理员权限。转区启动的权限由所选 LocaleEmulatorPlus 配置决定。首次使用内置 LocaleEmulatorPlus 时，GalGear 会迁移同目录已有的旧版转区配置。也可在设置中指定外部 Locale Emulator。
 
 确认永久删除游戏条目时会删除其游戏目录直属的 `cover.jpg`。确认移除游戏库时，也会删除随库移除条目的同名封面，包括原有封面。其他库仍包含的游戏和手动添加的游戏保留封面。
 
 - GalGear 管理的是已经安装好的本地 EXE 游戏，不提供游戏本体，也不负责光盘镜像挂载或安装。
-- 存档识别并不覆盖所有引擎，第一次备份前请检查位置。Locale Emulator、Magpie 可以在设置-路径与备份中修改配置路径，也取决于游戏与本机环境。
+- 存档识别并不覆盖所有引擎，第一次备份前请检查位置。LocaleEmulatorPlus、Magpie 可以在设置-路径与备份中修改配置路径，也取决于游戏与本机环境。
 - 资源下载目前一次处理一个任务，暂不支持断点续传。
 
 遇到问题，可以在 [Issues](https://github.com/CbShuiMu/GalGear/issues) 留下软件版本、出错步骤和报错信息。涉及存档或账号时，请先去掉个人信息。
@@ -192,6 +192,7 @@ GalGear 的部分功能使用了以下开源工具，感谢各项目的开发者
 
 - [SimpleFontHook — SuQiandYing](https://github.com/SuQiandYing/SimpleFontHook)：游戏字体 Hook 的上游实现，使用 MIT 许可；GalGear 的兼容构建保留[上游原始声明](docs/licenses/SuQiandYing-MIT.txt)。
 - [Microsoft Detours](https://github.com/microsoft/Detours)：Hook 使用的 API 拦截库，保留 [Microsoft MIT 许可](docs/licenses/Detours-MIT.txt)。
+- [LocaleEmulatorPlus（LEP）— julixian](https://github.com/julixian/LocaleEmulatorPlus)：内置转区工具，提供 x86/x64 区域模拟及跨架构传播。
 - [Locale Emulator（LE）](https://github.com/xupefei/Locale-Emulator)：提供转区启动能力。
 - [Magpie](https://github.com/Blinue/Magpie)：提供游戏画面的实时缩放与超分。
 - [waifu2x-ncnn-vulkan（waifu2x）](https://github.com/nihui/waifu2x-ncnn-vulkan)：用于封面去噪和首页背景增强。
