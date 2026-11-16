@@ -100,6 +100,15 @@ pub fn normalize_folder(path: &str) -> Result<String, Message> {
     Ok(display_path(&canonical))
 }
 
+/// 生成用于路径身份比较的文本。Linux 保留大小写与合法的反斜杠文件名。
+pub fn path_key(path: &str) -> String {
+    if cfg!(windows) {
+        path.to_lowercase()
+    } else {
+        path.to_owned()
+    }
+}
+
 pub fn display_path(path: &Path) -> String {
     let text = path.to_string_lossy();
     if let Some(network) = text.strip_prefix(r"\\?\UNC\") {
@@ -112,6 +121,33 @@ pub fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_import_keeps_case_distinct_installations_and_reloads_proton() {
+        let root = tempfile::tempdir().unwrap();
+        let mut settings = Settings::default();
+        for folder in ["Game", "game"] {
+            let directory = root.path().join(folder);
+            fs::create_dir(&directory).unwrap();
+            fs::write(directory.join("Game.exe"), []).unwrap();
+            crate::catalog::add_library_folder(&mut settings, display_path(&directory));
+        }
+        assert_eq!(settings.library_folders.len(), 2);
+        let catalog = crate::scanner::scan(&settings);
+        assert_eq!(catalog.games.len(), 2);
+        assert_ne!(catalog.games[0].id, catalog.games[1].id);
+        settings
+            .game_edits
+            .entry(catalog.games[0].id.clone())
+            .or_default()
+            .proton_path = Some("/opt/Proton".into());
+        let store = ConfigStore::new(root.path().join("settings.json"));
+        store.save(&settings).unwrap();
+        assert_eq!(store.load().unwrap().game_edits, settings.game_edits);
+        let imported: Settings = serde_json::from_str(r#"{"platform":"windows"}"#).unwrap();
+        assert_eq!(imported.platform, "linux");
+    }
 
     #[test]
     fn library_card_size_defaults_for_old_configs_and_survives_reopening() {

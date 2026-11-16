@@ -41,6 +41,7 @@ pub(crate) fn begin(app: &mut App) {
         ("draft-arguments", edit.arguments.join("\n")),
         ("draft-workdir", edit.working_directory.unwrap_or_default()),
         ("draft-launcher", edit.launcher.unwrap_or_default()),
+        ("draft-proton", edit.proton_path.unwrap_or_default()),
         ("draft-locale", edit.locale_profile),
     ] {
         app.form.insert(key.into(), value);
@@ -84,7 +85,7 @@ pub(crate) fn save(app: &mut App) {
         .filter(|(field, _)| value(&format!("draft-reset-{field}")) == "true")
         .map(|(field, _)| field)
         .collect();
-    let payload = json!({"id":id,"draft":{"title":value("draft-title"),"tags":value("draft-tags").split([',','，']).map(str::trim).collect::<Vec<_>>(),"executable":value("draft-executable"),"arguments":value("draft-arguments").lines().collect::<Vec<_>>(),"working_directory":optional("draft-workdir"),"launcher":optional("draft-launcher"),"locale_profile":value("draft-locale"),"metadata":metadata,"metadata_resets":resets}});
+    let payload = json!({"id":id,"draft":{"title":value("draft-title"),"tags":value("draft-tags").split([',','，']).map(str::trim).collect::<Vec<_>>(),"executable":value("draft-executable"),"arguments":value("draft-arguments").lines().collect::<Vec<_>>(),"working_directory":optional("draft-workdir"),"launcher":optional("draft-launcher"),"proton_path":optional("draft-proton"),"locale_profile":value("draft-locale"),"metadata":metadata,"metadata_resets":resets}});
     issue(app, Pending::DetailSaved, "save_game_details", payload);
 }
 

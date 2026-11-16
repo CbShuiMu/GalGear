@@ -284,12 +284,14 @@ fn seven_zip() -> Result<PathBuf, Message> {
     Err(error("RAR / 7z requires 7-Zip installed locally"))
 }
 fn hidden_command(exe: &Path) -> std::process::Command {
-    let mut command = std::process::Command::new(exe);
+    let command = std::process::Command::new(exe);
     #[cfg(windows)]
-    {
+    let command = {
         use std::os::windows::process::CommandExt;
+        let mut command = command;
         command.creation_flags(0x08000000);
-    }
+        command
+    };
     command
 }
 fn output_bounded(command: &mut std::process::Command, max: u64) -> Result<Vec<u8>, Message> {

@@ -16,7 +16,7 @@ pub(crate) fn open_resource(url: String) -> Result<(), Message> {
     open::that_detached(parsed.as_str()).map_err(|e| Message::detail("error.network", e))
 }
 
-pub(crate) fn run() {
+fn builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
         .plugin(
             tauri::plugin::Builder::<tauri::Wry>::new("diagnostics")
@@ -300,6 +300,10 @@ pub(crate) fn run() {
             tools::game_runtime,
             tools::upscale_game,
         ])))
+}
+
+pub(crate) fn run() {
+    builder()
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| {
             log::error!("startup_failed {error:?}");
@@ -333,3 +337,7 @@ pub(crate) fn run() {
             }
         });
 }
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "linux_smoke.rs"]
+mod linux_smoke;

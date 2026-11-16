@@ -12,6 +12,13 @@ import {startGamepad} from './gamepad.js';
 import {installCoverResolutions, syncCoverResolutions} from './cover-picker.js';
 import {installHomeNavigation, syncHomePresentation, captureHomeDetailCover, syncHomeDetailTransition, returnHomeDetail, cancelHomeDetailTransition} from './home.js';
 
+function nativeAssetUrls(text) {
+  const convert = window.__TAURI__?.core?.convertFileSrc;
+  if (!convert) return text;
+  return text.replace(/http:\/\/(galgear-(?:cover|icon|background))\.localhost\//g,
+    (_, protocol) => convert('', protocol));
+}
+
 let wasmReady = false;
 const syncSetupScroll = installSetupScroll((start, count, pinned) => {
   if (wasmReady) ui.setup_viewport(start, count, pinned);
@@ -345,7 +352,7 @@ function renderFrame(html) {
     const openingDetail = hasDialog && !previousDialog;
     const closingDetail = !hasDialog && previousDialog;
     const template = document.createElement('template');
-    template.innerHTML = html;
+    template.innerHTML = nativeAssetUrls(html);
     const nextDetail = template.content.querySelector('.detail-overlay');
     const homeCover = openingDetail && nextDetail?.dataset.detailOrigin === 'home'
       ? captureHomeDetailCover(nextDetail.dataset.detailGame) : null;
@@ -1084,9 +1091,9 @@ try {
       // are decoded by home-backdrop only when selected, avoiding unused image buffers.
       const data = event.payload;
       try {
-        const sources = [data.cover];
+        const sources = [nativeAssetUrls(data.cover)];
         if (document.querySelector('.home-game.selected')?.dataset.value === data.id) {
-          sources.push(`http://galgear-cover.localhost/${data.cover_artwork.background}`);
+          sources.push(nativeAssetUrls(`http://galgear-cover.localhost/${data.cover_artwork.background}`));
         }
         await Promise.all(sources.map(src => {
           const image = new Image(); image.src = src; return image.decode();

@@ -59,12 +59,12 @@ pub(crate) fn validate_components(path: &Path) -> Result<(), galgear_i18n::Messa
     for ancestor in path.ancestors() {
         let metadata = fs::symlink_metadata(ancestor)
             .map_err(|error| galgear_i18n::Message::detail("backup.error", error))?;
-        let mut linked = metadata.file_type().is_symlink();
+        let linked = metadata.file_type().is_symlink();
         #[cfg(windows)]
-        {
+        let linked = {
             use std::os::windows::fs::MetadataExt;
-            linked |= metadata.file_attributes() & 0x400 != 0;
-        }
+            linked || metadata.file_attributes() & 0x400 != 0
+        };
         if linked {
             return Err(galgear_i18n::Message::detail(
                 "backup.error",

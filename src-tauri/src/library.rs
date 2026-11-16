@@ -492,9 +492,17 @@ mod folder_tests {
         paths.extend([missing.clone(), display_path(&file), String::new()]);
         let result = persist_library_folders(&state, paths).unwrap();
         assert_eq!(result.added, 600);
-        assert_eq!(result.unchanged, 3);
-        assert_eq!(result.failed.len(), 3);
-        assert_eq!(result.failed[0].path, missing);
+        if cfg!(windows) {
+            assert_eq!(result.unchanged, 3);
+            assert_eq!(result.failed.len(), 3);
+            assert_eq!(result.failed[0].path, missing);
+        } else {
+            // 大写后的临时目录在区分大小写的平台上是另一条不存在的路径。
+            assert_eq!(result.unchanged, 2);
+            assert_eq!(result.failed.len(), 4);
+            assert_eq!(result.failed[0].path, first.to_uppercase());
+            assert_eq!(result.failed[1].path, missing);
+        }
         assert_eq!(
             state.store.load().unwrap().library_folders,
             result.settings.library_folders

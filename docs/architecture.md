@@ -1,5 +1,9 @@
 # 源码模块边界
 
+Linux 启动由 `core::runtime::proton` 生成 umu 命令，桌面 `tools` 保留启动互斥及异步失败通知。
+每游戏独立 prefix 位于应用数据目录，UI 的平台信息由后端提供。Linux 的运行观察仅确认带游戏标识的进程，缺少证据时保持未知状态。
+封面等自定义协议的系统差异由 `web/bridge.js` 在 DOM 传输边界转换。设计取舍见 [ADR 0006](adr/0006-linux-proton-launch.md)，构建和验证见 [Linux 开发与试用](linux.md)。
+
 媒体提取由 `ui::media_extract` 管理入口和响应，`ai_summary::media` 负责工作目录与校验发布。
 `media_agent.py` 只使用内置 Skill 试提取少量样本并冻结批量计划，规划进程退出后再由
 `media_batch.py` 独立执行；批量进程不接收模型凭据，也不拥有网络权限。两阶段共用桌面任务

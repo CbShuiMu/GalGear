@@ -138,6 +138,7 @@ fn save_magpie_hotkey(state: &AppState, executable: &Path, hotkey: &str, mode: O
     Ok(hotkey)
 }
 
+#[cfg(any(not(target_os = "linux"), test))]
 fn select_locale_profile<'a>(
     profiles: &'a [runtime::LocaleProfile],
     guid: &str,
@@ -197,7 +198,15 @@ fn launch_game_at(
     }
     let settings = snapshot(&state)?;
     let edit = settings.game_edits.get(&id).cloned().unwrap_or_default();
-    let upscale_hotkey = if edit.upscale { Some(ensure_magpie(&state, &settings)?) } else { None };
+    #[cfg(target_os = "linux")]
+    if edit.upscale || mode.as_deref().unwrap_or(&edit.launch_mode) == "locale" {
+        return Err(Message::new("proton.windows_tool"));
+    }
+    let upscale_hotkey = if edit.upscale {
+        Some(ensure_magpie(&state, &settings)?)
+    } else {
+        None
+    };
     let mut running = state
         .tools
         .running
@@ -215,6 +224,7 @@ fn launch_game_at(
     // begin_write serializes launches; do not hold the process map while spawning a process.
     drop(running);
     let locale = mode.as_deref().unwrap_or(&edit.launch_mode) == "locale";
+    #[cfg(not(target_os = "linux"))]
     let mut command = if locale {
         let locale_emulator = tool_path(&settings.locale_emulator, "tools.locale_missing")?;
         runtime::prepare_locale_config(&locale_emulator)
@@ -228,11 +238,25 @@ fn launch_game_at(
     } else {
         std::process::Command::new(edit.launcher.as_deref().unwrap_or(&executable))
     };
+    #[cfg(not(target_os = "linux"))]
     if !locale && edit.launcher.is_some() {
         command.arg(&executable);
     }
-    let directory = edit.working_directory.as_deref().unwrap_or(&game.folder);
-    command.args(&edit.arguments).current_dir(directory);
+    #[cfg(not(target_os = "linux"))]
+    command
+        .args(&edit.arguments)
+        .current_dir(edit.working_directory.as_deref().unwrap_or(&game.folder));
+    #[cfg(target_os = "linux")]
+    let mut command = runtime::proton::command(
+        Path::new(&executable),
+        &edit,
+        state
+            .store
+            .path
+            .parent()
+            .ok_or_else(|| Message::new("error.config_state"))?,
+        &id,
+    )?;
     #[cfg(windows)]
     let child = if locale {
         // Locale Emulator 自行按所选配置提权，保留显式非管理员配置的语义。
@@ -241,9 +265,18 @@ fn launch_game_at(
         game_process::spawn(&command)?
     };
     #[cfg(not(windows))]
-    let child = command.spawn()
-        .map_err(|e| Message::detail("error.launch", e))?;
-    if let Err(error) = state.tools.observer.launched(Path::new(&executable), &child) {
+    let child = command.spawn().map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            Message::new("proton.runner_missing")
+        } else {
+            Message::detail("error.launch", e)
+        }
+    })?;
+    if let Err(error) = state
+        .tools
+        .observer
+        .launched(Path::new(&executable), &child)
+    {
         log::warn!("runtime_tracking_failed game_id={id}: {error}");
     }
     log::info!("game_spawned game_id={id} pid={} locale={locale} upscale={}", child.id(), edit.upscale);
@@ -445,6 +478,25 @@ pub(crate) fn scheduler(app: tauri::AppHandle) {
         loop {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             let state = app.state::<AppState>();
+            #[cfg(target_os = "linux")]
+            if let Ok(mut running) = state.tools.running.lock() {
+                running.retain(|_, child| match child.try_wait() {
+                    Ok(Some(status)) => {
+                        if !status.success() {
+                            let _ = app.emit(
+                                "tool-failed",
+                                Message::new("proton.failed").arg("code", status.to_string()),
+                            );
+                        }
+                        false
+                    }
+                    Ok(None) => true,
+                    Err(error) => {
+                        log::warn!("proton_wait_failed: {error}");
+                        true
+                    }
+                });
+            }
             let games = match state.catalog.lock() {
                 Ok(c) => c
                     .games

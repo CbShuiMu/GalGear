@@ -14,7 +14,7 @@ pub fn host(home: &Path) -> Option<PathBuf> {
 }
 
 pub fn available(home: &Path) -> bool {
-    host(home).is_some() && home.join(SKILL_DIRECTORY).join("SKILL.md").is_file()
+    cfg!(windows) && host(home).is_some() && home.join(SKILL_DIRECTORY).join("SKILL.md").is_file()
 }
 
 pub fn home() -> Option<PathBuf> {
@@ -41,7 +41,7 @@ mod tests {
         fs::create_dir_all(home.join(SKILL_DIRECTORY)).unwrap();
         assert!(!available(home));
         fs::write(home.join(SKILL_DIRECTORY).join("SKILL.md"), "skill").unwrap();
-        assert!(available(home));
+        assert_eq!(available(home), cfg!(windows));
         fs::remove_file(executable).unwrap();
         assert!(!available(home));
     }

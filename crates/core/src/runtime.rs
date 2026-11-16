@@ -2,7 +2,10 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+#[cfg(target_os = "linux")]
+mod linux;
 mod locale;
+pub mod proton;
 pub use locale::{LocaleProfile, locale_profiles, prepare_locale_config};
 
 #[cfg(windows)]
@@ -12,21 +15,26 @@ mod processes;
 #[cfg(windows)]
 pub use monitor::Monitor;
 
-/// 非 Windows 平台无法确认游戏进程，保持未知状态。
+/// Linux 根据启动树标识确认运行中进程；无法确认的进程状态保持未知。
 #[cfg(not(windows))]
 #[derive(Default)]
 pub struct Monitor;
 #[cfg(not(windows))]
 impl Monitor {
-    /// Windows 启动跟踪在其他平台不可用。
+    /// Linux 的子进程由环境标识观察，无需注册 Windows 进程句柄。
     pub fn launched(&self, _executable: &Path, _child: &std::process::Child) -> Result<(), String> {
-        Err("Windows process inspection required".into())
+        // Linux 通过子进程环境中的游戏标识独立观察整个 umu 进程树。
+        if cfg!(target_os = "linux") {
+            Ok(())
+        } else {
+            Err("Windows process inspection required".into())
+        }
     }
-    /// 返回未知状态。
+    /// 返回可验证的运行状态，否则保持未知。
     pub fn detect(&self, executable: Option<&str>) -> Status {
         detect(executable)
     }
-    /// 返回所有游戏的未知状态。
+    /// 批量查询游戏的运行状态。
     pub fn detect_many(
         &self,
         games: &[(String, Option<String>)],
@@ -156,7 +164,7 @@ pub fn detect_many(
         .collect()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn detect_many(
     games: &[(String, Option<String>)],
 ) -> std::collections::BTreeMap<String, Status> {
@@ -166,9 +174,23 @@ pub fn detect_many(
         .collect()
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn process_ids(_path: &Path) -> Result<Vec<u32>, String> {
     Err("Windows process inspection required".into())
+}
+
+/// Linux 使用 umu 进程树标识，无法确认时保留未知状态。
+#[cfg(target_os = "linux")]
+pub fn process_ids(path: &Path) -> Result<Vec<u32>, String> {
+    linux::process_ids(path)
+}
+
+/// 一次读取 Linux 进程环境，查询整个游戏库。
+#[cfg(target_os = "linux")]
+pub fn detect_many(
+    games: &[(String, Option<String>)],
+) -> std::collections::BTreeMap<String, Status> {
+    linux::detect_many(games)
 }
 
 /// Focus the real game window and send the user's configured Magpie hotkey.

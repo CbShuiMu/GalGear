@@ -138,9 +138,15 @@ fn preserve(root: &Path, path: &Path) -> bool {
 fn reject_links(path: &Path) -> Result<(), Message> {
     for path in path.ancestors() {
         if let Ok(metadata) = fs::symlink_metadata(path) {
-            let mut link = metadata.is_symlink();
-            #[cfg(windows)] { use std::os::windows::fs::MetadataExt; link |= metadata.file_attributes() & 0x400 != 0; }
-            if link { return Err(error("Update destination contains a link")); }
+            let link = metadata.is_symlink();
+            #[cfg(windows)]
+            let link = {
+                use std::os::windows::fs::MetadataExt;
+                link || metadata.file_attributes() & 0x400 != 0
+            };
+            if link {
+                return Err(error("Update destination contains a link"));
+            }
         }
     }
     Ok(())

@@ -26,7 +26,7 @@ fn options(app: &App, game: &Game, edit: &GameEdit) -> [ToolOption; 4] {
             "LE",
             "locale",
             edit.launch_mode == "locale",
-            false,
+            app.settings.platform == "linux" && edit.launch_mode != "locale",
         ),
         (
             "toggle-upscale",
@@ -34,7 +34,7 @@ fn options(app: &App, game: &Game, edit: &GameEdit) -> [ToolOption; 4] {
             "M",
             "upscale",
             edit.upscale,
-            false,
+            app.settings.platform == "linux" && !edit.upscale,
         ),
         (
             "toggle-auto-backup",
@@ -92,5 +92,35 @@ pub(crate) fn configuration_options(html: &mut String, app: &App, game: &Game, e
         write!(html, r#"<button class="game-tool-option" role="checkbox" aria-checked="{}" data-action="{}" {}><span class="tool-check">{}</span><span>{}</span></button>"#,
             option.checked, option.action, if option.disabled { "disabled" } else { "" },
             if option.checked { icon("check") } else { String::new() }, t(app, option.key)).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::options;
+    use crate::{
+        models::{Game, GameEdit},
+        state::App,
+    };
+
+    #[test]
+    fn linux_can_clear_imported_windows_options_but_cannot_enable_them() {
+        let mut app = App::default();
+        app.settings.platform = "linux".into();
+        let game: Game = serde_json::from_value(serde_json::json!({
+            "id":"game", "title":"Game", "folder":"/games/game", "engine":"unknown",
+            "modified":0, "available":true
+        }))
+        .unwrap();
+        let defaults = options(&app, &game, &GameEdit::default());
+        assert!(defaults[0].disabled && defaults[1].disabled);
+        let imported = GameEdit {
+            launch_mode: "locale".into(),
+            upscale: true,
+            ..Default::default()
+        };
+        let previous = options(&app, &game, &imported);
+        assert!(previous[0].checked && previous[1].checked);
+        assert!(!previous[0].disabled && !previous[1].disabled);
     }
 }

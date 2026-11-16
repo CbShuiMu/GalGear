@@ -42,6 +42,9 @@ pub const RELEASE_PAGE: &str = "https://github.com/CbShuiMu/GalGear/releases";
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Settings {
+    /// 由运行中的后端提供，配置文件不能覆盖平台能力。
+    #[serde(skip_deserializing)]
+    pub platform: String,
     pub version: u32,
     pub library_folders: Vec<String>,
     pub cover_overrides: BTreeMap<String, String>,
@@ -107,6 +110,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            platform: std::env::consts::OS.into(),
             version: 1,
             library_folders: Vec::new(),
             cover_overrides: BTreeMap::new(),
@@ -179,6 +183,8 @@ pub struct GameEdit {
     pub arguments: Vec<String>,
     pub working_directory: Option<String>,
     pub launcher: Option<String>,
+    /// Linux 使用的 Proton 安装目录；为空时由 umu 管理默认版本。
+    pub proton_path: Option<String>,
     pub save_files: Vec<String>,
     pub save_path: Option<String>,
     pub save_path_auto: bool,
@@ -212,6 +218,7 @@ impl Default for GameEdit {
             arguments: Vec::new(),
             working_directory: None,
             launcher: None,
+            proton_path: None,
             save_files: Vec::new(),
             save_path: None,
             save_path_auto: false,

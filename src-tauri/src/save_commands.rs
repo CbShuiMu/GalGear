@@ -855,7 +855,7 @@ mod tests {
     }
 
     #[test]
-    fn automatic_backup_reuses_matching_manual_history_after_game_stops() {
+    fn automatic_backup_respects_runtime_and_reuses_matching_manual_history() {
         let temp = tempfile::tempdir().unwrap();
         let folder = temp.path().join("game");
         let saves = folder.join("savedata");
@@ -873,46 +873,63 @@ mod tests {
                 ..Default::default()
             },
         );
-        assert_eq!(
-            runtime::detect(game.executable.as_deref()),
-            runtime::Status::Stopped
-        );
-        let data = backup_data(&state.store.path, &crate::state::snapshot(&state).unwrap());
-        tauri::async_runtime::block_on(async {
-            fs::write(saves.join("slot.sav"), b"manual save").unwrap();
-            fs::write(
-                saves.join("system.ksd"),
-                br#"(const) %["trail_custom_exit_end" => 9, "cg_scene" => 1]"#,
-            )
-            .unwrap();
-            assert!(
-                backup(game.id.clone(), "Manual backup".into(), &state)
-                    .await
-                    .unwrap()
-            );
-            let original = snapshots::list(&data, &game.id).unwrap().remove(0);
-            fs::write(saves.join("slot.sav"), b"changed save").unwrap();
-            assert!(automatic_backup(game.id.clone(), &state).await.unwrap());
-            // An older match must be reused even when the latest backup differs.
-            fs::write(saves.join("slot.sav"), b"manual save").unwrap();
-            fs::write(
-                saves.join("system.ksd"),
-                br#"(const) %["cg_scene" => 1, "trail_custom_exit_end" => 10]"#,
-            )
-            .unwrap();
-            assert!(!automatic_backup(game.id.clone(), &state).await.unwrap());
-            let history = snapshots::list(&data, &game.id).unwrap();
-            assert_eq!(history.len(), 2);
+        #[cfg(not(windows))]
+        {
             assert_eq!(
-                snapshots::matching_current(
-                    &data,
-                    &history,
-                    &[galgear_core::config::display_path(&saves)],
-                )
-                .unwrap(),
-                Some(original.id)
+                runtime::detect(game.executable.as_deref()),
+                runtime::Status::Unknown
             );
-        });
+            fs::write(saves.join("slot.sav"), b"unchanged save").unwrap();
+            assert!(
+                tauri::async_runtime::block_on(automatic_backup(game.id.clone(), &state)).is_err()
+            );
+            assert_eq!(fs::read(saves.join("slot.sav")).unwrap(), b"unchanged save");
+            let data = backup_data(&state.store.path, &crate::state::snapshot(&state).unwrap());
+            assert!(snapshots::list(&data, &game.id).unwrap().is_empty());
+        }
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                runtime::detect(game.executable.as_deref()),
+                runtime::Status::Stopped
+            );
+            let data = backup_data(&state.store.path, &crate::state::snapshot(&state).unwrap());
+            tauri::async_runtime::block_on(async {
+                fs::write(saves.join("slot.sav"), b"manual save").unwrap();
+                fs::write(
+                    saves.join("system.ksd"),
+                    br#"(const) %["trail_custom_exit_end" => 9, "cg_scene" => 1]"#,
+                )
+                .unwrap();
+                assert!(
+                    backup(game.id.clone(), "Manual backup".into(), &state)
+                        .await
+                        .unwrap()
+                );
+                let original = snapshots::list(&data, &game.id).unwrap().remove(0);
+                fs::write(saves.join("slot.sav"), b"changed save").unwrap();
+                assert!(automatic_backup(game.id.clone(), &state).await.unwrap());
+                // An older match must be reused even when the latest backup differs.
+                fs::write(saves.join("slot.sav"), b"manual save").unwrap();
+                fs::write(
+                    saves.join("system.ksd"),
+                    br#"(const) %["cg_scene" => 1, "trail_custom_exit_end" => 10]"#,
+                )
+                .unwrap();
+                assert!(!automatic_backup(game.id.clone(), &state).await.unwrap());
+                let history = snapshots::list(&data, &game.id).unwrap();
+                assert_eq!(history.len(), 2);
+                assert_eq!(
+                    snapshots::matching_current(
+                        &data,
+                        &history,
+                        &[galgear_core::config::display_path(&saves)],
+                    )
+                    .unwrap(),
+                    Some(original.id)
+                );
+            });
+        }
     }
 
     fn game_with_legacy_backup(root: &Path, name: &str, legacy: &Path) -> Game {

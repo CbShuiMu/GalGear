@@ -39,6 +39,7 @@ pub(crate) fn save_game_details(
                 || draft.arguments != previous.arguments
                 || draft.working_directory != previous.working_directory
                 || draft.launcher != previous.launcher
+                || draft.proton_path != previous.proton_path
                 || draft.locale_profile != previous.locale_profile)
         {
             return Err(Message::new("games.unavailable"));

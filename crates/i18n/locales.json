@@ -5246,6 +5246,40 @@
     "zh-CN": "推断",
     "ja-JP": "推定",
     "en-US": "Inferred"
+  },
+  "proton.path": {
+    "zh-CN": "Proton 安装目录（可选）",
+    "ja-JP": "Proton インストール先（任意）",
+    "en-US": "Proton installation directory (optional)"
+  },
+  "proton.help": {
+    "zh-CN": "Linux 通过 umu-run 启动。自定义启动器可填写 umu-run 的绝对路径；Proton 留空时由 umu 下载默认版本和所需运行库。每款游戏使用独立的兼容环境。",
+    "ja-JP": "Linux では umu-run を使用します。カスタムランチャーには umu-run の絶対パスを指定できます。Proton が空欄の場合、umu が既定の Proton とランタイムをダウンロードします。ゲームごとに独立した環境を使用します。",
+    "en-US": "Linux uses umu-run. The custom launcher can specify its absolute path. Leave Proton empty to let umu download the default Proton and runtime. Each game has its own prefix."
+  },
+  "proton.invalid_path": {
+    "zh-CN": "请选择包含 proton 文件的安装目录，使用绝对路径。",
+    "ja-JP": "proton ファイルを含むインストール先を絶対パスで指定してください。",
+    "en-US": "Specify an absolute installation directory containing the proton file."
+  },
+  "proton.unsafe_prefix": {
+    "zh-CN": "Proton 数据目录包含不受支持的符号链接。",
+    "ja-JP": "Proton データディレクトリに未対応のシンボリックリンクがあります。",
+    "en-US": "The Proton data directory contains an unsupported symbolic link."
+  },
+  "proton.runner_missing": {
+    "zh-CN": "找不到 umu-run，请先安装 umu-launcher，或在自定义启动器中填写其绝对路径。",
+    "ja-JP": "umu-run が見つかりません。umu-launcher をインストールするか、カスタムランチャーに絶対パスを指定してください。",
+    "en-US": "umu-run was not found. Install umu-launcher or enter its absolute path in the custom launcher field."
+  },
+  "proton.failed": {
+    "zh-CN": "Proton 启动器异常退出（{code}）。请查看应用数据目录 compatdata 下该游戏的 launch.log。",
+    "ja-JP": "Proton ランチャーが異常終了しました（{code}）。アプリデータの compatdata 内の launch.log を確認してください。",
+    "en-US": "Proton launcher exited with an error ({code}). Check this game’s launch.log under compatdata in the app data directory."
+  },
+  "proton.windows_tool": {
+    "zh-CN": "此启动选项目前只支持 Windows。",
+    "ja-JP": "この起動オプションは現在 Windows のみ対応しています。",
+    "en-US": "This launch option currently requires Windows."
   }
-
 }

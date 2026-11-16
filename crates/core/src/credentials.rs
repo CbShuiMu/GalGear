@@ -128,7 +128,16 @@ pub fn clear(target: &str) -> Result<(), Message> {
 pub fn save(_: &str, _: &FanCredentials) -> Result<(), Message> {
     Err(Message::new("auth.platform"))
 }
-#[cfg(not(windows))]
+#[cfg(target_os = "linux")]
+pub fn load(_: &str) -> Result<FanCredentials, Message> {
+    // Linux 首版仅支持匿名数据源，没有凭据存储实现，也不会读取或覆盖 Windows 凭据。
+    // 保存和删除继续明确返回不支持，不能向用户报告授权已保存。
+    Ok(FanCredentials {
+        mode: "csrf".into(),
+        ..Default::default()
+    })
+}
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn load(_: &str) -> Result<FanCredentials, Message> {
     Err(Message::new("auth.platform"))
 }

@@ -1,10 +1,14 @@
 //! 全局截图快捷键及保存编排；工作线程拥有热键、剪贴板窗口和采集资源。
-use crate::state::{AppState, find_game, snapshot};
+#[cfg(windows)]
+use crate::state::snapshot;
+use crate::state::{AppState, find_game};
 use base64::Engine;
 use galgear_core::{Settings, screenshots};
 use galgear_i18n::Message;
 use std::{path::Path, sync::mpsc};
-use tauri::{Emitter, Manager};
+#[cfg(windows)]
+use tauri::Emitter;
+use tauri::Manager;
 
 #[cfg(windows)]
 mod windows;
@@ -324,7 +328,12 @@ fn worker(app: tauri::AppHandle, receiver: mpsc::Receiver<Command>) {
     while let Ok(command) = receiver.recv() {
         match command {
             Command::Stop => break,
-            Command::Configure { save, reply, .. } => {
+            Command::Configure {
+                hotkey,
+                save,
+                reply,
+            } => {
+                let _ = hotkey; // Linux 暂不注册 Windows 全局热键。
                 let _ = reply.send(save(&app.state::<AppState>()));
             }
         }

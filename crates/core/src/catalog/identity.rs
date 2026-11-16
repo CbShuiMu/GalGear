@@ -8,6 +8,9 @@ use std::{collections::BTreeMap, fs, path::Path};
 fn path_key(path: &str) -> String {
     let path = Path::new(path);
     let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_owned());
+    #[cfg(not(windows))]
+    return display_path(&canonical);
+    #[cfg(windows)]
     display_path(&canonical)
         .replace('\\', "/")
         .trim_end_matches('/')
@@ -81,7 +84,9 @@ pub fn empty_scan_duplicates(games: &[Game], settings: &Settings) -> Vec<String>
                 && game.id
                     == format!(
                         "{:x}",
-                        Sha256::digest(display_path(&identity).to_lowercase().as_bytes())
+                        Sha256::digest(
+                            crate::config::path_key(&display_path(&identity)).as_bytes()
+                        )
                     )
                 && !game.scan_stamp.is_empty()
                 && settings.game_edits.get(&game.id) == Some(&untouched)

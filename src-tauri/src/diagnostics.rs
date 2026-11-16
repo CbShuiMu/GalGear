@@ -16,11 +16,13 @@ use chrono::Local;
 use log::{Level, LevelFilter, Log, Metadata, Record};
 use serde::Deserialize;
 use serde_json::{Value, json};
+#[cfg(any(windows, test))]
+use std::path::PathBuf;
 use std::{
     backtrace::Backtrace,
     fs::{File, OpenOptions},
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::Path,
     sync::{
         Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
@@ -34,6 +36,7 @@ static LOGGER: OnceLock<SessionLog> = OnceLock::new();
 
 struct SessionLog {
     file: Mutex<File>,
+    #[cfg(any(windows, test))]
     path: PathBuf,
     started: Instant,
     privacy: privacy::Redactor,
@@ -56,6 +59,7 @@ impl SessionLog {
                 Ok(file) => {
                     return Ok(Self {
                         file: Mutex::new(file),
+                        #[cfg(any(windows, test))]
                         path,
                         started: Instant::now(),
                         privacy: privacy::Redactor::new()?,
@@ -158,8 +162,20 @@ fn initialize_at(directory: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// 在桌面运行时启动前创建安装目录 logs。失败时明确通知，不静默改写到其他目录。
+/// 启动前初始化日志。Linux 安装目录可能只读，因此使用 XDG_STATE_HOME。
 pub(crate) fn initialize() {
+    #[cfg(target_os = "linux")]
+    let result = (|| {
+        let directory = std::env::var_os("XDG_STATE_HOME")
+            .map(std::path::PathBuf::from)
+            .filter(|p| p.is_absolute())
+            .or_else(|| {
+                std::env::var_os("HOME").map(|p| std::path::PathBuf::from(p).join(".local/state"))
+            })
+            .ok_or_else(|| io::Error::other("Missing XDG_STATE_HOME and HOME"))?;
+        initialize_at(&directory.join("galgear/logs"))
+    })();
+    #[cfg(not(target_os = "linux"))]
     let result = std::env::current_exe().and_then(|exe| {
         let directory = exe
             .parent()

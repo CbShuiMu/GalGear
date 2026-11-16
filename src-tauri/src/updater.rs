@@ -12,8 +12,12 @@ pub(crate) struct Updates { pub active: AtomicBool, checked: Mutex<Option<Releas
 #[tauri::command]
 pub(crate) async fn check_update(state: State<'_, AppState>) -> Result<Release, Message> {
     let page = snapshot(&state)?.release_page;
-    let release = tauri::async_runtime::spawn_blocking(move || updates::check(&page, env!("CARGO_PKG_VERSION")))
+    let mut release = tauri::async_runtime::spawn_blocking(move || updates::check(&page, env!("CARGO_PKG_VERSION")))
         .await.map_err(|e| Message::detail("update.failed", e))??;
+    if !cfg!(windows) {
+        // 当前发布资产由 Windows 更新器验证，Linux 只展示发行说明和外部下载链接。
+        release.asset = None;
+    }
     *state.updates.checked.lock().map_err(|_| Message::new("error.operation"))? = Some(release.clone());
     Ok(release)
 }
@@ -22,9 +26,24 @@ pub(crate) async fn check_update(state: State<'_, AppState>) -> Result<Release, 
 struct Handoff { parent: u32, executable: PathBuf, release: Release, language: Language }
 
 #[tauri::command]
-pub(crate) async fn install_update(app: tauri::AppHandle, version: String, state: State<'_, AppState>) -> Result<(), Message> {
-    let release = state.updates.checked.lock().map_err(|_| Message::new("error.operation"))?
-        .as_ref().filter(|release| release.version == version && release.available && release.asset.is_some()).cloned()
+pub(crate) async fn install_update(
+    app: tauri::AppHandle,
+    version: String,
+    state: State<'_, AppState>,
+) -> Result<(), Message> {
+    if !cfg!(windows) {
+        return Err(Message::new("update.unavailable"));
+    }
+    let release = state
+        .updates
+        .checked
+        .lock()
+        .map_err(|_| Message::new("error.operation"))?
+        .as_ref()
+        .filter(|release| {
+            release.version == version && release.available && release.asset.is_some()
+        })
+        .cloned()
         .ok_or_else(|| Message::new("update.unavailable"))?;
     if state.updates.active.swap(true, Ordering::SeqCst) { return Err(Message::new("update.busy")); }
     let result = async {
@@ -59,8 +78,14 @@ pub(crate) async fn install_update(app: tauri::AppHandle, version: String, state
 }
 
 fn wait_parent(parent: u32) -> Result<(), Message> {
-    #[cfg(windows)] unsafe {
-        use windows_sys::Win32::{Foundation::CloseHandle, System::Threading::{OpenProcess, WaitForSingleObject, PROCESS_SYNCHRONIZE}};
+    #[cfg(not(windows))]
+    let _ = parent;
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::{
+            Foundation::CloseHandle,
+            System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject},
+        };
         let handle = OpenProcess(PROCESS_SYNCHRONIZE, 0, parent);
         if !handle.is_null() {
             let result = WaitForSingleObject(handle, 30000);
@@ -158,6 +183,8 @@ fn helper_builder(
         let window = builder.data_directory(profile).build()?;
         #[cfg(windows)]
         crate::diagnostics::observe_webview(&window, || {});
+        #[cfg(not(windows))]
+        let _ = window;
         let handle = app.handle().clone();
         std::thread::Builder::new()
             .name("updater-job".into())

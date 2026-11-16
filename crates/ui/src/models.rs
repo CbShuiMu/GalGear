@@ -65,6 +65,8 @@ pub(crate) struct Collection {
 
 #[derive(Clone, Default, Deserialize)]
 pub(crate) struct Settings {
+    #[serde(default)]
+    pub(crate) platform: String,
     pub(crate) library_folders: Vec<String>,
     #[serde(default)]
     pub(crate) collections: Vec<Collection>,
@@ -265,6 +267,7 @@ pub(crate) struct GameEdit {
     pub(crate) arguments: Vec<String>,
     pub(crate) working_directory: Option<String>,
     pub(crate) launcher: Option<String>,
+    pub(crate) proton_path: Option<String>,
     pub(crate) save_files: Vec<String>,
     pub(crate) save_path: Option<String>,
     pub(crate) save_path_auto: bool,
@@ -297,6 +300,7 @@ impl Default for GameEdit {
             arguments: Vec::new(),
             working_directory: None,
             launcher: None,
+            proton_path: None,
             save_files: Vec::new(),
             save_path: None,
             save_path_auto: false,

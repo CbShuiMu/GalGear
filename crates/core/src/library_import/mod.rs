@@ -196,6 +196,9 @@ fn timestamp(value: &str) -> Option<u64> {
     u64::try_from(local.assume_offset(offset).unix_timestamp()).ok()
 }
 fn path_key(path: &str) -> String {
+    #[cfg(not(windows))]
+    return path.trim_end_matches('/').to_owned();
+    #[cfg(windows)]
     path.replace('/', "\\")
         .trim_end_matches('\\')
         .to_lowercase()
@@ -258,9 +261,7 @@ pub fn read(
             game.id = format!(
                 "{:x}",
                 Sha256::digest(
-                    crate::config::display_path(&identity)
-                        .to_lowercase()
-                        .as_bytes()
+                    crate::config::path_key(&crate::config::display_path(&identity)).as_bytes()
                 )
             );
             game.folder = crate::config::display_path(folder);

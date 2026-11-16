@@ -516,7 +516,14 @@ fn configuration(html: &mut String, app: &App, game: &Game, edit: &GameEdit) {
             ("draft-arguments", "edit.args", true),
             ("draft-locale", "tools.profile", false),
         ] {
+            if field == "draft-locale" && app.settings.platform == "linux" {
+                continue;
+            }
             form_field(html, app, field, label, multiline);
+        }
+        if app.settings.platform == "linux" {
+            form_field(html, app, "draft-proton", "proton.path", false);
+            write!(html, "<p>{}</p>", t(app, "proton.help")).unwrap();
         }
         html.push_str("</fieldset></section>");
         return;

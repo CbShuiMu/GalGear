@@ -74,6 +74,8 @@ pub struct Draft {
     pub arguments: Vec<String>,
     pub working_directory: Option<String>,
     pub launcher: Option<String>,
+    #[serde(default)]
+    pub proton_path: Option<String>,
     pub locale_profile: String,
     pub metadata: BTreeMap<String, String>,
     #[serde(default)]
@@ -114,6 +116,7 @@ pub fn prepare(
     edit.arguments = draft.arguments;
     edit.working_directory = draft.working_directory;
     edit.launcher = draft.launcher;
+    edit.proton_path = draft.proton_path;
     edit.locale_profile = draft.locale_profile;
     let empty = Metadata::default();
     let current = game.metadata.as_ref().unwrap_or(&empty);
@@ -305,6 +308,7 @@ mod tests {
             arguments: vec![],
             working_directory: None,
             launcher: None,
+            proton_path: None,
             locale_profile: "ja-JP".into(),
             metadata: BTreeMap::new(),
             metadata_resets: Vec::new(),

@@ -220,7 +220,7 @@ fn visit(
         let identity = fs::canonicalize(folder).unwrap_or_else(|_| folder.to_owned());
         let id = format!(
             "{:x}",
-            Sha256::digest(display_path(&identity).to_lowercase().as_bytes())
+            Sha256::digest(crate::config::path_key(&display_path(&identity)).as_bytes())
         );
         let detected_executable = executable.as_deref().map(display_path);
         let existing = cache

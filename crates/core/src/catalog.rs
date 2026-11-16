@@ -25,7 +25,7 @@ pub fn manual_game(path: &Path, title: String) -> Result<Game, Message> {
     Ok(Game {
         id: format!(
             "{:x}",
-            Sha256::digest(display_path(path).to_lowercase().as_bytes())
+            Sha256::digest(crate::config::path_key(&display_path(path)).as_bytes())
         ),
         title,
         folder: display_path(folder),
@@ -107,14 +107,15 @@ pub fn is_excluded(game: &Game, settings: &Settings) -> bool {
         || settings
             .excluded_paths
             .iter()
-            .any(|path| path.eq_ignore_ascii_case(&game.folder))
+            .any(|path| crate::config::path_key(path) == crate::config::path_key(&game.folder))
         || settings.excluded_entries.values().any(|excluded| {
             settings.excluded_games.contains(&excluded.id)
-                && (excluded.folder.eq_ignore_ascii_case(&game.folder)
+                && (crate::config::path_key(&excluded.folder)
+                    == crate::config::path_key(&game.folder)
                     || excluded.executable.as_ref().is_some_and(|path| {
-                        game.executable
-                            .as_ref()
-                            .is_some_and(|other| path.eq_ignore_ascii_case(other))
+                        game.executable.as_ref().is_some_and(|other| {
+                            crate::config::path_key(path) == crate::config::path_key(other)
+                        })
                     }))
         })
 }
@@ -131,13 +132,13 @@ pub fn add_library_folders(settings: &mut Settings, paths: Vec<String>) -> usize
     let mut known: std::collections::HashSet<_> = settings
         .library_folders
         .iter()
-        .map(|path| path.to_ascii_lowercase())
+        .map(|path| crate::config::path_key(path))
         .collect();
     let mut roots = std::collections::HashSet::new();
     let previous_len = settings.library_folders.len();
     for path in paths {
-        if known.insert(path.to_ascii_lowercase()) {
-            roots.insert(std::path::PathBuf::from(path.to_lowercase()));
+        if known.insert(crate::config::path_key(&path)) {
+            roots.insert(std::path::PathBuf::from(crate::config::path_key(&path)));
             settings.library_folders.push(path);
         }
     }
@@ -147,7 +148,7 @@ pub fn add_library_folders(settings: &mut Settings, paths: Vec<String>) -> usize
     }
     // 沿路径祖先查找整批新增根目录，避免每个库都遍历所有排除项。
     let belongs_to_added = |folder: &str| {
-        Path::new(&folder.to_lowercase())
+        Path::new(&crate::config::path_key(folder))
             .ancestors()
             .any(|ancestor| roots.contains(ancestor))
     };
@@ -179,7 +180,7 @@ pub fn detach_library_games(
 ) -> BTreeSet<PathBuf> {
     let path_key = |path: &str| {
         #[cfg(windows)]
-        let path = path.to_lowercase();
+        let path = crate::config::path_key(path);
         PathBuf::from(path)
     };
     let removed = path_key(removed);
@@ -238,7 +239,7 @@ pub fn remove_entry(
     if !settings
         .excluded_paths
         .iter()
-        .any(|path| path.eq_ignore_ascii_case(&folder))
+        .any(|path| crate::config::path_key(path) == crate::config::path_key(&folder))
     {
         settings.excluded_paths.push(folder);
     }
@@ -251,7 +252,7 @@ pub fn allow_import(settings: &mut Settings, game: &Game) {
     settings.excluded_games.retain(|id| id != &game.id);
     settings
         .excluded_paths
-        .retain(|path| !path.eq_ignore_ascii_case(&game.folder));
+        .retain(|path| crate::config::path_key(path) != crate::config::path_key(&game.folder));
 }
 
 /// Forget application records without touching game files or save backups.
@@ -305,7 +306,7 @@ pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> Sc
     let libraries: HashSet<_> = settings
         .library_folders
         .iter()
-        .map(|path| path.to_ascii_lowercase())
+        .map(|path| crate::config::path_key(path))
         .collect();
     for game in old
         .games
@@ -314,7 +315,7 @@ pub fn merge(mut fresh: ScanResult, old: &ScanResult, settings: &Settings) -> Sc
         .chain(settings.excluded_entries.values())
     {
         if !positions.contains_key(&game.id)
-            && (libraries.contains(&game.library.to_ascii_lowercase())
+            && (libraries.contains(&crate::config::path_key(&game.library))
                 || manual_ids.contains(game.id.as_str())
                 || settings.excluded_entries.contains_key(&game.id))
         {
@@ -451,9 +452,15 @@ mod tests {
             settings.excluded_games.push(game.id.clone());
             settings.excluded_entries.insert(game.id.clone(), game);
         }
+        let existing = if cfg!(windows) {
+            "c:/existing"
+        } else {
+            "C:/Existing"
+        };
+        let duplicate = if cfg!(windows) { "c:/new" } else { "C:/New" };
         let added = add_library_folders(
             &mut settings,
-            ["c:/existing", "C:/New/Child", "C:/New", "c:/new"]
+            [existing, "C:/New/Child", "C:/New", duplicate]
                 .map(String::from)
                 .to_vec(),
         );
@@ -606,7 +613,14 @@ mod tests {
         remove_entry(&mut settings, &mut list, &id).unwrap();
         let previous = settings.clone();
 
-        add_library_folder(&mut settings, root.to_uppercase());
+        add_library_folder(
+            &mut settings,
+            if cfg!(windows) {
+                root.to_uppercase()
+            } else {
+                root
+            },
+        );
 
         assert_eq!(settings, previous);
     }

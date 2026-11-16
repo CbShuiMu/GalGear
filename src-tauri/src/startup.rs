@@ -247,14 +247,18 @@ fn start_services(app: &tauri::AppHandle) -> Result<(), Message> {
 
 #[cfg(test)]
 mod tests {
-    use super::{start_loading, wait_value};
+    #[cfg(windows)]
+    use super::start_loading;
+    use super::wait_value;
     use galgear_core::{GameEdit, ScanResult, Settings, catalog, config::ConfigStore};
     use galgear_i18n::Message;
+    use std::fs;
+    #[cfg(windows)]
     use std::{
-        fs,
         sync::{Arc, mpsc},
         time::Duration,
     };
+    #[cfg(windows)]
     use tauri::{Listener, Manager};
     use tokio::sync::watch;
 
