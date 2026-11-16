@@ -129,7 +129,7 @@ An optional **AI story recap** is available. Configure an API token and model fo
 
 An **AI route map** opens a generated map of branches and endings in your default browser. The interactive map works offline and lets you expand branches, zoom, and pan. Route maps always use DeepSeek, which must be configured separately. The feature analyzes the full dialogue and may reveal later story events and endings.
 
-**CG and audio extraction** requires a configured AI provider and the resource extraction Skill. Hover over or focus the **Extract resources** icon to the right of **Edit** in game details, then choose **Extract CGs** or **Extract audio**. AI tests a few samples before handing off to a local batch process. Story analysis is optional. Results go under CGs or audios in the game folder, and coverage depends on the resource format. [Extraction guide (Chinese)](docs/ai-summary.md#cg-与音频提取).
+**CG and audio extraction** requires a configured AI provider and the resource extraction Skill. Hover over or focus the **Extract resources** icon to the right of **Edit** in game details, then choose **Extract CGs** or **Extract audio**. AI tests a few samples before handing off to a local batch process. Story analysis is optional. Results go under CGs or audios in the game folder, and coverage depends on the resource format. GalGear removes temporary files after it saves the results. [Extraction guide (Chinese)](docs/ai-summary.md#cg-与音频提取).
 
 During analysis, the notification in the bottom-right corner shows the current stage and remains visible as you switch pages. On Windows, the analysis host and its parsers run in a system sandbox and can read only the game and save files authorized for the current task.
 
