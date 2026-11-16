@@ -24,6 +24,7 @@ mod game_actions;
 mod library;
 mod library_import;
 mod local_patches;
+mod media_extract;
 mod models;
 mod patches;
 mod playtime;

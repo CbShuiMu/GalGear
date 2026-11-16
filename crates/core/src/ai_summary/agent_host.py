@@ -23,6 +23,7 @@ import sys
 import tempfile
 import time
 import types
+import uuid
 import urllib.error
 import urllib.request
 import zlib
@@ -604,6 +605,25 @@ def resume_marker(row):
     return (isinstance(records, list) and any(isinstance(record, dict)
         and record.get('kind') == 'kag_label_resume' and record.get('role') == 'resume_node'
         for record in records))
+
+
+def create_archive_stage(parent):
+    # Python 3.13 的 tempfile 使用 0700 在 Windows 重建 DACL，丢失本轮 LPAC 的继承 ACE。
+    # 随机目录使用普通 mkdir 继承已经受限的 work ACL；不扩大任何外部目录权限。
+    path = pathlib.Path(parent) / ('.extract-' + uuid.uuid4().hex)
+    path.mkdir()
+    return path.resolve()
+
+
+@contextlib.contextmanager
+def archive_stage(parent):
+    path = create_archive_stage(parent)
+    try:
+        yield path
+    finally:
+        if path.parent != pathlib.Path(parent).resolve() or path.is_symlink() or not path.name.startswith('.extract-'):
+            raise ValueError('Unsafe archive staging cleanup path')
+        shutil.rmtree(path)
 
 
 class Agent:
@@ -1325,7 +1345,7 @@ class Agent:
             if backend != 'garbro-mod' and archive.stat().st_size > ARCHIVE_TOOLS['MAX_SPECIALIZED_ARCHIVE']:
                 raise ValueError('This CLI extracts the entire archive before filtering; use bounded listing or a smaller source archive')
             target.parent.mkdir(parents=True, exist_ok=True)
-            with tempfile.TemporaryDirectory(prefix='.extract-', dir=target.parent) as stage:
+            with archive_stage(target.parent) as stage:
                 staging = pathlib.Path(stage).resolve()
                 if staging.parent != target.parent or not staging.is_relative_to(self.work):
                     raise ValueError('Unsafe archive staging path')
@@ -3371,7 +3391,7 @@ class Agent:
             if args['command'] == 'x':
                 if not pattern or len(pattern) > 512:
                     raise ValueError('Supply a script-specific extraction filter')
-                staging = pathlib.Path(tempfile.mkdtemp(prefix='.extract-', dir=target.parent)).resolve()
+                staging = create_archive_stage(target.parent)
                 if not staging.is_relative_to(self.work) or staging.parent != target.parent.resolve():
                     raise ValueError('Extraction staging must stay inside the work unpacked directory')
                 command.extend(['-y', '-na', '-ni', '-f', effective_filter, '-o', str(staging)])
@@ -4098,6 +4118,10 @@ if __name__ == '__main__':
             config = probe_config(*sys.argv[2:6]) if len(sys.argv) > 1 and sys.argv[1] == '--probe' else json.load(sys.stdin)
             if config.get('mode') == 'skill_analysis':
                 result = runpy.run_path(str(pathlib.Path(__file__).with_name('analysis_agent.py')))['run'](config, globals())
+            elif config.get('mode') == 'media_extract':
+                result = runpy.run_path(str(pathlib.Path(__file__).with_name('media_agent.py')))['run'](config, globals())
+            elif config.get('mode') == 'media_batch':
+                result = runpy.run_path(str(pathlib.Path(__file__).with_name('media_batch.py')))['run'](config, globals())
             else:
                 result = Agent(config).run()
         print(json.dumps(result, ensure_ascii=False))

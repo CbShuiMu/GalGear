@@ -204,8 +204,8 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             "summary-run",
             &game.id,
             t(app, "summary.title"),
-            "sparkle",
-            "secondary ai-summary-button",
+            "book_5",
+            "secondary icon-only ai-summary-button",
             app.busy()
                 || !app.ai_available
                 || !game.available
@@ -222,14 +222,15 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
                     "route.title"
                 },
             ),
-            "open_in_new",
-            "secondary ai-route-map-button",
+            "graph_1",
+            "secondary icon-only ai-route-map-button",
             app.busy()
                 || !app.ai_available
                 || !game.available
                 || crate::ai_summary::busy(app, &game.id),
         ));
     }
+    crate::media_extract::shortcuts(html, app, game);
     html.push_str(&button(
         if app.detail.editing && !app.detail.editing_configuration {
             "detail-save"

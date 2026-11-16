@@ -10,6 +10,7 @@ pub(crate) enum Pending {
     Summary(String),
     RouteMapPrepare(String),
     RouteMap(String),
+    MediaExtract(String, crate::media_extract::Kind),
     SetupSearch(String),
     SetupExecutable(String),
     SetupSave(String),
@@ -104,6 +105,7 @@ impl Pending {
                 | Pending::Summary(_)
                 | Pending::RouteMapPrepare(_)
                 | Pending::RouteMap(_)
+                | Pending::MediaExtract(..)
                 | Pending::Scan
                 | Pending::BackgroundScan
                 | Pending::ObserveSaves(_)

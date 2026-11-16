@@ -189,6 +189,7 @@ pub(crate) fn run() {
             ai_summary::summarize_game,
             ai_summary::prepare_ai_route_map,
             ai_summary::open_ai_route_map,
+            ai_summary::extract_game_media,
             game_setup::choose_setup_executable,
             game_setup::complete_game_setup,
             game_setup::complete_game_setup_batch,

@@ -1,5 +1,41 @@
 # AI前情提要
 
+## CG 与音频提取
+
+启用游戏的 AI 功能后，详情页右上角的前情提要与路线图使用 `book_5`、`graph_1` 图标。
+提取入口 `upload` 始终显示在右上角“编辑”左侧（路线图显示时位于其右侧），无需开启或完成
+游戏 AI 前置分析。入口沿用游戏配置的悬停展开方式，向下展开 `image_search`（CG）与
+`mic`（音频）按钮；键盘与手柄聚焦也可进入子按钮，离开后收起。点击提取时先检查当前
+AI 服务商、模型与已保存的 Token；配置缺失或格式无效时提示错误，不创建提取工作目录或启动 AI。
+运行时的鉴权或模型服务错误同样会中止试提取，不会进入后台批量阶段。
+
+`extract_game_media` 与剧情任务共用每游戏互斥、Skill 使用租约及后台线程。core 的
+`ai_summary::media` 分别启动两个受限进程：`media_agent.py` 读取当前内置 GalExtract，
+针对每个待批量处理的资源集合试提取最多三个实际样本；CG 必须实际解码出 PNG，音频检查
+真实容器头与提取字节（不冒充听音或完整播放验证）。成功样本生成固定提取参数与来源记录。
+模型只能以这些成功记录调用 `start_batch`，不能提交任意未验证命令。提交后 AI 进程退出。
+
+随后 `media_batch.py` 在独立进程中读取冻结的计划，重新核对资源清单和样本字节，并批量提取。
+批量进程不接收模型、服务商或 Token，不再请求 AI，也不授予网络能力。进度沿用
+`ai-summary-progress` 的请求编号、游戏 ID 与递增序号；可选 `batch` 字段包含
+`completed/total/files`，分别表示已完成提取批次、总批次、已写入文件数。右下角通知持续显示
+检查、识别、试提取、后台批量、校验保存五阶段，切换页面不停止任务。应用退出沿用 Job Object
+终止工作进程与子进程。规划最长 40 分钟，批量最长 6 小时，单个工具另有限时。
+
+完成后在宿主退出、撤销写权限后核对清单、大小和 SHA-256，原子重命名至游戏目录下
+`CGs/media-<随机编号>/` 或 `audios/media-<随机编号>/`。旧文件与旧批次不覆盖；路径拒绝
+符号链接、Windows 重解析点及越界。CG 保留原生资源、PNG 与各帧，音频保留原编码。
+产物包含 `manifest.json`，记录来源、范围与转换失败；原始游戏、存档和备份不修改。
+空结果不作为成功；格式不支持、转换失败和范围不确定应显示限制或失败。
+目前批量计划支持内置归档工具及松散文件，未通过样本验证的加密/自定义格式不能进入批量。
+
+验证：`python -m unittest discover -s crates/core/src/ai_summary -p test_media_extract.py`，
+`cargo test -p galgear-core --locked --lib ai_summary::media`，前端构建后运行
+`node --test scripts/test-ai-summary-progress.mjs scripts/test-detail-tools.mjs scripts/test-gamepad.mjs`。
+真实游戏验证为显式忽略的 `real_game_sample_and_background_batch`，需指定
+`GALGEAR_MEDIA_TEST_CONFIG/ID/KIND/SCOPE`，只读原始资源，输出独立 `media-validation-*` 批次；
+默认测试不会调用真实账号或付费模型。修改宿主模块后须重新运行 `scripts/build-ai-agent.ps1`。
+
 ## 默认 Skill 分析流程
 
 新开启的 AI 分析使用 `skill_analysis.rs` / `analysis_agent.py`。一次任务同时交付

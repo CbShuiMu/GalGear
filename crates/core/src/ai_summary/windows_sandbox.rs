@@ -60,7 +60,7 @@ impl Sandbox {
         ] {
             sandbox.capabilities.push(Sid::capability(capability)?);
         }
-        if !parse {
+        if !parse && config["mode"] != "media_batch" {
             let broker = network::Broker::new(&name)?;
             sandbox.network = Some(broker);
             sandbox

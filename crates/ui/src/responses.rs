@@ -71,7 +71,9 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
             paint(&app);
             return;
         }
-        if crate::ai_summary::resolve(&mut app, &kind, id, success, payload) {
+        if crate::ai_summary::resolve(&mut app, &kind, id, success, payload)
+            || crate::media_extract::resolve(&mut app, &kind, id, success, payload)
+        {
             paint(&app);
             return;
         }
@@ -146,6 +148,7 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                     | Pending::Summary(_)
                     | Pending::RouteMapPrepare(_)
                     | Pending::RouteMap(_)
+                    | Pending::MediaExtract(..)
                     | Pending::SetupSearch(_)
                     | Pending::LocalPatchList(_)
                     | Pending::LocalPatchApply(..)

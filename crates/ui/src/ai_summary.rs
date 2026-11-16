@@ -12,10 +12,13 @@ use std::{collections::BTreeMap, fmt::Write};
 
 pub(crate) mod progress;
 
-fn issue(app: &mut App, kind: Pending, command: &str, mut payload: serde_json::Value) {
+pub(crate) fn issue(app: &mut App, kind: Pending, command: &str, mut payload: serde_json::Value) {
     let request_id = app.requests.next_id();
     progress::begin(app, &kind, request_id);
-    if matches!(kind, Pending::SummarySetup(..) | Pending::Summary(_)) {
+    if matches!(
+        kind,
+        Pending::SummarySetup(..) | Pending::Summary(_) | Pending::MediaExtract(..)
+    ) {
         payload["requestId"] = request_id.into();
     }
     issue_request(app, kind, command, payload);
@@ -79,7 +82,7 @@ struct ResultData {
 pub(crate) fn busy(app: &App, id: &str) -> bool {
     app.requests
         .values()
-        .any(|p| matches!(p, Pending::SummarySetup(game, _) | Pending::Summary(game) | Pending::RouteMapPrepare(game) | Pending::RouteMap(game) if game == id))
+        .any(|p| matches!(p, Pending::SummarySetup(game, _) | Pending::Summary(game) | Pending::RouteMapPrepare(game) | Pending::RouteMap(game) | Pending::MediaExtract(game, _) if game == id))
 }
 pub(crate) fn route_busy(app: &App, id: &str) -> bool {
     app.requests.values().any(

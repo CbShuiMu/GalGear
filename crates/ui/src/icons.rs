@@ -2,6 +2,21 @@
 
 pub(super) fn google(name: &str) -> Option<&'static str> {
     Some(match name {
+        "book_5" => include_str!(
+            "../../../src-tauri/icons/book_5_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "graph_1" => include_str!(
+            "../../../src-tauri/icons/graph_1_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "upload" => include_str!(
+            "../../../src-tauri/icons/upload_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "image_search" => include_str!(
+            "../../../src-tauri/icons/image_search_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
+        "mic" => {
+            include_str!("../../../src-tauri/icons/mic_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg")
+        }
         "home" => {
             include_str!("../../../src-tauri/icons/home_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg")
         }

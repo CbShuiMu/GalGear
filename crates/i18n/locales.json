@@ -5167,6 +5167,81 @@
     "ja-JP": "次へ",
     "en-US": "Continue"
   },
+  "media.sampling": {
+    "zh-CN": "AI 正在试提取样本…",
+    "ja-JP": "AI がサンプル抽出を検証中…",
+    "en-US": "AI is testing sample extraction…"
+  },
+  "media.batch_progress": {
+    "zh-CN": " · 批次 {completed}/{total}，已提取 {files} 个文件",
+    "ja-JP": " · バッチ {completed}/{total}、{files} ファイル抽出済み",
+    "en-US": " · Batch {completed}/{total}, {files} files extracted"
+  },
+  "media.title": {
+    "zh-CN": "CG 提取",
+    "ja-JP": "CG 抽出",
+    "en-US": "CG extraction"
+  },
+  "media.cg": {
+    "zh-CN": "提取 CG",
+    "ja-JP": "CG を抽出",
+    "en-US": "Extract CGs"
+  },
+  "media.audio": {
+    "zh-CN": "提取音频",
+    "ja-JP": "音声を抽出",
+    "en-US": "Extract audio"
+  },
+  "media.extracting_cg": {
+    "zh-CN": "正在后台批量提取 CG…",
+    "ja-JP": "バックグラウンドで CG を一括抽出中…",
+    "en-US": "Batch extracting CGs in the background…"
+  },
+  "media.extracting_audio": {
+    "zh-CN": "正在后台批量提取音频…",
+    "ja-JP": "バックグラウンドで音声を一括抽出中…",
+    "en-US": "Batch extracting audio in the background…"
+  },
+  "media.identifying": {
+    "zh-CN": "正在识别媒体资源…",
+    "ja-JP": "メディアを識別中…",
+    "en-US": "Identifying media resources…"
+  },
+  "media.publishing": {
+    "zh-CN": "正在校验并保存提取结果…",
+    "ja-JP": "抽出結果を検証・保存中…",
+    "en-US": "Validating and saving extracted files…"
+  },
+  "media.completed": {
+    "zh-CN": "已提取 {count} 个文件，保存至 {path}",
+    "ja-JP": "{count} ファイルを {path} に保存しました",
+    "en-US": "Extracted {count} files to {path}"
+  },
+  "media.partial": {
+    "zh-CN": "已保存 {count} 个文件至 {path}；存在未完成项：{detail}",
+    "ja-JP": "{count} ファイルを {path} に保存しました。未完了項目：{detail}",
+    "en-US": "Saved {count} files to {path}; incomplete items: {detail}"
+  },
+  "media.failed": {
+    "zh-CN": "媒体提取失败：{detail}",
+    "ja-JP": "メディア抽出に失敗しました：{detail}",
+    "en-US": "Media extraction failed: {detail}"
+  },
+  "media.invalid_output": {
+    "zh-CN": "提取结果无效或不完整，未发布文件。",
+    "ja-JP": "抽出結果が無効または不完全なため、公開しませんでした。",
+    "en-US": "Extraction output is invalid or incomplete; no files were published."
+  },
+  "media.unsafe_path": {
+    "zh-CN": "媒体输出路径包含链接、重解析点或越界路径，无法保存。",
+    "ja-JP": "出力先にリンク、再解析ポイント、または範囲外のパスが含まれています。",
+    "en-US": "The media output path contains a link, reparse point, or path outside the allowed directory."
+  },
+  "media.io": {
+    "zh-CN": "媒体文件操作失败：{detail}",
+    "ja-JP": "メディアファイルの操作に失敗しました：{detail}",
+    "en-US": "Media file operation failed: {detail}"
+  },
   "route.html.inferred": {
     "zh-CN": "推断",
     "ja-JP": "推定",

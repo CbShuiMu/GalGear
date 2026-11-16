@@ -2,6 +2,7 @@
 mod agent;
 mod background_identity;
 mod context;
+pub mod media;
 #[cfg(windows)]
 mod process;
 mod progress;

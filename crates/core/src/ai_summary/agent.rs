@@ -103,6 +103,8 @@ fn invoke(
     let start = Instant::now();
     let limit = Duration::from_secs(if parse {
         50
+    } else if payload["mode"] == "media_batch" {
+        21600
     } else {
         PREPARATION_TIMEOUT_SECONDS
     });

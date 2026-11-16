@@ -134,6 +134,30 @@ pub async fn prepare_ai_route_map(id: String, state: State<'_, AppState>) -> Res
 }
 
 #[tauri::command]
+pub async fn extract_game_media(
+    id: String,
+    kind: ai_summary::media::Kind,
+    request_id: u32,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<ai_summary::media::Extraction, Message> {
+    let game = find_game(&state, &id)?;
+    let settings = snapshot(&state)?;
+    let config = state.store.path.clone();
+    let (home, resources) = runtime_home(&state)?;
+    let guard = state.summaries.begin(&id)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
+        let _resources = resources;
+        ai_summary::media::extract(&game, &settings, &config, &home, kind, &|progress| {
+            report(&app, request_id, &game.id, progress)
+        })
+    })
+    .await
+    .map_err(|_| Message::new("error.operation"))?
+}
+
+#[tauri::command]
 pub async fn open_ai_route_map(id: String, state: State<'_, AppState>) -> Result<(), Message> {
     let path = generate_route_map(id, state).await?;
     tauri::async_runtime::spawn_blocking(move || crate::default_browser::open_route(&path))

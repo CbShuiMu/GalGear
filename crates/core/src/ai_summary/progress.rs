@@ -8,6 +8,8 @@ use std::path::Path;
 pub enum Stage {
     Checking,
     Resources,
+    Sampling,
+    Extracting,
     Scripts,
     Save,
     Route,
@@ -37,6 +39,17 @@ pub struct Progress {
     pub stages: Vec<StageProgress>,
     #[serde(default)]
     pub current_stage: Option<Stage>,
+    /// 仅媒体批量脚本提供实际完成批次与文件数；模型规划不能填写此计数。
+    #[serde(default)]
+    pub batch: Option<BatchProgress>,
+}
+
+/// 后台脚本的真实进度，total 为已通过样本验证的提取批次数。
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct BatchProgress {
+    pub completed: u64,
+    pub total: u64,
+    pub files: u64,
 }
 
 pub(super) struct Reporter<'a> {
@@ -104,6 +117,9 @@ impl<'a> Reporter<'a> {
             return;
         }
         self.host_sequence = value.sequence;
+        self.snapshot.batch = value
+            .batch
+            .filter(|batch| batch.total > 0 && batch.completed <= batch.total);
         for item in value.stages {
             self.update(item.stage, item.status);
         }

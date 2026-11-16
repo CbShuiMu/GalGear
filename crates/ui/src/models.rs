@@ -22,6 +22,15 @@ pub(crate) struct AnalysisProgress {
     pub(crate) stages: Vec<AnalysisStage>,
     #[serde(default)]
     pub(crate) current_stage: Option<String>,
+    #[serde(default)]
+    pub(crate) batch: Option<MediaBatchProgress>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MediaBatchProgress {
+    pub(crate) completed: u64,
+    pub(crate) total: u64,
+    pub(crate) files: u64,
 }
 
 #[derive(Deserialize)]

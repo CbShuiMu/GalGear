@@ -235,6 +235,7 @@ pub fn dispatch(action: &str, value: &str) {
             || ai::dispatch(&mut app, action, value)
             || cloud::dispatch(&mut app, action, value)
             || crate::ai_summary::dispatch(&mut app, action, value)
+            || crate::media_extract::dispatch(&mut app, action)
             || crate::launcher_picker::dispatch(&mut app, action, value)
             || game_setup::dispatch(&mut app, action, value)
             || cover_picker::dispatch(&mut app, action, value)

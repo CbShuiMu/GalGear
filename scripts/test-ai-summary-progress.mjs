@@ -18,8 +18,8 @@ async function fixture() {
     schedule_toast_expiry(token) { timers.push(token); }, schedule_download_notice_expiry() {},
     request(id, command, payload) {
       const args = JSON.parse(payload);
-      if (['set_ai_summary','summarize_game','prepare_ai_route_map','open_ai_route_map'].includes(command)) {
-        if (['set_ai_summary','summarize_game'].includes(command)) assert.equal(args.requestId,id);
+      if (['set_ai_summary','summarize_game','prepare_ai_route_map','open_ai_route_map','extract_game_media'].includes(command)) {
+        if (['set_ai_summary','summarize_game','extract_game_media'].includes(command)) assert.equal(args.requestId,id);
         pending.push({id,command,args});
         return;
       }
@@ -58,6 +58,83 @@ async function fixture() {
     },
   };
 }
+
+test('media entry stays before edit without AI preparation, and after route when enabled', async () => {
+  const app = await fixture();
+  assert.match(app.html, /media-tools-anchor/);
+  assert.ok(app.html.indexOf('media-tools-anchor') < app.html.indexOf('data-action="detail-edit"'));
+  assert.doesNotMatch(app.html, /data-action="summary-run"|data-action="route-map-open"/);
+  await app.ready();
+  for (const action of ['summary-run','route-map-open','extract-cg','extract-audio']) {
+    const tag = [...app.html.matchAll(/<button\b[^>]*>/g)].map(match => match[0]).find(tag => tag.includes(`data-action="${action}"`));
+    assert.match(tag, /icon-only/);
+    assert.match(tag, /aria-label="[^"]+"/);
+    assert.match(tag, /title="[^"]+"/);
+  }
+  assert.ok(app.html.indexOf('data-action="summary-run"') < app.html.indexOf('data-action="route-map-open"'));
+  assert.ok(app.html.indexOf('data-action="route-map-open"') < app.html.indexOf('media-tools-anchor'));
+  assert.ok(app.html.indexOf('media-tools-anchor') < app.html.indexOf('data-action="detail-edit"'));
+});
+
+test('both media actions start without preparation and report missing AI configuration', async () => {
+  const app = await fixture();
+  for (const kind of ['cg','audio']) {
+    app.ui.dispatch(`extract-${kind}`,'');
+    const request = app.pending.at(-1);
+    assert.equal(request.command,'extract_game_media');
+    assert.equal(request.args.kind,kind);
+    assert.equal(app.settings.game_edits.fixture.ai_summary,false);
+    app.complete(request.id,false,{key:'summary.ai_missing',args:{}});
+    assert.equal(app.notice,false);
+    assert.match(app.html,/请先在设置→AI中保存Token并选择可用的对话模型/);
+  }
+  assert.ok(app.pending.every(request => request.command === 'extract_game_media'));
+});
+
+test('media extraction serializes per game, survives navigation and validates the final response', async () => {
+  const app = await fixture();
+  await app.ready();
+  for (const kind of ['cg','audio']) {
+    app.ui.dispatch(`extract-${kind}`,'');
+    const request = app.pending.at(-1), count = app.pending.length;
+    assert.equal(request.command,'extract_game_media');
+    assert.equal(request.args.kind,kind);
+    app.ui.dispatch('extract-cg','');
+    app.ui.dispatch('summary-run','');
+    assert.equal(app.pending.length,count);
+    app.progress(request.id,1,[{stage:'extracting',status:'running'}],'fixture','extracting');
+    assert.match(app.html,/4\/5 · 正在后台批量提取/);
+    app.ui.ai_summary_progress(JSON.stringify({request_id:request.id,game_id:'fixture',progress:{sequence:2,current_stage:'extracting',stages:[{stage:'extracting',status:'running'}],batch:{completed:1,total:3,files:42}}}));
+    assert.match(app.html,/批次 1\/3，已提取 42 个文件/);
+    const current = app.html;
+    app.progress(request.id,3,[{stage:'save',status:'running'}],'fixture','save');
+    assert.equal(app.html,current);
+    app.ui.dispatch('close-detail','');
+    assert.ok(app.notice);
+    app.complete(request.id,true,{game_id:'fixture',kind,output:`F:/Fixture/${kind === 'cg' ? 'CGs' : 'audios'}/media-1`,files:2,warnings:[]});
+    assert.equal(app.notice,false);
+    assert.match(app.html,/已提取 2 个文件/);
+    app.ui.dispatch('game-detail','fixture');
+    await tick();
+  }
+});
+
+test('media failure, malformed success and partial results never show full success', async () => {
+  const app = await fixture();
+  await app.ready();
+  for (const [success,payload,expected] of [
+    [false,{key:'media.io',args:{detail:'fixture disk full'}},/fixture disk full/],
+    [true,{game_id:'fixture',kind:'cg',output:'F:/Fixture/CGs',files:0,warnings:[]},/媒体提取失败/],
+    [true,{game_id:'other',kind:'cg',output:'F:/Fixture/CGs',files:1,warnings:[]},/媒体提取失败/],
+    [true,{game_id:'fixture',kind:'cg',output:'F:/Fixture/CGs',files:1,warnings:['fixture unsupported']},/存在未完成项.*fixture unsupported/],
+  ]) {
+    app.ui.dispatch('extract-cg','');
+    app.complete(app.pending.at(-1).id,success,payload);
+    assert.equal(app.notice,false);
+    assert.match(app.html,expected);
+    assert.doesNotMatch(app.html,/已提取 \d+ 个文件/);
+  }
+});
 
 test('progress stays in the bottom-right stack, survives navigation and ignores stale events', async () => {
   const app = await fixture(), id = app.start();
