@@ -113,6 +113,51 @@ class MediaTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'credentials'):
             batch['run'](self.config,API)
 
+    def test_archive_sample_and_batch_share_case_insensitive_mod_selection(self):
+        archive = self.game/'voice.arc'
+        archive.write_bytes(b'archive fixture')
+        tool = self.skill/'tools/GARbro-cli'
+        tool.mkdir(parents=True)
+        (tool/'GARbro.Console.exe').touch()
+        (tool/'provenance.json').write_text('{"distribution":"GARbro-Mod-1.0.2.2"}')
+        guide = self.skill/'commands/garbro.md'
+        guide.parent.mkdir()
+        guide.write_text('Fixture CLI documentation')
+        self.agent.dispatch('read_text', dict(root='skill', path='commands/garbro.md'))
+        selected = ['a.ogg', 'b.OGG', 'c.Ogg', 'd.ogg']
+        listing = ''.join(f' 36 [{i:08x}] {name}\n' for i, name in
+                          enumerate([*selected, 'script.txt'])).encode()
+        extraction_calls = []
+
+        def run(argv, **kwargs):
+            if len(argv) == 2:
+                return subprocess.CompletedProcess(argv, 0, listing, b'')
+            extraction_calls.append(argv[2:])
+            for name in argv[2:]:
+                (kwargs['cwd']/name).write_bytes(b'OggS' + bytes(32))
+            return subprocess.CompletedProcess(argv, 0, b'', b'')
+
+        batch = runpy.run_path(str(BASE/'media_batch.py'))
+        config = {key: value for key, value in self.config.items()
+                  if key not in ('token', 'provider', 'model')}
+        with patch.object(subprocess, 'run', side_effect=run):
+            sample = self.agent.dispatch('test_extraction', dict(mode='archive', path=archive.name, pattern='*.ogg'))
+            self.assertEqual(sample['selected'], 4)
+            self.assertEqual(sample['tested'], 3)
+            self.agent.dispatch('start_batch', dict(tests=[sample['test']], scope='Mixed-case audio', warnings=[]))
+            self.assertEqual(batch['run'](config, API)['files'], 4)
+        self.assertEqual(extraction_calls, [['a.ogg'], ['c.Ogg'], ['d.ogg'], selected])
+
+    def test_archive_inventory_distinguishes_missing_and_unexpected_members(self):
+        verify = MEDIA['PLAN']['verify_archive_members']
+        for actual, diagnostic in [
+            ([], r'missing 1: scene\.png\)$'),
+            (['scene.png', 'extra.PNG'], r'unexpected 1: extra\.PNG\)$'),
+            (['extra.PNG'], r'missing 1: scene\.png; unexpected 1: extra\.PNG\)$'),
+        ]:
+            with self.subTest(actual=actual), self.assertRaisesRegex(ValueError, diagnostic):
+                verify('images.arc', ['scene.png'], actual)
+
     def test_converter_partial_failures_are_retained_even_if_model_omits_them(self):
         self.agent.kind = 'cg'
         (self.game/'cg.native').write_bytes(b'native fixture')

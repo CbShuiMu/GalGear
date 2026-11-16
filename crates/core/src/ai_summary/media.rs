@@ -1,7 +1,7 @@
 //! 媒体提取使用独立 Skill 任务；宿主只写工作目录，校验后由 core 发布到固定目录。
 use super::{Stage, StageStatus, agent, hash, progress::Reporter, read};
 use crate::{Game, Settings};
-use galgear_i18n::Message;
+use galgear_i18n::{Language, Message};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -27,7 +27,7 @@ impl Kind {
     }
 }
 
-/// 已经校验并发布的产物；warnings 非空表示仅完成了部分提取。
+/// 已经校验并发布的产物，附带提取范围、转换或清理的警告。
 #[derive(Debug, Serialize)]
 pub struct Extraction {
     pub game_id: String,
@@ -156,22 +156,52 @@ fn validate(delivery: &Path, kind: Kind) -> Result<Manifest, Message> {
     Ok(manifest)
 }
 
-fn publish(root: &Path, work: &Path, kind: Kind) -> Result<(PathBuf, Manifest), Message> {
-    // 宿主退出并撤销写权限后复核整棵目录；只重命名本次产物，不合并覆盖旧文件。
+fn check_work(root: &Path, work: &Path) -> Result<(), Message> {
+    let base = root.join(super::FOLDER);
+    if work.parent() != Some(base.as_path())
+        || !work
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("media-"))
+    {
+        return Err(Message::new("media.unsafe_path"));
+    }
     checked(root)?;
-    checked(work)?;
+    checked(&base)?;
+    if !checked(work)?.is_dir() || work.canonicalize().map_err(io)? != work {
+        return Err(Message::new("media.unsafe_path"));
+    }
+    Ok(())
+}
+
+fn publish(
+    root: &Path,
+    work: &Path,
+    kind: Kind,
+    language: Language,
+) -> Result<(PathBuf, Manifest), Message> {
+    // 宿主退出并撤销写权限后复核整棵目录；只重命名本次产物，不合并覆盖旧文件。
+    check_work(root, work)?;
     let delivery = work.join("delivery");
-    let manifest = validate(&delivery, kind)?;
+    let mut manifest = validate(&delivery, kind)?;
     let output = directory(root, kind.folder())?.join(work.file_name().ok_or_else(invalid)?);
     if output.try_exists().map_err(io)? {
         return Err(invalid());
     }
     fs::rename(&delivery, &output).map_err(io)?;
+    // 删工作目录前重新核对根路径，仅清理本次任务。清理失败时仍返回已发布的成果。
+    if let Err(error) = check_work(root, work).and_then(|()| fs::remove_dir_all(work).map_err(io)) {
+        manifest.warnings.push(
+            Message::detail("media.cleanup_failed", error.render(language))
+                .arg("path", crate::config::display_path(work))
+                .render(language),
+        );
+    }
     Ok((output, manifest))
 }
 
 /// 按当前 AI 配置调用内置 Skill 提取媒体，成功后保存到 CGs/audios 下的独立任务目录。
-/// 无需开启游戏剧情分析，先校验 AI 配置；不读取存档、不执行游戏。
+/// 发布成功后清理本次工作目录。无需开启游戏剧情分析，不读取存档或执行游戏。
 /// 同一游戏的任务互斥由桌面编排层负责。
 pub fn extract(
     game: &Game,
@@ -218,7 +248,7 @@ pub fn extract(
         &mut progress,
     )?;
     progress.stage(Stage::Publishing, StageStatus::Running);
-    let (output, manifest) = publish(&root, &work, kind)?;
+    let (output, manifest) = publish(&root, &work, kind, settings.language)?;
     progress.stage(Stage::Publishing, StageStatus::Completed);
     Ok(Extraction {
         game_id: game.id.clone(),
@@ -330,7 +360,8 @@ mod tests {
             "language":settings.language.code(),"game":crate::config::display_path(&root),"save":crate::config::display_path(&root),
             "work":crate::config::display_path(&work),"skill":crate::config::display_path(&home.join(crate::ai::runtime::SKILL_DIRECTORY)),
             "provider":provider,"model":model,"token":token,"request_scope":scope,"runtime_limit_seconds":1200,"max_turns":45}),&mut progress).unwrap();
-        let (output, manifest) = publish(&root, &work, kind).unwrap();
+        let (output, manifest) = publish(&root, &work, kind, settings.language).unwrap();
+        assert!(!work.exists(), "published workspace was not cleaned up");
         println!(
             "MEDIA_RESULT {}",
             json!({"title":game.title,"kind":kind,"files":manifest.files.len(),"output":crate::config::display_path(&output),"warnings":manifest.warnings,"work":crate::config::display_path(&work)})
@@ -338,7 +369,8 @@ mod tests {
     }
     fn fixture() -> (tempfile::TempDir, PathBuf) {
         let temp = tempfile::tempdir().unwrap();
-        let work = temp.path().canonicalize().unwrap().join("media-test");
+        let root = temp.path().canonicalize().unwrap();
+        let work = root.join(super::super::FOLDER).join("media-test");
         fs::create_dir_all(work.join("delivery/archive")).unwrap();
         let path = work.join("delivery/archive/cg.png");
         fs::write(&path, b"fixture").unwrap();
@@ -346,16 +378,28 @@ mod tests {
         (temp, work)
     }
     #[test]
-    fn publishes_in_fixed_folder_and_preserves_existing_files() {
+    fn publishes_and_cleans_only_this_workspace() {
         let (temp, work) = fixture();
         let root = temp.path().canonicalize().unwrap();
+        for intermediate in ["sample-delivery", "unpacked", "images-test"] {
+            let folder = work.join(intermediate);
+            fs::create_dir(&folder).unwrap();
+            fs::write(folder.join("sample.png"), b"temporary").unwrap();
+        }
+        let previous_work = root.join(super::super::FOLDER).join("media-previous");
+        fs::create_dir(&previous_work).unwrap();
+        fs::write(previous_work.join("session.json"), b"previous").unwrap();
         fs::create_dir(root.join("CGs")).unwrap();
         fs::write(root.join("CGs/previous.png"), b"old").unwrap();
-        let (path, manifest) = publish(&root, &work, Kind::Cg).unwrap();
+        let (path, manifest) = publish(&root, &work, Kind::Cg, Language::default()).unwrap();
         assert_eq!(path, root.join("CGs/media-test"));
         assert_eq!(manifest.files.len(), 1);
+        assert!(manifest.warnings.is_empty());
         assert_eq!(fs::read(root.join("CGs/previous.png")).unwrap(), b"old");
         assert!(path.join("archive/cg.png").is_file());
+        assert!(path.join("manifest.json").is_file());
+        assert!(!work.exists());
+        assert!(previous_work.join("session.json").is_file());
     }
     #[test]
     fn rejects_changed_unlisted_and_wrong_kind_outputs() {
@@ -373,7 +417,47 @@ mod tests {
         let (temp, work) = fixture();
         let root = temp.path().canonicalize().unwrap();
         fs::create_dir_all(root.join("CGs/media-test")).unwrap();
-        assert!(publish(&root, &work, Kind::Cg).is_err());
+        assert!(publish(&root, &work, Kind::Cg, Language::default()).is_err());
         assert!(work.join("delivery/archive/cg.png").is_file());
+    }
+
+    #[test]
+    fn refuses_work_outside_the_summary_directory() {
+        let (temp, work) = fixture();
+        let root = temp.path().canonicalize().unwrap();
+        let misplaced = root.join("media-test");
+        fs::rename(work, &misplaced).unwrap();
+        let error = publish(&root, &misplaced, Kind::Cg, Language::default())
+            .err()
+            .unwrap();
+        assert_eq!(error.key, "media.unsafe_path");
+        assert!(misplaced.join("delivery/archive/cg.png").is_file());
+        assert!(!root.join("CGs").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn cleanup_does_not_follow_a_junction_inside_the_workspace() {
+        let (temp, work) = fixture();
+        let root = temp.path().canonicalize().unwrap();
+        let original = temp.path().join("original");
+        fs::create_dir(&original).unwrap();
+        fs::write(original.join("keep.png"), b"original").unwrap();
+        let junction = std::process::Command::new("cmd.exe")
+            .args(["/C", "mklink", "/J"])
+            .arg(
+                temp.path()
+                    .join(super::super::FOLDER)
+                    .join("media-test")
+                    .join("linked"),
+            )
+            .arg(&original)
+            .output()
+            .unwrap();
+        assert!(junction.status.success(), "{junction:?}");
+        let (_, manifest) = publish(&root, &work, Kind::Cg, Language::default()).unwrap();
+        assert!(manifest.warnings.is_empty());
+        assert!(!work.exists());
+        assert_eq!(fs::read(original.join("keep.png")).unwrap(), b"original");
     }
 }

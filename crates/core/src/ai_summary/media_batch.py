@@ -34,9 +34,7 @@ def run(config,api):
                 result=agent.host._dispatch('run_skill',dict(command='x',archive=recipe['path'],filter=recipe['pattern'],filter_syntax='glob'))
                 if result.get('error') or result.get('exit_code',0):
                     raise ValueError(result.get('error') or 'Batch archive extraction failed')
-                inventory=json.loads(agent.host.path('work',result['member_inventory']).read_text('utf-8'))
-                if set(name.replace('\\','/') for name in inventory['members'])!=set(name.replace('\\','/') for name in current):
-                    raise ValueError('Batch archive extraction omitted selected members')
+                PLAN['verify_archive_members'](recipe['path'], current, PLAN['archive_members'](agent, result))
                 root='work'
                 directory=agent.host.path('work',result['output'])
             else:

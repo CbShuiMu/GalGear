@@ -1385,9 +1385,10 @@ class Agent:
                 for name in matches:
                     source = payload / name
                     destination = target / name
-                    if (source.resolve() != source or not source.is_file() or
-                            destination.resolve() != destination):
+                    if source.resolve() != source or destination.resolve() != destination:
                         raise ValueError('Extracted output does not match a safe listed member')
+                    if not source.is_file():
+                        raise ValueError(f'{archive.name}: archive extraction is missing the listed file {name}')
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     if not destination.is_file() or hashlib.sha256(destination.read_bytes()).digest() != hashlib.sha256(source.read_bytes()).digest():
                         os.replace(source, destination)

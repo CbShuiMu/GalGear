@@ -5242,6 +5242,11 @@
     "ja-JP": "メディアファイルの操作に失敗しました：{detail}",
     "en-US": "Media file operation failed: {detail}"
   },
+  "media.cleanup_failed": {
+    "zh-CN": "提取结果已保存，但未能清理工作目录 {path}。{detail}",
+    "ja-JP": "抽出結果は保存されましたが、作業フォルダー {path} を削除できませんでした。{detail}",
+    "en-US": "The extracted files were saved, but the working directory {path} could not be cleaned up. {detail}"
+  },
   "route.html.inferred": {
     "zh-CN": "推断",
     "ja-JP": "推定",

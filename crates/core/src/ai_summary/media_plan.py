@@ -1,7 +1,25 @@
 """先验证少量样本，再冻结可复用的批量参数；模型不能绕过试提取直接启动批量任务。"""
-import fnmatch
 import json
 from pathlib import Path
+
+
+def archive_members(agent, result):
+    inventory = agent.host.path('work', result['member_inventory'])
+    return json.loads(inventory.read_text('utf-8'))['members']
+
+
+def verify_archive_members(archive, expected, actual):
+    # 只统一路径分隔符，保留原生名称以发现改名或覆盖。
+    wanted = {name.replace('\\', '/') for name in expected}
+    found = {name.replace('\\', '/') for name in actual}
+    missing, extra = sorted(wanted - found), sorted(found - wanted)
+    if missing or extra:
+        details = []
+        if missing:
+            details.append(f'missing {len(missing)}: ' + ', '.join(missing[:3]))
+        if extra:
+            details.append(f'unexpected {len(extra)}: ' + ', '.join(extra[:3]))
+        raise ValueError(f'{archive}: extracted archive members differ from the selection (' + '; '.join(details) + ')')
 
 
 def audio_probe(path):
@@ -33,13 +51,12 @@ def listing(agent, args):
         if not path.is_file():
             raise ValueError('Select an archive file')
         agent.stamp(path)
-        result = agent.host._dispatch('run_skill', dict(command='l', archive=args['path']))
+        # 让实际解包后端解释 glob，统一规划与执行的大小写和目录匹配。
+        result = agent.host._dispatch('run_skill', dict(command='l', archive=args['path'], filter=pattern, filter_syntax='glob'))
         if result.get('error') or result.get('exit_code', 0):
             raise ValueError(result.get('error') or 'Archive listing failed')
-        inventory = json.loads(agent.host.path('work', result['member_inventory']).read_text('utf-8'))
-        names = inventory['members']
-        members = [name for name in names if fnmatch.fnmatchcase(name.replace('\\','/'), pattern)]
-        if len(set(members)) != len(members):
+        members = archive_members(agent, result)
+        if len({name.replace('\\', '/').casefold() for name in members}) != len(members):
             raise ValueError('Duplicate native names need an indexed extraction backend; this recipe cannot safely batch them')
     else:
         directory, paths = agent.files_api['select'](agent, dict(root='game',path=args['path'],pattern=pattern))
@@ -56,11 +73,12 @@ def listing(agent, args):
 def extracted_sample(agent, archive, name):
     literal = agent.api['ARCHIVE_TOOLS']['literal_glob_path'](name)
     result = agent.host._dispatch('run_skill', dict(command='x', archive=archive, filter=literal, filter_syntax='glob'))
-    if result.get('error') or result.get('exit_code',0) or not result.get('sample_output'):
+    if result.get('error') or result.get('exit_code',0):
         raise ValueError(result.get('error') or 'Sample archive extraction failed')
     # 每个请求只选择一个原生名称；控制脚本扩展在媒体任务中保持关闭。
-    if result.get('member_count') != 1:
-        raise ValueError('Sample extraction did not select exactly one resource')
+    verify_archive_members(archive, [name], archive_members(agent, result))
+    if not result.get('sample_output'):
+        raise ValueError('Sample archive extraction did not produce a file')
     return agent.host.path('work', result['sample_output'])
 
 
