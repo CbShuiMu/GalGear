@@ -7,6 +7,7 @@ import runpy
 
 
 BASE = Path(__file__).parent
+CONTROL_HINTS = runpy.run_path(str(BASE / 'analysis_control_hints.py'))
 READERS = runpy.run_path(str(BASE / 'agent_skill_readers.py'))
 TYPED = runpy.run_path(str(BASE / 'typed_evidence.py'))
 TEXT_PROBE = runpy.run_path(str(BASE / 'analysis_text_probe.py'))
@@ -42,6 +43,11 @@ def reader_options(data, reader, options):
     """以实际容器规范化参数，使 auto 与等价的显式读取共享本轮结果。"""
     options = dict(options or {})
     probe_unknown=options.pop('probe_unknown',False)
+    script_text=options.pop('script_text',False)
+    # A BOM identifies encoding, not a TJS saved-state expression. Companion
+    # control scripts are text; ordinary saves retain the structured reader.
+    if reader=='auto' and script_text and data[:2] in (b'\xff\xfe',b'\xfe\xff'):
+        reader='text'
     reader = (READERS['script_reader'](data[:4096]) or READERS['save_reader'](data)
               or ('structured' if data[:4] in (b'PSB\0', b'mdf\0') or READERS['text_container'](data)
                   else 'probe' if probe_unknown else 'text')) if reader == 'auto' else reader
@@ -185,7 +191,7 @@ def read_one(skill, path, reader='auto', options=None, api=None, *, memory_limit
             encoding=row['encoding'],view_codec=view['codec'],level='candidate')
             for i,view in reversed(list(enumerate(result['value']['views']))) for j,row in enumerate(view['text_candidates'])][:24]
     elif reader == 'text':
-        encoding = (options or {}).get('encoding', 'utf-8-sig')
+        encoding = (options or {}).get('encoding') or ('utf-16' if data[:2] in (b'\xff\xfe',b'\xfe\xff') else 'utf-8-sig')
         result = dict(text=data.decode(encoding), encoding=encoding)
     else:
         raise ValueError('Unknown reader')
@@ -236,6 +242,7 @@ def worker(config, api=None):
             record.update(output=str(target), sha256=result['source_sha256'], reader=result['reader'],
                           dialogue_count=len(rows)+sum(len(scene['records']) for scene in projected), keys=list(result),
                           anchor_hints=result.get('anchor_hints',[]),
+                          control_hints=CONTROL_HINTS['text_hints'](result.get('text')),
                           menu_locations=sorted({r['pointer'] for r in result.get('choice_texts',[]) if r.get('pointer')}),
                           control_fields=[k for k in ('instructions','flow','ast_tree','block_observations','value') if k in result],
                           instruction_count=len(result.get('instructions',[])),

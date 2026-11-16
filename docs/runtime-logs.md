@@ -6,15 +6,16 @@
 
 ## 排查顺序
 
-1. 按发生时间选择对应的日志，先查看 `session_start` 的版本、系统架构、程序位置和运行环境，以及 `desktop_setup` 的 WebView2 版本。
+1. 按发生时间选择对应的日志，先查看 `session_start` 的版本、系统架构、程序位置和运行环境，以及 `webview_diagnostics_ready` 的实际 WebView2 版本、浏览器 PID 和程序路径。`desktop_setup` / `updater_start` 的 `available_webview_version` 来自系统可用运行时探测，旧日志中该字段名为 `webview_version`。
 2. 搜索 `command_error`、`javascript_error`、`wasm_panic`、`galgear::panic`、`native_crash` 和后台警告。命令错误保留原有国际化错误码与脱敏后的错误详情，Rust panic 记录位置和强制捕获的堆栈。
 3. 用 `request` 关联 `command_start` 与 `command_ok`/`command_error`，查看操作顺序与耗时；游戏操作同时记录合法的游戏哈希 ID。起点在后端接收命令时写入，结果由前端桥接报告，页面或进程提前退出时可能只留下起点，不能单凭缺少结束记录断定命令失败。
 4. 结合 `state_loaded`、游戏进程 PID、运行状态变更，以及工具、自动备份、截图、资料更新和账号刷新事件判断上下文。原生后台事件直接记录，不依赖窗口仍然可用。
-5. 正常退出具有 `shutdown_start` 和 `session_end`；缺少这些标记说明进程未完整执行退出流程，但可能是断电、强制结束或更新交接，不能单凭标记判定崩溃原因。
+5. 完整退出流程具有 `shutdown_start` 和 `session_end`。`session_end webview_process_failed=true` 表示本会话曾收到 WebView2 的 `ProcessFailed` 事件，包括浏览器、渲染、GPU 等进程退出和渲染无响应，事件详情读取失败也会标记。`false` 表示本会话未观察到该事件；旧日志缺少此字段时应检查前面的故障记录。缺少退出记录可能由断电、强制结束或更新交接造成，需结合其他证据判断。
 
 ## 黑屏和界面无响应
 
-- `webview_diagnostics_ready` 记录 Windows 主窗口的 WebView2 浏览器进程 PID，可用来关联 Windows 事件日志。`webview_process_failed` 由原生侧记录，包括浏览器、渲染或 GPU 进程异常的类型，以及运行时提供的原因码和退出码（十进制及十六进制）。监听注册失败时记录 `webview_diagnostics_unavailable`。
+- `webview_diagnostics_ready` 记录当前 WebView2 环境的 `BrowserVersionString`、`browser_pid` 和通过该 PID 查询的 `browser_exe`，主窗口与更新窗口共用此诊断入口。程序路径在写入时统一脱敏，支持含空格的 Windows 用户目录名。读取某项失败会记录具体错误，并将该项写为 `None` / `unavailable`，其余诊断继续工作。
+- `webview_process_failed` 在同一条 ERROR 日志中记录窗口、进程异常类型、原因码、退出码（十进制及十六进制），以及启动时缓存的实际版本、浏览器 PID 和程序路径，并在返回前通过 `sync_data` 刷盘。即使事件详情读取失败，仍记录缓存的关联信息并刷盘。`browser_pid` 始终指所属浏览器主进程，JSON 顶层的 `pid` 指 GalGear 宿主；渲染和 GPU 故障需结合类型及转储定位。监听注册失败时记录 `webview_diagnostics_unavailable`。
 - `webview_failure_report_folder` 记录运行时报告的崩溃转储目录；日志中的用户名仍会脱敏，故障机上需替换为实际用户目录。旧运行时不支持此接口时单独记录警告，不影响进程监听。转储由 WebView2 自行生成，GalGear 不复制或上传转储；转储可能含进程内存中的个人数据，分享前需确认内容与接收方。
 - 主窗口的浏览器或主渲染进程退出后，后台线程只显示一次原生错误提示，指引用户退出并重新打开。提示不依赖 JavaScript，不自动退出或重启，不中断后台写入。GPU 或子框架退出只记录日志，由运行时或页面处理；渲染无响应仍记录事件，不能当成已退出。浏览器进程退出后仅刷新页面无法恢复，需重建 WebView 或重新打开程序（[微软进程故障处理说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/process-related-events)）。
 - `view_applied` 表示 DOM 已应用。切换页面或弹窗类别时记录一次，例如资料确认关闭会从 `page=Home overlay=Setup` 变为 `page=Home overlay=None`。用同一页面加载内的 `view` 编号关联 `view_frames` 和 `view_frames_delayed`。页面可见且超过 2 秒仍未收到第二次帧回调时才记录延迟，回调随后到达时会记录实际耗时。新视图和页面隐藏会取消之前的帧检查，`frontend_visibility` 提供可见性上下文。

@@ -143,15 +143,13 @@ fn credit(html: &mut String, meta: &Metadata, field: &str, text: &str) {
             .filter(|link| link.field == field)
             .map(|link| link.name.as_str()),
     );
+    let class = if field == "brand" {
+        "tag-button credit-tag credit-brand"
+    } else {
+        "tag-button credit-tag"
+    };
     for name in names {
-        html.push_str(&button(
-            "detail-tag",
-            &name,
-            &esc(&name),
-            "",
-            "tag-button credit-tag",
-            false,
-        ));
+        html.push_str(&button("detail-tag", &name, &esc(&name), "", class, false));
     }
 }
 

@@ -15,7 +15,7 @@ impl Redactor {
             (r#"(?im)\b(?:authorization|proxy-authorization|cookie|set-cookie)\s*[:=][^\r\n]*"#, "[credential header]"),
             (r#"(?i)\b(?:bearer|basic)\s+[a-z0-9+/_.=~-]+"#, "[credential]"),
             (r#"(?i)["']?(?:[a-z_-]*(?:token|secret|password|passwd|api[_-]?key)|code_verifier|signature)["']?\s*[:=]\s*(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;}]+)"#, "[credential]"),
-            (r#"(?i)\b[a-z]:[\\/]+Users[\\/]+[^\\/\s"']+"#, "[user]"),
+            (r#"(?i)\b[a-z]:[\\/]+Users[\\/]+[^\\/\r\n"']+"#, "[user]"),
             (r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"#, "[email]"),
         ].into_iter().map(|(pattern, replacement)| Regex::new(pattern)
             .map(|regex| (regex, replacement)).map_err(io::Error::other))

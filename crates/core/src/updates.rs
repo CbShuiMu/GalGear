@@ -133,7 +133,7 @@ fn preserve(root: &Path, path: &Path) -> bool {
     let value = path.to_string_lossy().replace('\\', "/").to_lowercase();
     value == "portable.flag" || value == "data" || value.starts_with("data/")
         || value == "settings.json" || value.starts_with(".galgear")
-        || (value == "tools/magpie/config/config.json" || value == "tools/locale-emulator/leconfig.xml") && root.join(path).exists()
+        || (value == "tools/magpie/config/config.json" || value == "tools/locale-emulator/leconfig.xml" || value == "tools/locale-emulator/lepconfig.xml") && root.join(path).exists()
 }
 fn reject_links(path: &Path) -> Result<(), Message> {
     for path in path.ancestors() {
@@ -278,6 +278,26 @@ mod tests {
             assert!(unpack(&zip,&temp.path().join("payload"),true).is_err());
         }
     }
+    #[test]
+    fn update_keeps_both_locale_generations_user_profiles() {
+        let temp = tempfile::tempdir().unwrap();
+        let install = temp.path().join("installed");
+        let payload = temp.path().join("payload");
+        for base in [&install, &payload] {
+            fs::create_dir_all(base.join("tools/locale-emulator")).unwrap();
+            fs::write(base.join("GalGear.exe"), b"MZ").unwrap();
+        }
+        for name in ["LEConfig.xml", "LEPConfig.xml"] {
+            let path = Path::new("tools/locale-emulator").join(name);
+            fs::write(install.join(&path), b"user profiles").unwrap();
+            fs::write(payload.join(&path), b"release profiles").unwrap();
+        }
+        replace(&payload, &install.join("GalGear.exe"), &temp.path().join("backup")).unwrap();
+        for name in ["LEConfig.xml", "LEPConfig.xml"] {
+            assert_eq!(fs::read(install.join("tools/locale-emulator").join(name)).unwrap(), b"user profiles");
+        }
+    }
+
     #[test]
     fn replacement_preserves_user_data_and_rolls_back_on_any_failure() {
         let temp=tempfile::tempdir().unwrap();

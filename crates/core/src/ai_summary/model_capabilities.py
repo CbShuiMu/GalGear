@@ -136,6 +136,7 @@ def read_capabilities(config, timeout=20):
     try:
         request = urllib.request.Request(DEEPSEEK_MODELS, method='GET', headers={
             'Authorization': 'Bearer '+secret, 'Accept': 'application/json', 'Connection': 'close'})
+        request.galgear_use_proxy = False
         try:
             with urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({})).open(request, timeout=timeout) as response:
                 try:

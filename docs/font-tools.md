@@ -77,3 +77,18 @@ cargo test -p galgear --locked font_tools -- --include-ignored --test-threads=1
 原生面板三语控件与窗口定位测试通过，明暗主题、中文字体预览已实际检查。兼容辅助夹具覆盖 PFS 索引边界、覆盖包优先级、字号比例与 KiriKiri ABI 识别。工作区测试、桌面及 WASM Clippy、前端与桌面构建通过；全工作区格式检查仍有既有无关文件差异，本次修改的 Rust 文件通过局部检查。
 
 真实游戏引擎尚未逐一验收，隔离夹具不能替代游戏画面验收。本轮基于固定上游提交重建；未重新验收远端新提交下载。本轮 Raw Input 隔离测试未能将测试窗口切到前台，失败于焦点前提，尚未验证该次按键接收；其余字体客户端、面板控件和快捷键注册检查通过。
+
+
+## LocaleEmulatorPlus 替换验证（2026-11-16）
+
+内置工具已替换为官方 LocaleEmulatorPlus v2.0.6.0。`native_locale_chinese_family_preserves_shift_jis` 通过 x64 启动器运行 x86/x64 隔离 GDI 进程，均确认 ACP 932；黑体与华文中宋的实际字形替换、Shift-JIS 字节含义、自动兼容及显式字符集伪装共 8 种组合通过。测试不操作真实游戏或存档。
+
+新增 `native_locale_x86_x64_hotkey_png_and_clipboard` 用于转区进程的截图联调。当前 x86 运行收到 Shift+S 的 WM_HOTKEY，但合成输入没有通过 Raw Input 断言，测试在 PNG/剪贴板检查前停止；x64 截图尚未验收。用户随后以 Escape 停止桌面控制，本轮没有继续交互验证，不能据此宣称一键截图整体通过。截图 WASM 桥接回归通过，字体结果也不等同于所有真实游戏引擎兼容。
+
+复现命令（需交互桌面，截图测试会写入测试剪贴板）：
+
+```powershell
+.\scripts\build-font-hook.ps1 -Fixtures
+cargo test -p galgear --locked native_locale_chinese_family_preserves_shift_jis -- --ignored --test-threads=1 --nocapture
+cargo test -p galgear --locked native_locale_x86_x64_hotkey_png_and_clipboard -- --ignored --test-threads=1 --nocapture
+```

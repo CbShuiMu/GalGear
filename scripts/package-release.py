@@ -12,7 +12,8 @@ stage = artifacts / f'release-v{version}' / 'portable'
 stage.mkdir(parents=True, exist_ok=False)
 for name in ('7zip', 'ai-agent', 'waifu2x', 'magpie', 'locale-emulator', 'font-hook'):
     shutil.copytree(root / 'tools' / name, stage / 'tools' / name,
-                    ignore=shutil.ignore_patterns('logs', '*.log', '*.tmp', '__pycache__'))
+                    ignore=shutil.ignore_patterns('logs', '*.log', '*.tmp', '__pycache__',
+                                                  'LEConfig.xml', 'LEPConfig.xml'))
 for source, target in (
     (artifacts / 'GalGear.exe', 'GalGear.exe'),
     (artifacts / 'GalGear.sha256', 'GalGear.sha256'),
@@ -48,8 +49,12 @@ required = ('tools/font-hook/x86/GalGearFontHook.dll', 'tools/font-hook/x86/font
             'tools/ai-agent/GalGear.AiAgent.exe',
             'tools/waifu2x/waifu2x-ncnn-vulkan.exe', 'tools/waifu2x/LICENSE',
             'tools/magpie/Magpie.exe', 'tools/magpie/LICENSE',
-            'tools/magpie/config/config.json', 'tools/locale-emulator/LEProc.exe',
-            'tools/locale-emulator/COPYING', 'tools/locale-emulator/LEConfig.xml')
+            'tools/magpie/config/config.json', 'tools/locale-emulator/LEPProc_x86.exe',
+            'tools/locale-emulator/LEPProc_x64.exe', 'tools/locale-emulator/LEPCommonLibrary.dll',
+            'tools/locale-emulator/LoaderDll_x86.dll', 'tools/locale-emulator/LoaderDll_x64.dll',
+            'tools/locale-emulator/LocaleEmulatorPlus_x86.dll', 'tools/locale-emulator/LocaleEmulatorPlus_x64.dll',
+            'tools/locale-emulator/COPYING', 'tools/locale-emulator/COPYING.LESSER',
+            'tools/locale-emulator/README_ORG.md', 'tools/locale-emulator/bundle.json')
 for name in required:
     assert (stage / name).is_file(), name
 expected = (stage / 'GalGear.sha256').read_text().split()[0]

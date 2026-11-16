@@ -1,6 +1,7 @@
 ﻿$ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path -Parent $PSScriptRoot
-foreach ($relative in @('tools\magpie\Magpie.exe', 'tools\magpie\config\config.json', 'tools\locale-emulator\LEProc.exe', 'tools\locale-emulator\LEConfig.xml')) {
+& (Join-Path $PSScriptRoot 'setup-locale-emulator.ps1')
+foreach ($relative in @('tools\magpie\Magpie.exe', 'tools\magpie\config\config.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $taskRoot $relative) -PathType Leaf)) {
         throw "Missing $relative. Run scripts/import-game-tools.ps1 with the installed tools and Magpie configuration first."
     }
@@ -28,6 +29,7 @@ try {
         $source = (Resolve-Path -LiteralPath (Join-Path $taskRoot "tools\$name")).Path
         Get-ChildItem -LiteralPath $source -Recurse -File | ForEach-Object {
             $relative = $_.FullName.Substring($source.Length + 1)
+            if ($name -eq 'locale-emulator' -and $relative -in @('LEConfig.xml', 'LEPConfig.xml')) { return }
             $destination = Join-Path $agentOutput "$name\$relative"
             # Preserve settings changed in the output copy when rebuilding it.
             if ($relative -in @('config\config.json', 'LEConfig.xml') -and (Test-Path -LiteralPath $destination)) { return }

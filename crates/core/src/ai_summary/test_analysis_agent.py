@@ -785,8 +785,12 @@ class AnalysisTests(unittest.TestCase):
             self.agent.emit(index,dict(input_root='work',records=[dict(input=name,name=name,output=name+'.json',
                 menu_locations=['/choice'],known_options=[dict(pointer='/choice/0',variants=[text])])]))
         self.agent.batches=['original.json','localized.json']
-        value['graph']['nodes'].append(dict(id='c',label='是否出发',kind='choice',decision_kind='condition',evidence='O1'))
-        value['graph']['edges']=[dict(**{'from':'s','to':'c'},label='出发',kind='choice',inferred=False,evidence='O1')]
+        value['graph']['nodes'].extend([
+            dict(id='c',label='是否出发',kind='choice',decision_kind='player',evidence='O1'),
+            dict(id='d',label='启程',kind='scene',evidence='O1')])
+        value['graph']['edges']=[
+            dict(**{'from':'s','to':'c'},label='',kind='flow',inferred=False,evidence='O1'),
+            dict(**{'from':'c','to':'d'},label='出发',kind='choice',inferred=False,evidence='O1')]
         with self.assertRaisesRegex(ValueError,'2 distinct menu'):self.agent.submit_route(value)
         value['scope'].update(script_indexes=['localized.json'],resource_selection='Localized overlay supplies the displayed text; original was inspected only for structure.')
         self.agent.submit_route(value)

@@ -191,6 +191,7 @@ def complete(config, messages, tools, max_tokens=12000, timeout=300):
             raise failure('configuration') from None
         try:
             # OpenAI uses configured proxies; DeepSeek bypasses them even in a frozen host.
+            request.galgear_use_proxy = config['provider'] == 'openai'
             proxy = urllib.request.ProxyHandler() if config['provider'] == 'openai' else urllib.request.ProxyHandler({})
             with urllib.request.build_opener(NoRedirect(), proxy).open(request, timeout=timeout) as response:
                 try:

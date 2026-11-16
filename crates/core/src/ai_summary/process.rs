@@ -1,32 +1,27 @@
 //! Windows owns each AI process tree, even if the desktop is forcibly terminated.
-use super::agent::close_aborted_session;
+use super::{
+    agent::close_aborted_session,
+    windows_sandbox::{Child, Sandbox},
+};
+use std::fs::File;
 use std::{
     collections::BTreeMap,
     io,
     ops::{Deref, DerefMut},
-    os::windows::{
-        io::{AsHandle, AsRawHandle, FromRawHandle, OwnedHandle},
-        process::CommandExt,
-    },
+    os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     path::{Path, PathBuf},
-    process::{Child, Command},
+    process::Command,
     sync::{Arc, Mutex, MutexGuard, OnceLock},
 };
 use windows_sys::Win32::{
     Foundation::{HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0},
     System::{
-        Diagnostics::ToolHelp::{
-            CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
-        },
         JobObjects::{
             AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
             JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
             SetInformationJobObject, TerminateJobObject,
         },
-        Threading::{
-            CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenThread, ResumeThread, THREAD_SUSPEND_RESUME,
-            WaitForSingleObject,
-        },
+        Threading::WaitForSingleObject,
     },
 };
 
@@ -45,10 +40,11 @@ struct Entry {
     job: OwnedHandle,
     process: OwnedHandle,
     session: Option<PathBuf>,
+    sandbox: Option<Sandbox>,
 }
 
 impl Entry {
-    fn stop(self, status: &str) {
+    fn stop(mut self, status: &str) -> io::Result<()> {
         // Only GalGear owns this non-inheritable handle. Closing it kills all
         // descendants, including the bundled host's bootloader and tool workers.
         drop(self.job);
@@ -58,6 +54,10 @@ impl Entry {
         {
             close_aborted_session(&work, false, status);
         }
+        if let Some(sandbox) = &mut self.sandbox {
+            sandbox.revoke()?;
+        }
+        Ok(())
     }
 }
 
@@ -72,7 +72,19 @@ impl Workers {
         self.0.lock().unwrap_or_else(|error| error.into_inner())
     }
 
+    #[cfg(test)]
     fn spawn(&self, command: &mut Command, work: &Path, parse: bool) -> io::Result<Worker> {
+        self.launch(command, work, parse, None, None)
+    }
+
+    fn launch(
+        &self,
+        command: &mut Command,
+        work: &Path,
+        parse: bool,
+        sandbox: Option<Sandbox>,
+        output: Option<(&File, &File)>,
+    ) -> io::Result<Worker> {
         let mut state = self.state();
         if state.shutting_down {
             return Err(io::Error::new(
@@ -83,8 +95,7 @@ impl Workers {
         let job = create_job()?;
         // Assign before any code runs, so even a one-file bootloader cannot
         // start a child outside the job. The lock serializes spawning and exit.
-        command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
-        let mut child = command.spawn()?;
+        let mut child = Child::spawn(command, work, sandbox.as_ref(), output)?;
         let registered = (|| {
             // SAFETY: both handles are live and the child was created suspended.
             if unsafe { AssignProcessToJobObject(job.as_raw_handle(), child.as_raw_handle()) } == 0
@@ -92,11 +103,12 @@ impl Workers {
                 return Err(io::Error::last_os_error());
             }
             let process = child.as_handle().try_clone_to_owned()?;
-            resume(&child)?;
+            child.resume()?;
             Ok(Entry {
                 job,
                 process,
                 session: (!parse).then(|| work.to_path_buf()),
+                sandbox,
             })
         })();
         match registered {
@@ -116,15 +128,26 @@ impl Workers {
     }
 
     fn shutdown(&self) {
-        let mut state = self.state();
-        state.shutting_down = true;
-        for (_, entry) in std::mem::take(&mut state.entries) {
-            entry.stop("cancelled");
+        let entries = {
+            let mut state = self.state();
+            state.shutting_down = true;
+            std::mem::take(&mut state.entries)
+        };
+        for (_, entry) in entries {
+            let _ = entry.stop("cancelled");
         }
     }
 }
 
 impl Worker {
+    pub(super) fn finish(&mut self, status: &str) -> io::Result<()> {
+        let entry = self.workers.state().entries.remove(&self.child.id());
+        if let Some(entry) = entry {
+            entry.stop(status)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn kill(&mut self) -> io::Result<()> {
         let state = self.workers.state();
         if let Some(entry) = state.entries.get(&self.child.id()) {
@@ -153,17 +176,25 @@ impl DerefMut for Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        if let Some(entry) = self.workers.state().entries.remove(&self.child.id()) {
-            entry.stop("failed");
+        let entry = self.workers.state().entries.remove(&self.child.id());
+        if let Some(entry) = entry {
+            let _ = entry.stop("failed");
         }
         let _ = self.child.wait();
     }
 }
 
-pub(super) fn spawn(command: &mut Command, work: &Path, parse: bool) -> io::Result<Worker> {
+pub(super) fn spawn(
+    command: &mut Command,
+    work: &Path,
+    parse: bool,
+    payload: &serde_json::Value,
+    output: (&File, &File),
+) -> io::Result<Worker> {
+    let sandbox = Sandbox::new(command, work, payload, parse)?;
     WORKERS
         .get_or_init(Workers::default)
-        .spawn(command, work, parse)
+        .launch(command, work, parse, Some(sandbox), Some(output))
 }
 
 pub(super) fn shutdown() {
@@ -196,37 +227,6 @@ fn create_job() -> io::Result<OwnedHandle> {
         return Err(io::Error::last_os_error());
     }
     Ok(job)
-}
-
-fn resume(child: &Child) -> io::Result<()> {
-    // std::process::Child does not expose the primary thread handle. A suspended
-    // process has only its primary thread, which cannot exit before we resume it.
-    // SAFETY: snapshot flags request threads and do not use the process-id argument.
-    let snapshot = owned(unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) })?;
-    let mut thread = THREADENTRY32 {
-        dwSize: size_of::<THREADENTRY32>() as u32,
-        ..Default::default()
-    };
-    // SAFETY: thread points to an initialized structure with the required size.
-    let mut found = unsafe { Thread32First(snapshot.as_raw_handle(), &mut thread) };
-    while found != 0 {
-        if thread.th32OwnerProcessID == child.id() {
-            // SAFETY: this thread belongs to our still-suspended child.
-            let handle =
-                owned(unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, thread.th32ThreadID) })?;
-            // SAFETY: handle has suspend/resume rights and is held open for the call.
-            if unsafe { ResumeThread(handle.as_raw_handle()) } == u32::MAX {
-                return Err(io::Error::last_os_error());
-            }
-            return Ok(());
-        }
-        // SAFETY: snapshot and thread remain valid for enumeration.
-        found = unsafe { Thread32Next(snapshot.as_raw_handle(), &mut thread) };
-    }
-    Err(io::Error::new(
-        io::ErrorKind::NotFound,
-        "AI worker thread not found",
-    ))
 }
 
 #[cfg(test)]
@@ -410,5 +410,22 @@ mod tests {
         owner.0.kill().unwrap();
         owner.0.wait().unwrap();
         assert_stopped(&handles);
+    }
+
+    #[test]
+    fn shutdown_reclaims_sandboxed_workers_and_their_descendants() {
+        let work = tempfile::tempdir().unwrap();
+        let workers = Workers::default();
+        let ready = work.path().join("ready.json");
+        let mut command = fixture("tree", &ready);
+        let sandbox =
+            super::Sandbox::new(&mut command, work.path(), &serde_json::json!({}), true).unwrap();
+        let mut worker = workers
+            .launch(&mut command, work.path(), true, Some(sandbox), None)
+            .unwrap();
+        let handles = tree(&ready);
+        workers.shutdown();
+        assert_stopped(&handles);
+        assert!(worker.try_wait().unwrap().is_some());
     }
 }

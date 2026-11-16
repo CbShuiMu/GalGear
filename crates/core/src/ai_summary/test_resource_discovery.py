@@ -73,6 +73,44 @@ class ResourceDiscoveryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'payload extent'):
             host.ARCHIVE_TOOLS['scene_members'](archive)
 
+    def test_siglus_key_discovery_uses_original_directory_and_payload_success(self):
+        archive = self.root/'localized.custom'
+        header = [0]*23
+        header[0], header[13:22] = 92, [92,1,100,1,102,1,110,1,1]
+        archive.write_bytes(struct.pack('<23i',*header)+struct.pack('<ii',0,1)
+                            +'a'.encode('utf-16-le')+struct.pack('<ii',0,4)+b'data')
+        tool = self.root/'tools/siglus-ssu/siglus-ssu.exe'
+        tool.parent.mkdir(parents=True)
+        tool.touch()
+        wrong = self.root/'SiglusEngine.exe'
+        correct = self.root/'SiglusEngine_variant.exe'
+        wrong.write_bytes(b'MZwrong')
+        correct.write_bytes(b'MZright')
+        attempted=[]
+        def run(argv, **kwargs):
+            self.assertEqual(argv[1], 'unpack')
+            selected = pathlib.Path(argv[argv.index('--angou')+1])
+            attempted.append(selected)
+            if selected==wrong:
+                return mock.Mock(returncode=1,stderr=b'encrypted scene data requires a valid exe_el key source')
+            self.assertEqual(selected,correct)
+            output = pathlib.Path(argv[3])
+            output.mkdir()
+            (output/'a.dat').write_bytes(b'decoded')
+            return mock.Mock(returncode=0,stderr=b'')
+        with mock.patch.object(host.subprocess,'run',side_effect=run):
+            result=self.agent.run_specialized_archive(archive,'siglus',dict(command='x',filter='*.dat'))
+            repeated=self.agent.run_specialized_archive(archive,'siglus',dict(command='x',filter='*.dat'))
+            self.assertTrue(repeated['reused'])
+        self.assertEqual(attempted,[wrong,correct])
+        self.assertEqual(result['key_resolution']['source'],correct.name)
+        self.assertEqual(result['key_resolution']['rejected_sources'],[wrong.name])
+        self.assertEqual((self.agent.work/result['sample_output']).read_bytes(),b'decoded')
+        self.assertIn(str(correct),self.agent.sources)
+        header[21]=0
+        archive.write_bytes(struct.pack('<23i',*header)+archive.read_bytes()[92:])
+        self.assertEqual(host.ARCHIVE_TOOLS['siglus_key_candidates'](archive,self.root),[])
+
     def test_pfs_extract_preserves_literal_brackets_and_reports_cli_error(self):
         archive = self.root / '[Vendor] 日本語 [patch]' / 'story.pfs.099'
         archive.parent.mkdir()

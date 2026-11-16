@@ -27,6 +27,9 @@ import urllib.error
 import urllib.request
 import zlib
 
+if os.name == 'nt' and os.environ.get('GALGEAR_AI_HTTP_HANDLE'):
+    runpy.run_path(str(pathlib.Path(__file__).with_name('sandbox_http.py')))['install']()
+
 MODULES = {m.__name__: m for m in (base64, binascii, codecs, collections, hashlib, json, math, re, struct, zlib)}
 CONTRACT_VERSION = 4
 SKILL_PROBE = runpy.run_path(str(pathlib.Path(__file__).with_name('agent_skill_probe.py')))
@@ -497,7 +500,7 @@ TOOLS = [
     tool('inspect_data', 'Run YOUR temporary pure Python analysis on complete raw file bytes without replacing final parsers. Entry def extract(data, metadata). metadata includes the SAME verified global resources and speaker_resources as companion helpers; target_script optionally selects matching scoped bindings. For root="save", metadata["dialogue"] contains the same verified transcript supplied to save parsers. Inspect these maps directly, without recursively guessing their shape or persisting a probe as metadata. Import allowed modules explicitly. Return compact JSON. This is analysis, not speaker/script/save validation.', {'root': ROOT, 'path': STRING, 'source': STRING, 'target_script': {'type': 'object', 'properties': {'root': ROOT, 'path': STRING}, 'required': ['root','path'], 'additionalProperties': False}}, ['root', 'path', 'source']),
     tool('inspect_structured', 'Parse the COMPLETE actual file using the fixed typed data syntax from verification_contract(topic="structured"), with a declarative standard byte view. Optional field_path selects a typed node by actual object keys/array indices. Returns a bounded node and an exact read_json locator for the complete parsed tree, preserving native field/reference positions. Prefer this over repeatedly writing temporary TJS/PSB parsers. This proves data structure only, never dialogue roles, execution order or a current node.', {'root': ROOT, 'path': STRING, 'document': {'type': 'object'}, 'field_path': {'type': 'array', 'maxItems': 32, 'items': {'type': ['string', 'integer']}}}, ['root', 'path', 'document']),
     tool('inspect_archive_member', 'Read native metadata for an actual archive and an exact member extracted by run_skill into THIS work directory. Independently binds it by the exact native name and full raw segment bytes, or a unique complete raw-byte match for mapped names; size/caption alone cannot select a member. Returns native size/Adler-32/flags/segments and a binding receipt, never a key or decoded answer. Use this bounded checksum investigation even when ordinary exploration is gated; a newly changed parser must still be tested first. A metadata receipt does not verify restored bytes, dialogue or a node.', {'archive': STRING, 'root': {'type': 'string', 'enum': ['work']}, 'path': STRING}, ['archive', 'root', 'path']),
-    tool('run_skill', 'List or extract with the installed archive backend chosen by actual header. Use the cli_document in source_inventory before calling. Specialized backends accept filename globs; GARbro also accepts regex. Extraction requires a filter and returns member_inventory and sample_output. For Siglus only, key_source may name an existing matching game-relative executable for static tool input, never execution or raw key text. A zero-member listing is not proof that an archive is empty.', {'command': {'type': 'string', 'enum': ['i', 'l', 'x']}, 'archive': STRING, 'key_source': STRING, 'filter': STRING, 'filter_syntax': {'type': 'string', 'enum': ['auto','glob','regex']}, 'offset': {'type': 'integer'}, 'length': {'type': 'integer'}}, ['command', 'archive']),
+    tool('run_skill', 'List or extract with the installed archive backend chosen by actual header. Use the cli_document in source_inventory before calling. Specialized backends accept filename globs; GARbro also accepts regex. Extraction requires a filter and returns member_inventory and sample_output. Siglus automatically discovers local key sources and verifies them by decoding. key_source optionally selects a game-relative executable or supported key file; sources are only read, never executed. A zero-member listing is not proof that an archive is empty.', {'command': {'type': 'string', 'enum': ['i', 'l', 'x']}, 'archive': STRING, 'key_source': STRING, 'filter': STRING, 'filter_syntax': {'type': 'string', 'enum': ['auto','glob','regex']}, 'offset': {'type': 'integer'}, 'length': {'type': 'integer'}}, ['command', 'archive']),
     tool('load_script_metadata', 'Parse a real companion file with YOUR pure Python helper. Return {values:{...},speakers:{entry:{id:<native ID>,text:<displayed name or null>,evidence:<name proof>,id_evidence:<ID proof>}}}. Name tables are global. Original-script message IDs MUST specify target_script:{root,path}: IDs restart in each script and may NEVER be shared across scripts. EVERY scoped entry, named or null, also requires supported native_link command-chain evidence from verification_contract(topic="speaker"); separate ID/NUL spans cannot establish it. Unsupported profiles cannot pass as verified. Include every native message with its actual displayed name or empty-name narration proof. Resolve names through the verified localized name table, not untranslated original names. Only matching scoped bindings are supplied to each transcript parser. Changed metadata invalidates affected validations.', {'root': ROOT, 'path': STRING, 'key': STRING, 'source': STRING, 'target_script': {'type': 'object', 'properties': {'root': ROOT, 'path': STRING}, 'required': ['root','path'], 'additionalProperties': False}}, ['root', 'path', 'key', 'source']),
     tool('load_script_metadata_batch', 'Apply YOUR tested companion helper to all matching original-script files, pairing each with one translated target of the SAME STEM. Supply helper_key from a successful load_script_metadata to reuse its saved code directly, or source for a new helper. Global name tables are available. Keeps the already verified sample binding; narration needs empty-name byte evidence. Never merge numeric IDs across files.', {'root': ROOT, 'path': STRING, 'filter': STRING, 'source': STRING, 'helper_key': STRING, 'target_root': ROOT, 'target_path': STRING, 'target_extension': STRING, 'key_prefix': STRING}, ['root','path','filter','target_root','target_path','target_extension']),
     tool('verify_resource_selection_batch', 'Verify the effective archive for every extracted script matching a filename filter. Listings are reused across files. Use before batch metadata and transcript extraction; do not prepare only the current-save sample.', {'root': ROOT,'path':STRING,'filter':STRING,'selected':STRING,'configuration':STRING,'priority':{'type':'string','enum':['first','last']},'encoding':STRING}, ['root','path','filter','selected']),
@@ -1201,7 +1204,7 @@ class Agent:
             return 'garbro-mod'
         return 'garbro'
 
-    def run_specialized_archive(self, archive, backend, args):
+    def run_specialized_archive(self, archive, backend, args, key_deadline=None):
         command = args['command']
         if command not in ('i', 'l', 'x'):
             raise ValueError('Supported read-only commands: i, l, x')
@@ -1217,15 +1220,50 @@ class Agent:
         stamp = self.file_fingerprint(archive)
         executable = self.path('skill', ARCHIVE_TOOLS['BACKENDS'][backend][0])
         key_source = None
+        if backend == 'siglus' and command == 'x' and not args.get('key_source'):
+            candidates = ARCHIVE_TOOLS['siglus_key_candidates'](archive, self.roots['game'])
+            resolution_key = ('siglus-key-source', hashlib.sha256(CONTEXT['encode']([
+                str(archive), self.file_fingerprint(archive),
+                [(str(p), self.file_fingerprint(p)) for p in candidates]])).hexdigest())
+            resolved = self.skill_run_cache.get(resolution_key)
+            if resolved in candidates:
+                candidates = [resolved] + [p for p in candidates if p != resolved]
+            failures = []
+            key_deadline = time.monotonic() + 90
+            for candidate in candidates:
+                if time.monotonic() >= key_deadline:
+                    break
+                relative = candidate.relative_to(self.roots['game']).as_posix()
+                try:
+                    output = self.run_specialized_archive(archive, backend,
+                        dict(args, key_source=relative), key_deadline=key_deadline)
+                except ValueError as error:
+                    message = str(error)
+                    # Only a rejected key is a reason to try the next source.
+                    # Structural or I/O failures retain their original diagnostic.
+                    if not any(word in message.casefold() for word in ('exe_el', '--angou', 'key source')):
+                        raise
+                    failures.append(relative)
+                    continue
+                self.skill_run_cache[resolution_key] = candidate
+                output['key_resolution'] = dict(mode='automatic', source=relative,
+                    rejected_sources=failures, verified_by='installed archive decoder')
+                return output
+            if candidates:
+                raise ValueError('Installed decoder accepted none of the local key sources: '
+                                 + ', '.join(failures) + '. Supply a different key_source or inspect the format; do not repeat unchanged extraction.')
         if args.get('key_source'):
             if backend != 'siglus' or command != 'x':
                 raise ValueError('key_source is only accepted for Siglus extraction')
             key_source = self.path('game', args['key_source'])
-            if key_source.suffix.casefold() != '.exe' or key_source.stat().st_size > 64 * 1024 * 1024:
-                raise ValueError('Select an existing matching game executable, at most 64 MiB')
-            with key_source.open('rb') as stream:
-                if stream.read(2) != b'MZ':
-                    raise ValueError('Key source must be a game executable with an MZ header')
+            if (not key_source.is_file() or key_source.stat().st_size > 64 * 1024 * 1024
+                    or (key_source.suffix.casefold() != '.exe'
+                        and key_source.name.casefold() not in ('key.txt', '暗号.dat'))):
+                raise ValueError('Select a local executable or supported key file, at most 64 MiB')
+            if key_source.suffix.casefold() == '.exe':
+                with key_source.open('rb') as stream:
+                    if stream.read(2) != b'MZ':
+                        raise ValueError('Key source executable must have an MZ header')
         key_stamp = self.file_fingerprint(key_source) if key_source else None
         version = hashlib.sha256(CONTEXT['encode']([str(archive), stamp, backend, self.file_fingerprint(executable)])).hexdigest()[:20]
         listing_key = ('specialized-list', version)
@@ -1262,6 +1300,10 @@ class Agent:
             matches = [name for name in names if matcher.search(name)]
         else:
             matches = ARCHIVE_TOOLS['selected'](names, pattern)
+        controls = (ARCHIVE_TOOLS['automatic_control_scripts'](names, matches)
+                    if command == 'x' and args.get('_include_control_scripts') else [])
+        requested_count = len(matches)
+        matches = [*matches, *controls]
         variant = hashlib.sha256(CONTEXT['encode']([str(key_source), key_stamp])).hexdigest()[:12] if key_source else 'default'
         target = self.path('work', 'unpacked/' + version + '-' + variant)
         extracted = []
@@ -1309,7 +1351,7 @@ class Agent:
                     if key_source:
                         argv.extend(['--angou', str(key_source)])
                     commands, cwd = [argv], None
-                deadline = time.monotonic() + 90
+                deadline = key_deadline or (time.monotonic() + 90)
                 for argv in commands:
                     result = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                             cwd=cwd, timeout=max(0.1, deadline-time.monotonic()), creationflags=flags)
@@ -1337,11 +1379,16 @@ class Agent:
                 self.sources.add(str(key_source))
         self.used_skill = True
         self.sources.add(str(archive))
+        companions = ARCHIVE_TOOLS['companion_scripts'](names, matches)
         inventory, _ = CONTEXT['archive_result'](self.work, dict(
-            members=matches, archive=archive.relative_to(self.roots['game']).as_posix(),
+            companion_scripts=companions, members=matches, archive=archive.relative_to(self.roots['game']).as_posix(),
             output=target.relative_to(self.work).as_posix() if extracted else None))
         output = dict(exit_code=0, backend=backend, stdout='', stderr='', members=matches[:30],
-                      member_count=len(matches), member_inventory=inventory,
+                      member_count=len(matches), requested_member_count=requested_count, member_inventory=inventory,
+                      control_script_outputs=[(target/name).relative_to(self.work).as_posix() for name in controls],
+                      companion_scripts=dict(count=len(companions),examples=companions[:16],
+                          inventory=inventory,pointer='/companion_scripts',
+                          hint='Unselected script candidates may contain entry dispatch/menu callbacks/unlock conditions. Read the relevant companions before declaring these unknown; filenames alone do not prove semantics.'),
                       read_members=dict(root='work', path=inventory, pointer='/members'),
                       output=target.relative_to(self.work).as_posix(), sample_output=next(iter(extracted), None), reused=reused)
         if extracted:

@@ -94,7 +94,35 @@ int Session() {
     }
     return 0;
 }
+// 独立窗口供 LEP x86/x64 截图联调；不接触游戏目录，输出路径由隔离测试提供。
+int LocaleWindow(const char* output) {
+    FILE* file = _fsopen(output, "w", _SH_DENYNO);
+    if (!file) return 7;
+    SetProcessDPIAware();
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"GalGearLocaleScreenshotFixture";
+    HBRUSH brush = CreateSolidBrush(RGB(204,102,51));
+    wc.hbrBackground = brush;
+    if (!RegisterClassW(&wc)) { fclose(file); DeleteObject(brush); return 8; }
+    HWND window = CreateWindowExW(WS_EX_TOPMOST, wc.lpszClassName, L"GalGear LEP screenshot fixture",
+        WS_OVERLAPPEDWINDOW, 80, 80, 640, 480, nullptr, nullptr, wc.hInstance, nullptr);
+    if (!window) { fclose(file); UnregisterClassW(wc.lpszClassName,wc.hInstance); DeleteObject(brush); return 8; }
+    ShowWindow(window,SW_SHOW); SetForegroundWindow(window); UpdateWindow(window);
+    fprintf(file,"PID %lu ACP %u READY\n",GetCurrentProcessId(),GetACP()); fflush(file);
+    ULONGLONG start=GetTickCount64();
+    while (IsWindow(window) && GetTickCount64()-start<60000) {
+        MSG message{};
+        while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {TranslateMessage(&message);DispatchMessageW(&message);}
+        Sleep(10);
+    }
+    if (IsWindow(window)) DestroyWindow(window);
+    fclose(file); UnregisterClassW(wc.lpszClassName,wc.hInstance); DeleteObject(brush);
+    return 0;
+}
 int main(int argc, char** argv) {
+    if (argc==3 && strcmp(argv[1],"--locale-window")==0) return LocaleWindow(argv[2]);
     if (argc==2 && strcmp(argv[1],"--session")==0) return Session();
     if (argc==4 && strcmp(argv[1],"--locale-family")==0) {
         fixtureOutput = _fsopen(argv[3],"w",_SH_DENYNO);

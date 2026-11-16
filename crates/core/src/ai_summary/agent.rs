@@ -38,7 +38,7 @@ fn command(home: &Path) -> Result<Command, Message> {
 fn invoke(
     home: &Path,
     work: &Path,
-    payload: Value,
+    mut payload: Value,
     parse: bool,
     mut progress: Option<&mut super::progress::Reporter<'_>>,
 ) -> Result<Value, Message> {
@@ -66,18 +66,27 @@ fn invoke(
     };
     if parse {
         command.arg("--parse");
+        payload["skill"] = json!(crate::config::display_path(
+            &home.join(crate::ai::runtime::SKILL_DIRECTORY)
+        ));
     }
     command
         .stdin(Stdio::piped())
         .stdout(output.reopen().map_err(io)?)
         .stderr(errors.reopen().map_err(io)?);
     #[cfg(windows)]
-    let spawned = super::process::spawn(&mut command, work, parse);
+    let spawned = super::process::spawn(
+        &mut command,
+        work,
+        parse,
+        &payload,
+        (output.as_file(), errors.as_file()),
+    );
     #[cfg(not(windows))]
     let spawned = command.spawn();
     let mut child = spawned.map_err(|error| {
         close_aborted_session(work, parse, "failed");
-        io(error)
+        Message::detail("summary.sandbox_failed", error)
     })?;
     let bytes = serde_json::to_vec(&payload).map_err(io)?;
     let written = child
@@ -127,6 +136,14 @@ fn invoke(
         }
         std::thread::sleep(Duration::from_millis(100));
     };
+    #[cfg(windows)]
+    child
+        .finish(if status.success() {
+            "completed"
+        } else {
+            "failed"
+        })
+        .map_err(|error| Message::detail("summary.sandbox_failed", error))?;
     if !status.success() {
         close_aborted_session(work, parse, "failed");
         if !parse
@@ -294,6 +311,72 @@ pub fn parse(home: &Path, directory: &Path, path: &Path) -> Result<super::sandbo
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "requires the locally packaged AI runtime"]
+    fn packaged_parser_runs_inside_windows_sandbox() {
+        let home = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize()
+            .unwrap();
+        assert!(crate::ai::runtime::host(&home).is_some());
+        let work = tempfile::tempdir().unwrap();
+        let result = invoke(
+            &home,
+            work.path(),
+            json!({
+                "program":"def extract(data, metadata):\n    return {'size': len(data)}\n",
+                "data":"YWJj", "metadata":{}
+            }),
+            true,
+            None,
+        )
+        .unwrap();
+        assert_eq!(result, json!({"size":3}));
+
+        // 使用真实批量读取入口覆盖技能资源读取和工作目录输出，不访问模型服务。
+        let game = tempfile::tempdir().unwrap();
+        let script = game.path().join("chapter.ks");
+        fs::write(&script, "*start\nHello from the isolated reader.\n").unwrap();
+        let output = tempfile::tempfile().unwrap();
+        let errors = tempfile::tempfile().unwrap();
+        let payload = json!({
+            "game":game.path(), "save":game.path(),
+            "skill":home.join(crate::ai::runtime::SKILL_DIRECTORY),
+            "save_candidates":[{"path":script}],
+            "output":work.path().join("read-output"),
+            "items":[{"input":script,"name":"chapter.ks"}]
+        });
+        let mut command = command(&home).unwrap();
+        command.arg("--analysis-read");
+        let mut worker = super::super::process::spawn(
+            &mut command,
+            work.path(),
+            false,
+            &payload,
+            (&output, &errors),
+        )
+        .unwrap();
+        worker
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(&serde_json::to_vec(&payload).unwrap())
+            .unwrap();
+        let status = worker.wait().unwrap();
+        worker.finish("completed").unwrap();
+        use std::io::{Read, Seek};
+        let mut errors = errors;
+        let mut diagnostic = String::new();
+        errors.rewind().unwrap();
+        errors.read_to_string(&mut diagnostic).unwrap();
+        assert!(status.success(), "{diagnostic}");
+        let mut output = output;
+        output.rewind().unwrap();
+        let result: Value = serde_json::from_reader(output).unwrap();
+        assert_eq!(result["succeeded"], 1, "{result}");
+    }
 
     #[test]
     fn new_unavailable_session_returns_a_localized_missing_story_save_message() {

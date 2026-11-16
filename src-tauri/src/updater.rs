@@ -105,7 +105,7 @@ pub(crate) fn run_helper() -> bool {
     };
     crate::diagnostics::initialize();
     log::info!(
-        "updater_start webview_version={:?}",
+        "updater_start available_webview_version={:?}",
         tauri::webview_version()
     );
     let recovery_manifest = manifest.clone();

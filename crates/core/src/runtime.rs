@@ -2,6 +2,9 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod locale;
+pub use locale::{LocaleProfile, locale_profiles, prepare_locale_config};
+
 #[cfg(windows)]
 mod monitor;
 #[cfg(windows)]
@@ -293,44 +296,6 @@ pub fn canonical_hotkey(value: &str) -> Result<String, String> {
     let modifiers = keys.len() - 1;
     keys[..modifiers].sort_unstable();
     Ok(keys.into_iter().filter_map(hotkey_key_name).collect::<Vec<_>>().join("+"))
-}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct LocaleProfile {
-    pub guid: String,
-    pub name: String,
-    pub locale: String,
-    pub admin: bool,
-}
-
-/// Read global profiles without rewriting Locale Emulator configuration.
-pub fn locale_profiles(tool: &Path) -> Result<Vec<LocaleProfile>, String> {
-    let path = tool
-        .parent()
-        .ok_or("Missing tool directory")?
-        .join("LEConfig.xml");
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let doc = scraper::Html::parse_document(&text);
-    let selector = scraper::Selector::parse("profiles > profile").map_err(|e| e.to_string())?;
-    Ok(doc
-        .select(&selector)
-        .filter_map(|element| {
-            let field = |name: &str| {
-                element
-                    .children()
-                    .filter_map(scraper::ElementRef::wrap)
-                    .find(|c| c.value().name() == name)
-                    .map(|e| e.text().collect::<String>())
-                    .unwrap_or_default()
-            };
-            Some(LocaleProfile {
-                guid: element.value().attr("guid")?.into(),
-                name: element.value().attr("name").unwrap_or_default().into(),
-                locale: field("location"),
-                admin: field("runasadmin").eq_ignore_ascii_case("true"),
-            })
-        })
-        .collect())
 }
 
 #[cfg(test)]

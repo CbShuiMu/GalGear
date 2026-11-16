@@ -258,6 +258,66 @@ mod tests {
     use tauri::{Listener, Manager};
     use tokio::sync::watch;
 
+    #[cfg(windows)]
+    #[test]
+    fn startup_reclaims_stale_sandbox_records_and_preserves_failed_records() {
+        use std::os::windows::process::CommandExt;
+        let root = tempfile::tempdir().unwrap();
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "startup::tests::sandbox_recovery_startup_fixture",
+                "--ignored",
+                "--nocapture",
+            ])
+            .env("GALGEAR_RECOVERY_STARTUP_FIXTURE", root.path())
+            .env("LOCALAPPDATA", root.path().join("local"))
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "启动恢复子进程夹具，使用隔离的 LocalAppData"]
+    fn sandbox_recovery_startup_fixture() {
+        let Some(root) = std::env::var_os("GALGEAR_RECOVERY_STARTUP_FIXTURE") else {
+            return;
+        };
+        let root = std::path::Path::new(&root);
+        let journal = root.join("local/GalGear/ai-sandbox/v1");
+        fs::create_dir_all(&journal).unwrap();
+        // 由隔离夹具路径生成身份，覆盖创建记录后尚未创建 profile 的异常退出。
+        use sha2::{Digest, Sha256};
+        let identity = format!("{:x}", Sha256::digest(root.as_os_str().as_encoded_bytes()));
+        let stale = journal.join(format!("GalGear.Analysis.{}.jsonl", &identity[..32]));
+        let failed = journal.join(format!("GalGear.Analysis.{}.jsonl", &identity[32..]));
+        fs::write(&stale, []).unwrap();
+        fs::write(&failed, b"invalid complete record\n").unwrap();
+        let state = crate::state::AppState::load_with_preview(root.join("data"), |_| {
+            assert!(stale.exists(), "应在发布缓存首屏后执行恢复");
+        })
+        .unwrap();
+        assert!(!stale.exists(), "启动应自动删除已回收记录");
+        assert!(failed.exists(), "失败记录必须保留以便重试");
+        assert!(
+            state
+                .catalog
+                .lock()
+                .unwrap()
+                .warnings
+                .iter()
+                .any(|warning| { warning.key == "summary.sandbox_failed" })
+        );
+        assert!(state.settings.lock().is_ok(), "恢复失败不能阻断本地功能");
+    }
+
     #[test]
     fn completion_handles_already_finished_failure_and_closed_loader() {
         tauri::async_runtime::block_on(async {

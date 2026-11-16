@@ -28,7 +28,10 @@ $agentOutput = Join-Path $taskRoot 'tools\ai-agent'
 $agentBuild = Join-Path $taskRoot 'target\ai-agent-build'
 New-Item -ItemType Directory -Path $agentOutput,$agentBuild -Force | Out-Null
 $runtimeDirectory = Split-Path -Parent $agentSource
-$pyInstallerArgs = @('--noconfirm', '--onefile', '--console')
+# LPAC 必须在启动前为 Python DLL 和模块授予只读权限。
+# onefile 的自解包目录使用 bootloader 自建 ACL，无法继承本轮沙盒授权。
+$agentStage = Join-Path $taskRoot 'target\ai-agent-dist'
+$pyInstallerArgs = @('--noconfirm', '--onedir', '--console')
 # The host loads pure verifier modules by filename. Include every production
 # helper so new verification capabilities also exist in the frozen runtime.
 Get-ChildItem -LiteralPath $runtimeDirectory -File |
@@ -40,9 +43,11 @@ $pyInstallerArgs += @('--hidden-import', 'bz2', '--hidden-import', 'lzma', '--hi
     '--hidden-import', 'functools', '--hidden-import', 'mmap', '--hidden-import', 'pefile',
     '--hidden-import', 'cryptography.hazmat.primitives.ciphers',
     '--hidden-import', 'cryptography.hazmat.decrepit.ciphers.algorithms',
-    '--name', 'GalGear.AiAgent', '--distpath', $agentOutput,
+    '--name', 'GalGear.AiAgent', '--distpath', $agentStage,
     '--workpath', $agentBuild, '--specpath', $agentBuild, $agentSource)
 & $selectedPython -m PyInstaller @pyInstallerArgs
 if ($LASTEXITCODE -ne 0) { throw 'AI host build failed. Python and PyInstaller are required on the build machine.' }
+Get-ChildItem -LiteralPath (Join-Path $agentStage 'GalGear.AiAgent') |
+    Copy-Item -Destination $agentOutput -Recurse -Force
 & $selectedPython (Join-Path $PSScriptRoot 'ai-agent-notices.py') $agentOutput
 if ($LASTEXITCODE -ne 0) { throw 'AI host dependency notices could not be packaged.' }

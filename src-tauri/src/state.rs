@@ -77,6 +77,12 @@ impl AppState {
             cg_engines: Vec::new(),
         });
         record_startup_stage("cache", &mut stage);
+        let sandbox_warnings = galgear_core::ai_summary::recover_sandboxes();
+        for warning in &sandbox_warnings {
+            log::warn!("ai_sandbox_recovery_failed {warning:?}");
+        }
+        cached.warnings.extend(sandbox_warnings);
+        record_startup_stage("ai_sandbox_recovery", &mut stage);
         catalog::refresh_availability(&settings, &mut cached);
         let pending_changed = galgear_core::game_setup::mark_new(&mut settings, &cached.games, &Default::default());
         cached.games.retain(|game| !catalog::is_excluded(game, &settings));

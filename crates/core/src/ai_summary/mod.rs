@@ -12,6 +12,8 @@ mod route_html;
 mod route_map;
 mod sandbox;
 mod skill_analysis;
+#[cfg(windows)]
+mod windows_sandbox;
 
 pub use progress::{Progress, Stage, StageProgress, StageStatus};
 pub use route_map::route_map;
@@ -38,6 +40,22 @@ pub const FOLDER: &str = ".galgear-ai-summary";
 pub fn shutdown() {
     #[cfg(windows)]
     process::shutdown();
+}
+
+/// 回收当前用户上次异常退出遗留的 AI 沙盒权限和身份，跳过其他活跃实例。
+/// 应在启动后台线程中调用；失败项保留恢复记录，返回警告但不阻断本地游戏功能。
+pub fn recover_sandboxes() -> Vec<Message> {
+    #[cfg(windows)]
+    {
+        windows_sandbox::recover()
+            .into_iter()
+            .map(|error| Message::detail("summary.sandbox_failed", error))
+            .collect()
+    }
+    #[cfg(not(windows))]
+    {
+        Vec::new()
+    }
 }
 
 fn invalid() -> Message {

@@ -6,6 +6,8 @@ AI 剧情分析默认由 core 的 `ai_summary::skill_analysis` 调用宿主 `ana
 旧 `agent` / `agent_workflow` 继续负责可复用解析器的严格验证，不再阻断新静态分析。
 两种缓存分别持久化，静态定位不获得运行时恢复资格。参见 [AI前情提要](ai-summary.md)。
 
+`ai_summary::windows_sandbox` 负责每任务 LPAC 身份、文件 ACL 和原生进程创建；`process` 保持 Job Object 生命周期管理。所有分析入口在启动时授权，退出时回收权限。`windows_sandbox::journal` 在授权前持久记录身份和路径，桌面启动后台通过 `recover_sandboxes` 回收异常退出残留，独占句柄保护其他活跃实例。运行库打包调整和隔离边界见 [ADR 0005](adr/0005-ai-windows-sandbox.md)。
+
 未知档案研究由 `analysis_formats.py` 管理源码 ZIP 检索、多输入字节程序、输出边界和成员凭据。
 模型程序复用 `agent_host.py` 的纯执行校验；原生算法仅经固定白名单桥接批量计算，不接触游戏进程或任意文件接口。
 停滞时可按需请求源码对照，由分析编排器使用独立上下文完成；普通探查不触发计数式强制审阅，补丁必须重跑，并共享原任务预算；不能替代脚本读取、存档定位和最终交付校验。
@@ -75,6 +77,12 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo clippy -p galgear-ui --target wasm32-unknown-unknown --locked -- -D warnings
 ```
 
+## 内置转区工具
+
+内置 LocaleEmulatorPlus v2.0.6.0 保持 `tools/locale-emulator` 路径，以 `LEPProc_x64.exe` 为入口，由上游启动器自动选择 x86/x64。`core::runtime::locale` 负责只读配置与首次原子迁移，桌面 `bundled_tools` 只迁移内置旧路径，外部 LE 路径仍受支持。首次使用时优先把 `LEConfig.xml` 迁移成 `LEPConfig.xml`，保留 GUID、参数、权限、时区与旧文件；旧注册表重定向标记映射到 LEP 的 0/1/2 模式。已存在的 LEP 配置保持不变，错误在转区启动时报告，不阻塞游戏库。
+
+`scripts/setup-locale-emulator.ps1` 固定官方发布版本与 SHA-256，并保留 GPL/LGPL 和原始来源声明。NSIS、便携包及构建复制清单只带工具文件；配置由运行时生成，避免发行包覆盖用户配置或带入构建机器的配置。LEP 保持上游的参数优先级及目标目录工作目录语义。
+
 ## 游戏截图
 
 `core::screenshots` 维护快捷键校验、游戏内 `screenshots` 路径边界、PNG 原子写入和最近截图读取；桌面端 `screenshots` 的独立线程管理前台游戏识别、Win32 热键、客户区采集和剪贴板；后台键盘接收及管理员输入转发由 `game_input` 统一管理。UI 通过 `configure_tools` 统一保存卡片中的工具、保留份数和截图快捷键，通过 `latest_screenshot`、`open_screenshot_folder` 读取预览和打开目录；`screenshot-updated` 只携带游戏 ID，预览响应用游戏 ID 和请求代数隔离迟到结果。
@@ -119,7 +127,7 @@ GalGear 的 `check_update` 结果通过可缺省的 `notes` 字段传递 GitHub 
 
 ## 汉化启动器与游戏运行会话
 
-Windows 普通启动（包括自定义启动器）默认通过 `tools::game_process` 使用 `ShellExecuteExW` 的 `runas` 请求管理员权限，保留参数及工作目录。参数按 Windows argv 规则转义，不经过命令解释器；系统授权取消时返回明确提示，不降级重试，也不执行启动后最小化或退出。Shell 调用运行在独立 STA 线程，启动仍受 `state::begin_write` 协调。转区启动继续由 Locale Emulator 按所选配置决定权限，默认日文管理员配置，显式指定的其他配置保持原语义。
+Windows 普通启动（包括自定义启动器）默认通过 `tools::game_process` 使用 `ShellExecuteExW` 的 `runas` 请求管理员权限，保留参数及工作目录。参数按 Windows argv 规则转义，不经过命令解释器；系统授权取消时返回明确提示，不降级重试，也不执行启动后最小化或退出。Shell 调用运行在独立 STA 线程，启动仍受 `state::begin_write` 协调。转区启动由内置 LocaleEmulatorPlus（或用户指定的旧 LE）按所选配置决定权限，默认日文管理员配置，显式指定的其他配置保持原语义。
 
 `core::runtime::Monitor` 属于应用实例，由桌面 `tools::RuntimeState` 持有并显式共享给计时、启动检查、存档备份/恢复、补丁写入和封面处理。启动后立即从借用的进程句柄记录 PID 与创建时间，兼容普通 `Child` 和 Shell 返回的管理员进程句柄，启动器即使瞬间退出也不会丢失交接线索。`runtime/processes.rs` 采集一次进程表和窗口表；`runtime/monitor.rs` 在锁外完成系统采集，锁内仅更新会话，较旧的并发快照不能覆盖新状态。桌面观察周期为 1 秒，耗时采集运行在后台任务中。
 

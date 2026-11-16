@@ -1469,6 +1469,11 @@
     "ja-JP": "AI による読み取りプログラムの作成・検証が未完了です：{detail}",
     "en-US": "The AI could not finish writing or validating the extractor: {detail}"
   },
+  "summary.sandbox_failed": {
+    "zh-CN": "AI 分析沙盒初始化或权限回收失败：{detail}",
+    "ja-JP": "AI 分析サンドボックスの初期化またはアクセス権の回収に失敗しました：{detail}",
+    "en-US": "AI analysis sandbox initialization or permission cleanup failed: {detail}"
+  },
   "save.saved_games": {
     "zh-CN": "Saved Games 中匹配的存档目录",
     "ja-JP": "Saved Games 内の候補",
@@ -2530,9 +2535,9 @@
     "en-US": "Save backups and bundled tools"
   },
   "tools.locale": {
-    "zh-CN": "Locale Emulator：LEProc.exe 路径",
-    "ja-JP": "Locale Emulator：LEProc.exe の場所",
-    "en-US": "Locale Emulator: LEProc.exe path"
+    "zh-CN": "转区工具：LEPProc_x64.exe / LEProc.exe 路径",
+    "ja-JP": "ロケールツール：LEPProc_x64.exe / LEProc.exe の場所",
+    "en-US": "Locale tool: LEPProc_x64.exe / LEProc.exe path"
   },
   "tools.magpie": {
     "zh-CN": "Magpie.exe 路径",
@@ -2590,9 +2595,9 @@
     "en-US": "Save locale profile"
   },
   "tools.locale_missing": {
-    "zh-CN": "未找到内置转区工具，请保留软件目录中的 tools/locale-emulator，或在设置中指定 LEProc.exe 路径。",
-    "ja-JP": "内蔵ロケールツールが見つかりません。tools/locale-emulator を復元するか、設定で LEProc.exe を指定してください。",
-    "en-US": "Bundled locale tool not found. Keep tools/locale-emulator beside the app, or set the LEProc.exe path in Settings."
+    "zh-CN": "未找到内置转区工具，请保留软件目录中的 tools/locale-emulator，或在设置中指定 LEPProc_x64.exe / LEProc.exe 路径。",
+    "ja-JP": "内蔵ロケールツールが見つかりません。tools/locale-emulator を復元するか、設定で LEPProc_x64.exe / LEProc.exe を指定してください。",
+    "en-US": "Bundled locale tool not found. Keep tools/locale-emulator beside the app, or set the LEPProc_x64.exe / LEProc.exe path in Settings."
   },
   "tools.path_invalid": {
     "zh-CN": "工具程序文件不存在或无法访问：{path}。请在设置中填写完整的程序文件路径，并点击“保存”。",

@@ -25,11 +25,18 @@ Magpie 的启动与退出由同一次提权启动的后台进程管理，退出�
 除便携配置外，也支持 Magpie 0.13 的用户配置目录。
 如另一个目录的 Magpie 已在运行，请先退出它，以便使用内置版本及配置。
 
-转区：tools/locale-emulator/LEProc.exe（本机 Locale Emulator 2.5.0.1）
-配置：tools/locale-emulator/LEConfig.xml
+转区：tools/locale-emulator/LEPProc_x64.exe（LocaleEmulatorPlus v2.0.6.0）
+同时附带 LEPProc_x86.exe 及两套核心 DLL，启动器按目标程序架构自动切换。
+配置：tools/locale-emulator/LEPConfig.xml（首次使用时创建）
 在游戏配置中勾选“转区启动”。默认使用 Run in Japanese (Admin)，
 Windows 可能显示管理员确认；指定其他配置 GUID 时遵从所选配置。
-无需为了 GalGear 调用而安装 Locale Emulator 的右键菜单扩展。
+无需安装右键菜单扩展。只随包提供启动器、核心 DLL、配置 GUI、语言资源和许可证，
+不附带独立更新器或安装器。可打开 LEPGUI.exe 调整转区配置。
+旧版内置 LE 路径会自动迁移，外部 LEProc.exe 路径保持不变。首次使用 LEP 时，
+如果存在 LEConfig.xml，则保留旧文件并迁移配置及 GUID；已有 LEPConfig.xml 不覆盖。
+升级包不携带本机 LE/LEP 配置，旧配置损坏会明确报告，不静默恢复默认值。
+构建前运行 scripts/setup-locale-emulator.ps1，按固定 SHA-256 校验官方发布包。
+运行环境需要 .NET Framework 4.8（Windows 10/11 通常已包含）。
 
 标签筛选
 “已收藏／未收藏”和“已通关／未通关”位于标签筛选弹窗的“游戏状态”区域。
@@ -39,7 +46,11 @@ Windows 可能显示管理员确认；指定其他配置 GUID 时遵从所选配
 
 上游项目及源代码
 Magpie：https://github.com/Blinue/Magpie/tree/v0.13.0
-Locale Emulator：https://github.com/xupefei/Locale-Emulator
+LocaleEmulatorPlus：https://github.com/julixian/LocaleEmulatorPlus/tree/v2.0.6.0
+原生核心：https://github.com/julixian/LocaleEmulatorPlus-Core
+原始 Locale Emulator：https://github.com/xupefei/Locale-Emulator
+LEP 继承的 GPL/LGPL 原文见 tools/locale-emulator/COPYING、COPYING.LESSER，
+原始来源声明见 README_ORG.md，固定版本与下载校验值见 bundle.json。
 各工具目录保留其许可证；effects 中的算法保留原文件及声明。
 
 程序默认仍使用 %APPDATA%/com.galgear.desktop 保存游戏库和偏好。

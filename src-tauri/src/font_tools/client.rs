@@ -114,7 +114,7 @@ mod tests {
         time::{Duration, Instant},
     };
     #[test]
-    #[ignore = "需要日文非管理员 Locale Emulator 配置及 x86 字体夹具；不启动真实游戏"]
+    #[ignore = "需要内置 LEP 及 x86/x64 字体夹具；不启动真实游戏"]
     fn native_locale_chinese_family_preserves_shift_jis() {
         use std::os::windows::process::CommandExt;
         struct Launcher(std::process::Child);
@@ -125,69 +125,75 @@ mod tests {
             }
         }
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-        let emulator = root.join("tools/locale-emulator/LEProc.exe");
+        let emulator = root.join(crate::bundled_tools::LOCALE);
+        galgear_core::runtime::prepare_locale_config(&emulator).unwrap();
         let profile = galgear_core::runtime::locale_profiles(&emulator)
             .unwrap()
             .into_iter()
             .find(|profile| profile.locale == "ja-JP" && !profile.admin)
             .expect("Japanese non-admin fixture profile required");
-        let executable = root
-            .join("target/font-fixtures/x86/font-fixture.exe")
-            .canonicalize()
-            .unwrap();
-        for (face, requested, spoof) in [
-            ("SimHei", "黑体", None),
-            ("STZhongsong", "华文中宋", None),
-            ("SimHei", "黑体", Some(CharsetSpoof { from: 128, to: 128 })),
-            (
-                "STZhongsong",
-                "华文中宋",
-                Some(CharsetSpoof { from: 128, to: 128 }),
-            ),
-        ] {
-            let temp = tempfile::tempdir().unwrap();
-            let output = temp.path().join("font-result.txt");
-            let _launcher = Launcher(
-                Command::new(&emulator)
-                    .args(["-runas", &profile.guid])
-                    .arg(&executable)
-                    .args(["--locale-family", face])
-                    .arg(&output)
-                    .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW)
-                    .spawn()
-                    .unwrap(),
-            );
-            let started = Instant::now();
-            let mut submitted = false;
-            loop {
-                let text = std::fs::read_to_string(&output).unwrap_or_default();
-                if !submitted && text.contains("READY") {
-                    assert!(
-                        text.contains("ACP 932"),
-                        "fixture did not run under Japanese locale"
-                    );
-                    let pid = text.split_whitespace().nth(1).unwrap().parse().unwrap();
-                    apply(
-                        pid,
-                        &executable,
-                        &Profile {
-                            face: requested.into(),
-                            charset_spoof: spoof,
-                            ..Default::default()
-                        },
-                    )
-                    .unwrap();
-                    submitted = true;
-                }
-                if text.contains("RESULT") {
-                    assert!(submitted && text.contains("RESULT 0"), "{face}: {text}");
-                    break;
-                }
-                assert!(
-                    started.elapsed() < Duration::from_secs(30),
-                    "locale fixture timed out: {text}"
+        for arch in ["x86", "x64"] {
+            let executable = root
+                .join(format!("target/font-fixtures/{arch}/font-fixture.exe"))
+                .canonicalize()
+                .unwrap();
+            for (face, requested, spoof) in [
+                ("SimHei", "黑体", None),
+                ("STZhongsong", "华文中宋", None),
+                ("SimHei", "黑体", Some(CharsetSpoof { from: 128, to: 128 })),
+                (
+                    "STZhongsong",
+                    "华文中宋",
+                    Some(CharsetSpoof { from: 128, to: 128 }),
+                ),
+            ] {
+                let temp = tempfile::tempdir().unwrap();
+                let output = temp.path().join("font-result.txt");
+                let _launcher = Launcher(
+                    Command::new(&emulator)
+                        .args(["-runas", &profile.guid])
+                        .arg(&executable)
+                        .args(["--locale-family", face])
+                        .arg(&output)
+                        .creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW)
+                        .spawn()
+                        .unwrap(),
                 );
-                std::thread::sleep(Duration::from_millis(50));
+                let started = Instant::now();
+                let mut submitted = false;
+                loop {
+                    let text = std::fs::read_to_string(&output).unwrap_or_default();
+                    if !submitted && text.contains("READY") {
+                        assert!(
+                            text.contains("ACP 932"),
+                            "fixture did not run under Japanese locale"
+                        );
+                        let pid = text.split_whitespace().nth(1).unwrap().parse().unwrap();
+                        apply(
+                            pid,
+                            &executable,
+                            &Profile {
+                                face: requested.into(),
+                                charset_spoof: spoof,
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                        submitted = true;
+                    }
+                    if text.contains("RESULT") {
+                        assert!(submitted && text.contains("RESULT 0"), "{face}: {text}");
+                        eprintln!(
+                            "LEP {arch} {face}, spoof={spoof:?}: glyphs and Shift-JIS verified"
+                        );
+                        break;
+                    }
+                    assert!(
+                        started.elapsed() < Duration::from_secs(30),
+                        "locale fixture timed out: {text}"
+                    );
+                    std::thread::sleep(Duration::from_millis(50));
+                }
             }
         }
     }

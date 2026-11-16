@@ -14,6 +14,7 @@ import time
 
 
 SCHEMA = 1
+CONTROL_HINTS=runpy.run_path(str(Path(__file__).with_name('analysis_control_hints.py')))
 RECAP=runpy.run_path(str(Path(__file__).with_name('analysis_recap.py')))
 READERS=runpy.run_path(str(Path(__file__).with_name('agent_skill_readers.py')))
 FORMATS=runpy.run_path(str(Path(__file__).with_name('analysis_formats.py')))
@@ -53,6 +54,13 @@ For repeated decisions or a large graph, use query_data to build the complete ro
 
 
 
+
+SYSTEM += '''
+ROUTE COMPLETENESS: Budget is 256 nodes, 512 edges and 262144 UTF-8 graph bytes, independent of model reply size. For repeated decisions use query_data to assemble the full payload from the menu inventory, then submit_route(route_file=output). Keep a separate decision per source occurrence, even for repeated/cosmetic wording or common targets. Reduce narration/evidence repetition, never delete menu occurrences to fit a reply. Repair a saved route file instead of retyping it.
+Use decision_kind=player for displayed choices (including UI-return dispatch) and decision_kind=condition for automatic flag/affection tests. The latter use kind=flow edges with readable conditions, never kind=choice; keep the decision before branch-specific narration. A menu option with an enabled condition is still a player choice.
+The analysis host automatically reads small same-archive text control sets as control_script_reads; reuse those indexes and control_sources, including entry/setup overrides. Read companion_scripts from archive output and control_sources from read_resources: these preview ALL relevant text files, not only the first six. The full source remains in the reader JSON /text. Follow referenced functions/assignments in the corresponding companion scripts; keywords and file names are search hints, not semantic proof.
+UNLOCK TRACE: An observed true/extra entry selector proves dispatch, not unlock. Before marking its prerequisite unknown, batch-search that selector's ASSIGNMENTS, then inspect the originating menu/button enabled condition and the WRITERS of its persistent clear flags. Include title/menu/system scripts, not just scenario dialogue; extract only the relevant readable text/scripts using the same archive tool. Follow aliases/callbacks one step when the target is assigned indirectly. Link supported prerequisites with unlock edges; report unknown only with the search scope and remaining gap. This is evidence gathering, not an additional review API call or completion gate.
+'''
 
 def tools(api):
     # 已知格式统一经 read_resources，确保格式观察与提要选择共享同一登记表。
@@ -264,6 +272,7 @@ class AnalysisAgent:
         return dict(index=index, selected=len(paths), succeeded=result['succeeded'], failed=result['failed'],
                     dialogue_count=sum(r.get('dialogue_count',0) for r in result['records']),
                     records=result['records'][:6], errors=[r for r in result['records'] if 'error' in r][:8],
+                    control_sources=CONTROL_HINTS['batch_hints'](result['records']),
                     choice_sources=[{k:r[k] for k in ('name','output','choice_count','choice_preview','menu_locations') if k in r}
                                     for r in result['records'] if r.get('choice_count')][:64],
                     reused=sum(r.get('reused',False) for r in result['records']),
@@ -336,7 +345,8 @@ class AnalysisAgent:
         nodes, edges = graph.get('nodes', []), graph.get('edges', [])
         ids = {n.get('id') for n in nodes}
         if not 1 <= len(nodes) <= 256 or len(ids) != len(nodes) or len(edges) > 512 or len(json.dumps(graph,ensure_ascii=False).encode()) > 262144:
-            raise ValueError('Graph needs 1..256 unique nodes, <=512 edges, <=262144 bytes')
+            self.emit('route-input.json', args)
+            raise ValueError('Graph needs 1..256 unique nodes, <=512 edges, <=262144 bytes. Full draft saved as route-input.json. Repair with query_data and route_file; group narration/repeated evidence only, never omit choice occurrences.')
         for node in nodes:
             if node.get('kind') not in ('start','scene','choice','save','ending','extra','grand') or not node.get('evidence') or not node.get('label'):
                 raise ValueError('Node kind, label and evidence required')
@@ -392,7 +402,7 @@ class AnalysisAgent:
         excluded=args.get('scope',{}).get('excluded_menus',[])
         if excluded and (not isinstance(excluded,list) or any(not isinstance(m,dict) or not m.get('source') or not m.get('reason') for m in excluded)):
             raise ValueError('excluded_menus must list source locations and non-story reasons')
-        choices=sum(n['kind']=='choice' for n in nodes)
+        choices=sum(n['kind']=='choice' and n.get('decision_kind')!='condition' for n in nodes)
         if choices+len(excluded)<len(menu_locations):
             raise ValueError('Selected script tables contain '+str(len(menu_locations))+' distinct menu locations, but graph has '+str(choices)+' decision nodes. If original and localized/patch batches coexist, set scope.script_indexes and resource_selection to the effective set. Preserve each real occurrence, including identical/cosmetic options at different positions. Only non-story menus may be listed in scope.excluded_menus with source/reason.')
         labels={e['label'] for e in edges}
@@ -416,6 +426,10 @@ class AnalysisAgent:
         if any(n['kind']=='save' and n['id'] not in reached for n in nodes):
             raise ValueError('Current save marker must be reachable from a start node. Attach its corresponding story scene -> save (inferred if only a caption candidate), not a separate save -> scene root.')
         for node in nodes:
+            if node.get('decision_kind')=='condition':
+                for edge in edges:
+                    if edge['from']==node['id'] and edge.get('kind')=='choice':
+                        edge['kind']='flow'
             flow=[e for e in edges if e['from']==node['id'] and e.get('kind','flow') not in ('unlock','reference') and by_id[e['to']]['kind']!='save']
             if node['kind']=='choice':
                 if node.get('decision_kind') not in ('player','condition'):
@@ -536,6 +550,7 @@ class AnalysisAgent:
             self.progress('route', 'running')
             return self.submit_route(args)
         if name == 'run_skill':
+            args=dict(args,_include_control_scripts=True)
             self.progress('resources', 'running')
             archive = self.host.path('game', args['archive'])
             self.stamp(archive)
@@ -549,7 +564,15 @@ class AnalysisAgent:
             path = self.host.path(args['root'], args['path'])
             if path.is_file() and args['root'] != 'skill':
                 self.stamp(path)
-        result = self.host._dispatch(name, args)
+        result=self.host._dispatch(name, args)
+        if name=='run_skill' and result.get('control_script_outputs'):
+            try:
+                result['control_script_reads']=self.batch(dict(root='work',
+                    paths=result['control_script_outputs'],reader='auto',options=dict(script_text=True)))
+            except Exception as error:
+                # Discovery is helpful evidence, not another completion gate.
+                result['control_script_read_error']=str(error)[:1200]
+
         if name == 'run_skill' and isinstance(result,dict) and result.get('exit_code',0):
             result['recovery'] = 'Backend failed. For a selected script archive, read reverse/SKILL.md and inspect bundled tool source via read_reference, then author run_format_program. Do not repeat unchanged CLI failures.'
         return result

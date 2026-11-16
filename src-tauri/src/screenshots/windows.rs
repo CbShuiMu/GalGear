@@ -9,6 +9,8 @@ use windows_sys::Win32::{
 
 #[cfg(test)]
 mod keyboard;
+#[cfg(test)]
+mod locale_tests;
 use crate::game_window::magpie;
 mod notification;
 pub(super) use notification::Notification;

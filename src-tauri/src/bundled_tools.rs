@@ -14,7 +14,7 @@ pub(crate) use process::{
 };
 
 pub(crate) const MAGPIE: &str = "tools/magpie/Magpie.exe";
-pub(crate) const LOCALE: &str = "tools/locale-emulator/LEProc.exe";
+pub(crate) const LOCALE: &str = "tools/locale-emulator/LEPProc_x64.exe";
 
 pub(crate) fn resolve(base: &Path, configured: &str) -> PathBuf {
     let path = Path::new(configured);
@@ -31,6 +31,16 @@ pub(crate) fn apply_defaults(settings: &mut Settings, base: &Path) -> bool {
         settings.locale_emulator.clone(),
         settings.magpie_hotkey.clone(),
     );
+    // 更新包可能保留旧二进制；只有内置路径迁移到 LEP，外部 LE 路径仍由用户选择。
+    let legacy = "tools/locale-emulator/LEProc.exe";
+    let configured = settings.locale_emulator.replace('\\', "/");
+    let bundled_legacy = base.join(legacy).to_string_lossy().replace('\\', "/");
+    if base.join(LOCALE).is_file()
+        && (configured.eq_ignore_ascii_case(legacy)
+            || configured.eq_ignore_ascii_case(&bundled_legacy))
+    {
+        settings.locale_emulator = LOCALE.into();
+    }
     for (configured, bundled) in [
         (&mut settings.magpie, MAGPIE),
         (&mut settings.locale_emulator, LOCALE),
@@ -40,6 +50,12 @@ pub(crate) fn apply_defaults(settings: &mut Settings, base: &Path) -> bool {
         {
             *configured = bundled.into();
         }
+    }
+    if !settings.locale_emulator.is_empty()
+        && let Err(error) = runtime::prepare_locale_config(&resolve(base, &settings.locale_emulator))
+    {
+        // 转区配置故障不阻止本地游戏库加载；实际启动时再次校验并向用户报告。
+        log::warn!("locale_config_prepare_failed: {error}");
     }
     if !settings.magpie.is_empty() {
         // Read the portable configuration on startup as well as before every launch.
@@ -266,6 +282,26 @@ mod tests {
         assert_eq!(settings.locale_emulator, LOCALE);
         assert!(resolve(moved.path(), &settings.magpie).is_file());
         assert!(resolve(moved.path(), &settings.locale_emulator).is_file());
+    }
+
+    #[test]
+    fn old_bundled_locale_paths_upgrade_but_external_le_is_preserved() {
+        let temp = tempfile::tempdir().unwrap();
+        let legacy = temp.path().join("tools/locale-emulator/LEProc.exe");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, []).unwrap();
+        std::fs::write(temp.path().join(LOCALE), []).unwrap();
+        for configured in [r"tools\locale-emulator\LEProc.exe".into(), legacy.to_string_lossy().into_owned()] {
+            let mut settings = Settings { locale_emulator: configured, ..Default::default() };
+            assert!(apply_defaults(&mut settings, temp.path()));
+            assert_eq!(settings.locale_emulator, LOCALE);
+        }
+        let external = temp.path().join("custom/LEProc.exe");
+        std::fs::create_dir_all(external.parent().unwrap()).unwrap();
+        std::fs::write(&external, []).unwrap();
+        let mut settings = Settings { locale_emulator: external.to_string_lossy().into_owned(), ..Default::default() };
+        apply_defaults(&mut settings, temp.path());
+        assert_eq!(Path::new(&settings.locale_emulator), external);
     }
 
     #[test]

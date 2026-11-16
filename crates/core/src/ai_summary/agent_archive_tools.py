@@ -20,11 +20,62 @@ def literal_glob_path(path):
     return re.sub(r'[\[\]*?]', lambda match: '[' + match[0] + ']', str(path))
 
 
+def siglus_key_candidates(archive, game):
+    """Keep key discovery beside the original archive, even when decoding a copy.
+
+    These are candidates only. The installed decoder must accept the key against
+    the actual payload; executable names or an MZ header never prove a match.
+    """
+    with archive.open('rb') as stream:
+        header = stream.read(92)
+    if len(header) != 92 or not struct.unpack('<23i', header)[21]:
+        return []
+    candidates = []
+    for directory in dict.fromkeys((archive.parent, game)):
+        for path in sorted(directory.iterdir(), key=lambda p: (
+                not p.name.casefold().startswith('siglusengine'), p.name.casefold())):
+            if (not path.is_file() or path.resolve() != path or not path.is_relative_to(game)
+                    or path.stat().st_size > 64 * 1024 * 1024):
+                continue
+            if path.suffix.casefold() == '.exe':
+                with path.open('rb') as stream:
+                    if stream.read(2) != b'MZ':
+                        continue
+            elif path.name.casefold() not in ('key.txt', '暗号.dat'):
+                continue
+            if path not in candidates:
+                candidates.append(path)
+    return candidates
+
+
 def selection_error(category, message, **facts):
     """Keep resource discovery blockers distinct from parser/format failures."""
     error = ValueError(message)
     error.error_details = dict(category=category, **facts)
     return error
+
+
+def companion_scripts(names, selected_names):
+    """Expose control scripts a dialogue-only extraction filter would hide."""
+    selected_set = set(selected_names)
+    suffixes = ('.ks', '.tjs', '.lua', '.ast', '.asb', '.rpy', '.ss', '.func')
+    candidates = [name for name in names if name not in selected_set and name.casefold().endswith(suffixes)]
+    return sorted(candidates, key=lambda name: (
+        not re.search(r'(?:start|boot|title|menu|init|flow)', name, re.I), name.casefold()))
+
+
+def automatic_control_scripts(names, selected_names):
+    """Analysis-only convenience: include a small text control set beside scripts.
+
+    General resource extraction keeps its exact filter. Large framework trees
+    remain explicit candidates so a story request does not become a UI audit.
+    """
+    if not any(name.casefold().endswith(('.scn','.ks','.ast','.ss','.rpy','.lua','.asb'))
+               for name in selected_names):
+        return []
+    candidates=list(dict.fromkeys(name for name in companion_scripts(names,selected_names)
+        if name.casefold().endswith(('.ks','.tjs','.lua','.rpy','.ss','.func'))))
+    return candidates if len(candidates)<=16 else []
 
 
 def mod_installed(skill):

@@ -38,6 +38,7 @@ struct SessionLog {
     started: Instant,
     privacy: privacy::Redactor,
     failed: AtomicBool,
+    webview_process_failed: AtomicBool,
 }
 
 impl SessionLog {
@@ -59,6 +60,7 @@ impl SessionLog {
                         started: Instant::now(),
                         privacy: privacy::Redactor::new()?,
                         failed: AtomicBool::new(false),
+                        webview_process_failed: AtomicBool::new(false),
                     });
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -178,9 +180,21 @@ fn show_failure(key: &str, detail: &str) {
         .show();
 }
 
-/// 仅完整退出路径调用；后台任务的可恢复 panic 不阻止后续正常退出。
+/// 记录已观察到的 WebView2 进程故障；ERROR 写入完成前执行 sync_data。
+#[cfg(windows)]
+fn record_webview_failure(message: std::fmt::Arguments<'_>) {
+    if let Some(logger) = LOGGER.get() {
+        logger.webview_process_failed.store(true, Ordering::Relaxed);
+    }
+    log::error!(target: "galgear::diagnostics::webview", "{message}");
+}
+
+/// 仅完整退出路径调用；保留本次会话已观察到的界面进程故障标记。
 pub(crate) fn finish() {
-    log::info!(target: "galgear::session", "session_end");
+    let webview_process_failed = LOGGER
+        .get()
+        .is_some_and(|logger| logger.webview_process_failed.load(Ordering::Relaxed));
+    log::info!(target: "galgear::session", "session_end webview_process_failed={webview_process_failed}");
     log::logger().flush();
 }
 

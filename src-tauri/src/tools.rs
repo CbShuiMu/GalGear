@@ -217,6 +217,8 @@ fn launch_game_at(
     let locale = mode.as_deref().unwrap_or(&edit.launch_mode) == "locale";
     let mut command = if locale {
         let locale_emulator = tool_path(&settings.locale_emulator, "tools.locale_missing")?;
+        runtime::prepare_locale_config(&locale_emulator)
+            .map_err(|e| Message::detail("tools.error", e))?;
         let mut command = std::process::Command::new(&locale_emulator);
         let profiles = runtime::locale_profiles(&locale_emulator)
             .map_err(|e| Message::detail("tools.error", e))?;

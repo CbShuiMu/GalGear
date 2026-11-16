@@ -73,6 +73,10 @@ fn credentials_urls_and_personal_paths_are_redacted() {
     );
     let long = redactor.clean(&"中".repeat(40_000));
     assert!(long.ends_with(" [truncated]"));
+    assert_eq!(
+        redactor.clean(r#"browser_exe="C:\Users\Alice Smith\AppData\Local\Microsoft\EdgeWebView\msedgewebview2.exe""#),
+        r#"browser_exe="[user]\AppData\Local\Microsoft\EdgeWebView\msedgewebview2.exe""#,
+    );
 }
 
 #[test]
@@ -84,7 +88,7 @@ fn unwritable_destination_reports_error() {
     assert_eq!(fs::read_to_string(file).unwrap(), "do not replace");
 }
 
-fn run_crash_child(kind: &str) -> String {
+fn run_session_child(kind: &str, expected_success: bool) -> String {
     let directory = tempfile::tempdir().unwrap();
     let output = Command::new(std::env::current_exe().unwrap())
         .args([
@@ -97,7 +101,7 @@ fn run_crash_child(kind: &str) -> String {
         .env("GALGEAR_TEST_CRASH_KIND", kind)
         .output()
         .unwrap();
-    assert!(!output.status.success(), "child must fail");
+    assert_eq!(output.status.success(), expected_success, "{output:?}");
     let file = fs::read_dir(directory.path())
         .unwrap()
         .next()
@@ -109,7 +113,7 @@ fn run_crash_child(kind: &str) -> String {
 
 #[test]
 fn panic_records_location_backtrace_and_last_operation_before_exit() {
-    let log = run_crash_child("panic");
+    let log = run_session_child("panic", false);
     assert!(log.contains("last_operation"));
     assert!(log.contains("galgear::panic"));
     assert!(log.contains("diagnostic test panic"));
@@ -121,12 +125,45 @@ fn panic_records_location_backtrace_and_last_operation_before_exit() {
 #[cfg(windows)]
 #[test]
 fn native_exception_records_fault_code_and_address() {
-    let log = run_crash_child("native");
+    let log = run_session_child("native", false);
     assert!(log.contains("last_operation"));
     assert!(log.contains("galgear::native_crash"), "{log}");
     assert!(log.contains("0xE0424747"));
     assert!(log.contains("module_base"));
     assert!(!log.contains("session_end"));
+}
+
+#[test]
+fn clean_session_reports_no_webview_failure() {
+    let log = run_session_child("clean", true);
+    assert!(
+        log.contains("session_end webview_process_failed=false"),
+        "{log}"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn webview_failure_without_details_is_recorded_in_session_summary() {
+    let log = run_session_child("webview_unavailable", true);
+    let records: Vec<serde_json::Value> = log
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let failure = records
+        .iter()
+        .find(|record| {
+            record["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("webview_process_failed ")
+        })
+        .unwrap();
+    assert_eq!(failure["level"], "ERROR");
+    assert!(
+        log.contains("session_end webview_process_failed=true"),
+        "{log}"
+    );
 }
 
 #[cfg(windows)]
@@ -144,6 +181,7 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
 
     let browser_crash = std::env::var_os("GALGEAR_TEST_BROWSER_CRASH").is_some();
     let root = tempfile::tempdir().unwrap();
+    let panic_hook = std::panic::take_hook();
     initialize_at(&root.path().join("logs")).unwrap();
     let log_path = LOGGER.get().unwrap().path.clone();
     let profile = root.path().join("webview");
@@ -228,8 +266,14 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
         })
         .build(context)
         .unwrap();
-    let exit_code = app.run_return(|_, _| {});
+    let exit_code = app.run_return(|_, event| {
+        if matches!(event, tauri::RunEvent::Exit) {
+            super::finish();
+        }
+    });
     let log = fs::read_to_string(log_path).unwrap();
+    // 恢复测试框架输出，断言失败时应能看到临时日志中的诊断证据。
+    std::panic::set_hook(panic_hook);
     assert_eq!(exit_code, 0, "{log}");
     assert!(
         log.contains("webview_diagnostics_ready window=main browser_pid=Some("),
@@ -237,6 +281,44 @@ fn native_webview_records_frontend_view_and_renderer_failure() {
     );
     assert!(
         log.contains("webview_failure_report_folder window=main path="),
+        "{log}"
+    );
+    let records: Vec<serde_json::Value> = log
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let runtime = records
+        .iter()
+        .filter_map(|record| record["message"].as_str())
+        .find_map(|message| message.strip_prefix("webview_diagnostics_ready window=main "))
+        .unwrap();
+    assert!(runtime.contains("browser_pid=Some("), "{runtime}");
+    assert!(
+        regex::Regex::new(r"webview_version=\d+\.\d+\.\d+\.\d+")
+            .unwrap()
+            .is_match(runtime),
+        "{runtime}"
+    );
+    assert!(
+        runtime.to_lowercase().contains("msedgewebview2.exe\""),
+        "{runtime}"
+    );
+    let failure = records
+        .iter()
+        .find(|record| {
+            record["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("webview_process_failed ")
+        })
+        .unwrap();
+    assert_eq!(failure["level"], "ERROR");
+    assert!(
+        failure["message"].as_str().unwrap().ends_with(runtime),
+        "{failure}"
+    );
+    assert!(
+        log.contains("session_end webview_process_failed=true"),
         "{log}"
     );
 }
@@ -249,6 +331,19 @@ fn crash_child() {
     };
     initialize_at(std::path::Path::new(&directory)).unwrap();
     log::info!("last_operation");
+    let kind = std::env::var("GALGEAR_TEST_CRASH_KIND").unwrap_or_default();
+    if kind == "clean" {
+        super::finish();
+        return;
+    }
+    #[cfg(windows)]
+    if kind == "webview_unavailable" {
+        super::record_webview_failure(format_args!(
+            "webview_process_failed window=main details=unavailable"
+        ));
+        super::finish();
+        return;
+    }
     if std::env::var("GALGEAR_TEST_CRASH_KIND").as_deref() == Ok("native") {
         #[cfg(windows)]
         // SAFETY: 仅在本测试派生的独立进程触发无参数、不可继续的测试异常；禁用系统错误弹窗。

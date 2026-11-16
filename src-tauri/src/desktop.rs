@@ -90,7 +90,7 @@ pub(crate) fn run() {
         })
         .setup(|app| {
             crate::diagnostics::observe_events(app.handle());
-            log::info!("desktop_setup webview_version={:?}", tauri::webview_version());
+            log::info!("desktop_setup available_webview_version={:?}", tauri::webview_version());
             #[cfg(windows)]
             if let Some(window) = app.get_webview_window("main") {
                 let handle = app.handle().clone();
