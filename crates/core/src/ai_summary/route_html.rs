@@ -4,7 +4,7 @@ use galgear_i18n::{Language, Message, tr};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
-pub(super) fn render(graph: &Graph, title: &str, language: Language) -> Result<String, Message> {
+pub(super) fn data(graph: &Graph, title: &str, language: Language) -> Result<Value, Message> {
     graph.validate()?;
     let mut data = serde_json::to_value(graph).map_err(io)?;
     let mut reached = BTreeSet::new();
@@ -67,6 +67,11 @@ pub(super) fn render(graph: &Graph, title: &str, language: Language) -> Result<S
     data["title"] = json!(title);
     data["language"] = json!(language.code());
     data["validation"] = json!(validation);
+    Ok(data)
+}
+
+pub(super) fn render(graph: &Graph, title: &str, language: Language) -> Result<String, Message> {
+    let data = data(graph, title, language)?;
     // JSON script contents must not be able to terminate the script element, even inside strings.
     let encoded = serde_json::to_string(&data)
         .map_err(io)?
@@ -77,26 +82,22 @@ pub(super) fn render(graph: &Graph, title: &str, language: Language) -> Result<S
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;");
-    // 仅扫描固定模板一次，输入中的占位符文本永远不参与下一轮替换。
-    let mut html = String::new();
-    for (index, part) in include_str!("../../../../web/route-map.html")
-        .split("__")
-        .enumerate()
-    {
-        if index % 2 == 0 {
-            html.push_str(part);
-            continue;
-        }
-        html.push_str(match part {
-            "STYLE" => include_str!("../../../../web/route-map.css"),
-            "SCRIPT" => include_str!("../../../../web/route-map.js"),
-            "LANG" => language.code(),
-            "TITLE" => &escaped_title,
-            "DATA" => &encoded,
-            _ => return Err(super::invalid()),
-        });
-    }
-    Ok(html)
+    let template = include_str!("../../../../web/route-map.html");
+    let (_, view) = template
+        .split_once("<!-- route view -->")
+        .ok_or_else(super::invalid)?;
+    let (view, _) = view
+        .split_once("<!-- route scripts -->")
+        .ok_or_else(super::invalid)?;
+    Ok(format!(
+        r#"<!doctype html><html lang="{lang}"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>{escaped_title}</title><style>{style}</style>{view}<script id="route-data" type="application/json">{encoded}</script><script>{script}</script></html>"#,
+        lang = language.code(),
+        style = include_str!("../../../../web/route-map.css"),
+        script = include_str!("../../../../web/route-map.js")
+    ))
 }
 
 #[cfg(test)]

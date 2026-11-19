@@ -10,7 +10,7 @@ mod collections;
 mod covers;
 mod cover_art;
 mod data_sources;
-mod default_browser;
+mod route_window;
 mod desktop;
 mod diagnostics;
 mod dialogs;

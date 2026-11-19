@@ -268,9 +268,13 @@ pub(super) fn summarize(
     Ok(summary)
 }
 
-pub(super) fn route(game: &Game, settings: &Settings) -> Result<PathBuf, Message> {
+pub(super) fn graph(game: &Game, settings: &Settings) -> Result<route_graph::Graph, Message> {
     let record = load(game, settings, false)?;
-    let graph = validate(&record.result)?;
+    validate(&record.result)
+}
+
+pub(super) fn route(game: &Game, settings: &Settings) -> Result<PathBuf, Message> {
+    let graph = graph(game, settings)?;
     let path = cache(game, settings.language).join("route-map.html");
     fs::write(
         &path,

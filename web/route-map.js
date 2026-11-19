@@ -1,7 +1,9 @@
 /* 离线视图只消费宿主已校验的图；共享子树和循环转换为引用，不补造业务边。 */
 (() => {
   'use strict';
-  const data = JSON.parse(document.getElementById('route-data').textContent);
+  const source = document.getElementById('route-data');
+  if (!source) return;
+  const data = JSON.parse(source.textContent);
   const t = data.ui;
   const board = document.getElementById('board'), world = document.getElementById('world');
   const layer = document.getElementById('nodes'), svg = document.getElementById('wires');
@@ -73,7 +75,16 @@
   function reveal(b){if(b.element.hidden)return;const x=camera.x+b.x*camera.scale,y=camera.y+b.y*camera.scale,w=b.element.offsetWidth*camera.scale;if(x-w/2<8||x+w/2>board.clientWidth-8)camera.x=board.clientWidth/2-b.x*camera.scale;if(y<8||y+b.h*camera.scale>board.clientHeight-8)camera.y=40-b.y*camera.scale;cameraDraw();}
   function navigate(id){const b=entries.get(id);for(let p=b;p;p=p.parent)open.add(p.id);layout();camera.x=board.clientWidth/2-b.x*camera.scale;camera.y=60-b.y*camera.scale;cameraDraw();b.control.focus({preventScroll:true});showDetail(b);}
   function activate(b){if(b.reference){navigate(b.id);return;}showDetail(b);if(!b.children.length)return;const {x,y}=b;open.has(b.id)?open.delete(b.id):open.add(b.id);layout();camera.x+=(x-b.x)*camera.scale;camera.y+=(y-b.y)*camera.scale;cameraDraw();}
-  function download(name,value,type){const a=el('a');a.href=URL.createObjectURL(new Blob([value],{type}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+  function download(name, value, type) {
+    if (window.GalGearRoute?.export) {
+      return window.GalGearRoute.export(type === 'application/json' ? 'json' : 'draft', value);
+    }
+    const link = el('a');
+    link.href = URL.createObjectURL(new Blob([value], {type}));
+    link.download = name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
   const actions={expand(){entries.forEach((_,id)=>open.add(id));layout();fit();},collapse(){initial();layout();fit();},in(){zoom(1.2);},out(){zoom(1/1.2);},fit,theme(){document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';},json(){const {ui,...route}=data;download('route-map-data.json',JSON.stringify(route,null,2),'application/json');},draft(){download('route-guide.txt',[data.title,t.draftNote,...data.nodes.flatMap(n=>[`\n[${n.id}] ${n.title}`, ...data.edges.filter(e=>e.from===n.id).map(e=>`${e.label||t.next}${e.condition?' ['+e.condition+']':''} → [${e.to}]${e.inferred?' ('+t.inferred+')':''}`)]),...data.validation,...data.uncertainties].join('\n'),'text/plain');}};
   const toolbar=document.getElementById('toolbar');for(const key of Object.keys(actions)){const b=el('button','',t[key]);b.type='button';b.dataset.action=key;b.addEventListener('click',actions[key]);toolbar.append(b);}const scale=el('span','');toolbar.append(scale);
   board.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('button'))return;drag={id:e.pointerId,x:e.clientX-camera.x,y:e.clientY-camera.y};board.dataset.dragging='';board.setPointerCapture(e.pointerId);});

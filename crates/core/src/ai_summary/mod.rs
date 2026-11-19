@@ -11,6 +11,7 @@ mod resources;
 mod route_graph;
 mod route_html;
 mod route_map;
+pub mod route_view;
 mod sandbox;
 mod skill_analysis;
 #[cfg(windows)]

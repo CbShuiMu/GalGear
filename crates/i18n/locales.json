@@ -3635,9 +3635,14 @@
     "en-US": "The AI route map is saved and ready to open from game details."
   },
   "route.opened": {
-    "zh-CN": "已使用默认浏览器打开AI路线图。",
-    "ja-JP": "既定のブラウザーでAIルートマップを開きました。",
-    "en-US": "Opened the AI route map in your default browser."
+    "zh-CN": "已打开路线图窗口。",
+    "ja-JP": "ルートマップのウィンドウを開きました。",
+    "en-US": "Opened the route map window."
+  },
+  "route.export_failed": {
+    "zh-CN": "路线图导出失败：{detail}",
+    "ja-JP": "ルートマップを書き出せませんでした：{detail}",
+    "en-US": "Could not export the route map: {detail}"
   },
   "route.failed": {
     "zh-CN": "AI路线图操作失败：{detail}",
@@ -3669,15 +3674,10 @@
     "ja-JP": "DeepSeekから無効なルート分析が返されました。再生成してください。",
     "en-US": "DeepSeek returned invalid route analysis. Retry generation."
   },
-  "route.open_failed": {
-    "zh-CN": "无法打开AI路线图文件或调用默认浏览器，请重试。",
-    "ja-JP": "AIルートマップのファイルを開くか、既定のブラウザーを起動できません。再試行してください。",
-    "en-US": "Could not access the AI route map file or launch the default browser. Please retry."
-  },
   "route.open_failed_detail": {
-    "zh-CN": "无法使用默认浏览器打开AI路线图：{detail}",
-    "ja-JP": "既定のブラウザーでAIルートマップを開けません：{detail}",
-    "en-US": "Could not open the AI route map in the default browser: {detail}"
+    "zh-CN": "无法打开路线图窗口：{detail}",
+    "ja-JP": "ルートマップのウィンドウを開けません：{detail}",
+    "en-US": "Could not open the route map window: {detail}"
   },
   "summary.recap": {
     "zh-CN": "前情提要",
@@ -5192,6 +5192,11 @@
     "ja-JP": "音声を抽出",
     "en-US": "Extract audio"
   },
+  "media.dialogue": {
+    "zh-CN": "台词提取",
+    "ja-JP": "台詞を抽出",
+    "en-US": "Extract dialogue"
+  },
   "media.extracting_cg": {
     "zh-CN": "正在后台批量提取 CG…",
     "ja-JP": "バックグラウンドで CG を一括抽出中…",
@@ -5201,6 +5206,11 @@
     "zh-CN": "正在后台批量提取音频…",
     "ja-JP": "バックグラウンドで音声を一括抽出中…",
     "en-US": "Batch extracting audio in the background…"
+  },
+  "media.extracting_dialogue": {
+    "zh-CN": "正在后台批量提取台词…",
+    "ja-JP": "バックグラウンドで台詞を一括抽出中…",
+    "en-US": "Batch extracting dialogue in the background…"
   },
   "media.identifying": {
     "zh-CN": "正在识别媒体资源…",

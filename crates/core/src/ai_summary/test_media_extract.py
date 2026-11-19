@@ -113,6 +113,85 @@ class MediaTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'credentials'):
             batch['run'](self.config,API)
 
+    def test_dialogue_batch_exports_verified_speaker_table_and_links_native_ids(self):
+        config = dict(self.config, kind='dialogue', work=str(self.agent.work.parent/'media-dialogue'))
+        agent = MEDIA['MediaAgent'](config, API)
+        (self.game/'names.bin').write_bytes(b'\x07Alice')
+        for index in range(5):
+            (self.game/f'scene{index}.bin').write_bytes(
+                b'\x07' + f'第 {index} 句台词'.encode() + b'\n\x00Narration')
+        old = self.game/'dialogues/media-old'
+        old.mkdir(parents=True)
+        (old/'manifest.json').write_text('{}')
+        (old/'scene-old.bin').write_bytes(b'not a script')
+
+        table = agent.dispatch('test_extraction', dict(mode='files',path='.',pattern='names.bin',
+            dialogue=dict(reader='speakers', program='''def extract(data, metadata):
+    return {'values':{},'speakers':{'character':{'id':data[0],'text':data[1:].decode('ascii'),
+        'id_evidence':{'offset':0,'width':1},'evidence':{'offset':1,'length':len(data)-1,'encoding':'ascii'}}}}
+''')))['test']
+        with self.assertRaisesRegex(ValueError, 'at least one verified dialogue script'):
+            agent.dispatch('start_batch', dict(tests=[table],scope='Names only',warnings=[]))
+        script = '''def extract(data, metadata):
+    rows = []
+    offset = 0
+    for line in data.split(b"\\n"):
+        proof = {'offset':offset+1,'length':len(line)-1,'encoding':'utf-8'}
+        speaker = None
+        if line[0] != 0:
+            speaker = metadata['speaker_resources']['sample-1']['character']['text']
+            proof['speaker'] = {'resource':'sample-1','entry':'character','reference':{'offset':offset,'width':1}}
+        rows.append({'position':offset+1,'speaker':speaker,'text':line[1:].decode('utf-8'),'evidence':proof})
+        offset += len(line)+1
+    return rows
+'''
+        sample = agent.dispatch('test_extraction', dict(mode='files',path='.',pattern='**/scene*.bin',
+            dialogue=dict(reader='script',program=script,speaker_tests=[table])))
+        self.assertEqual((sample['selected'], sample['tested']), (5, 3))
+        with self.assertRaisesRegex(ValueError, 'companion table tests'):
+            agent.dispatch('start_batch', dict(tests=[sample['test']],scope='Missing table',warnings=[]))
+        agent.dispatch('start_batch', dict(tests=[table,sample['test']],scope='Five scenes and native name table',warnings=[]))
+        self.assertFalse((agent.work/'delivery').exists())
+
+        batch = runpy.run_path(str(BASE/'media_batch.py'))
+        batch_config = {key:value for key,value in config.items() if key not in ('token','provider','model')}
+        with patch.dict(API['TRANSPORT'],complete=lambda *args,**kwargs: self.fail('Batch script must never call AI')):
+            self.assertEqual(batch['run'](batch_config, API)['files'], 6)
+        delivery = agent.work/'delivery'
+        manifest = json.loads((delivery/'manifest.json').read_text('utf-8'))
+        self.assertEqual(manifest['kind'], 'dialogue')
+        for member in manifest['files']:
+            path = delivery/member['path']
+            self.assertEqual(member['sha256'], hashlib.sha256(path.read_bytes()).hexdigest())
+            result = json.loads(path.read_text('utf-8'))
+            if path.name == 'speakers.json':
+                self.assertEqual(result['entries'], {'character':{'id':7,'text':'Alice'}})
+                self.assertEqual(result['source']['member'], 'names.bin')
+            else:
+                index = result['source']['member'].removeprefix('scene').removesuffix('.bin')
+                self.assertEqual([(row['text'],row['speaker']) for row in result['rows']],
+                                 [(f'第 {index} 句台词','Alice'),('Narration',None)])
+        self.assertEqual((old/'scene-old.bin').read_bytes(), b'not a script')
+
+    def test_dialogue_without_name_table_rejects_fabricated_text_and_allows_narration(self):
+        config = dict(self.config, kind='dialogue', work=str(self.agent.work.parent/'media-narration'))
+        agent = MEDIA['MediaAgent'](config, API)
+        (self.game/'scene.txt').write_bytes(b'Narration')
+        script = """def extract(data, metadata):
+    return [{'position':0,'speaker':None,'text':data.decode('ascii'),
+             'evidence':{'offset':0,'length':len(data),'encoding':'ascii'}}]
+"""
+        args = dict(mode='files',path='.',pattern='scene.txt')
+        with self.assertRaisesRegex(ValueError, 'match|byte'):
+            agent.dispatch('test_extraction', dict(args,
+                dialogue=dict(reader='script',program=script.replace("data.decode('ascii')", "'Fabricated'"))))
+        sample = agent.dispatch('test_extraction', dict(args, dialogue=dict(reader='script',program=script)))
+        agent.dispatch('start_batch', dict(tests=[sample['test']],scope='One scene',warnings=[]))
+        batch = runpy.run_path(str(BASE/'media_batch.py'))
+        batch_config = {key:value for key,value in config.items() if key not in ('token','provider','model')}
+        self.assertEqual(batch['run'](batch_config, API)['files'], 1)
+        self.assertFalse((agent.work/'delivery/speakers').exists())
+
     def test_archive_sample_and_batch_share_case_insensitive_mod_selection(self):
         archive = self.game/'voice.arc'
         archive.write_bytes(b'archive fixture')

@@ -23,7 +23,12 @@
     assert(document.activeElement.dataset.node===ref.dataset.jump,'Reference did not focus its canonical target');
     assert(!document.activeElement.closest('.node').hidden,'Reference target remains collapsed');
   }
-  assert(performance.getEntriesByType('resource').every(r=>r.name.startsWith('file:')||r.name.startsWith('data:')),'Offline document fetched external resources');
+  const localResource = ({name}) => {
+    const url = new URL(name);
+    return ['file:', 'data:'].includes(url.protocol) ||
+      (window.GalGearRoute && url.origin === location.origin);
+  };
+  assert(performance.getEntriesByType('resource').every(localResource),'Offline document fetched external resources');
   document.querySelector('[data-action="collapse"]').click();
   await paint();
   return {nodes:data.nodes.length,edges:data.edges.length,references:document.querySelectorAll('[data-jump]').length,collisions,validation:data.validation,visibleCollapsed:document.querySelectorAll('.node:not([hidden])').length,width:innerWidth};

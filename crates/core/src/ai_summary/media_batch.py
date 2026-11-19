@@ -52,10 +52,14 @@ def run(config,api):
                 relative=directory.relative_to(agent.host.roots[root]).as_posix()
                 if agent.kind=='cg':
                     agent.files_api['convert_images'](agent,dict(root=root,path=relative,_paths=names,mode='files'))
-                else:
+                elif agent.kind=='audio':
                     for name in names:
                         PLAN['audio_probe'](agent.files_api['checked'](directory/name,directory))
                     agent.files_api['export'](agent,dict(root=root,path=relative,_paths=names))
+                else:
+                    for name in names:
+                        path = agent.files_api['source'](agent, root, (Path(relative) / name).as_posix())
+                        PLAN['DIALOGUE']['extract'](agent, path, recipe, name)
                 agent.progress('extracting')
             agent.batch_completed+=1
             agent.progress('extracting')

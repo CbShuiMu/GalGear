@@ -159,7 +159,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 log::info!("window_close_requested window={}", window.label());
-                if crate::startup::close_to_tray(window.app_handle()) {
+                if window.label() == "main" && crate::startup::close_to_tray(window.app_handle()) {
                     api.prevent_close();
                     let _ = window.hide();
                 }
@@ -188,7 +188,8 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             ai_summary::set_ai_summary,
             ai_summary::summarize_game,
             ai_summary::prepare_ai_route_map,
-            ai_summary::open_ai_route_map,
+            crate::route_window::open_ai_route_map,
+            crate::route_window::export_route,
             ai_summary::extract_game_media,
             game_setup::choose_setup_executable,
             game_setup::complete_game_setup,

@@ -24,7 +24,7 @@ fn report(app: &AppHandle, request_id: u32, game_id: &str, progress: &ai_summary
 
 #[derive(Default)]
 pub(crate) struct Jobs(Arc<Mutex<BTreeSet<String>>>);
-struct Guard(Arc<Mutex<BTreeSet<String>>>, String);
+pub(crate) struct Guard(Arc<Mutex<BTreeSet<String>>>, String);
 impl Drop for Guard {
     fn drop(&mut self) {
         if let Ok(mut jobs) = self.0.lock() {
@@ -33,7 +33,7 @@ impl Drop for Guard {
     }
 }
 impl Jobs {
-    fn begin(&self, id: &str) -> Result<Guard, Message> {
+    pub(crate) fn begin(&self, id: &str) -> Result<Guard, Message> {
         if !self
             .0
             .lock()
@@ -155,14 +155,6 @@ pub async fn extract_game_media(
     })
     .await
     .map_err(|_| Message::new("error.operation"))?
-}
-
-#[tauri::command]
-pub async fn open_ai_route_map(id: String, state: State<'_, AppState>) -> Result<(), Message> {
-    let path = generate_route_map(id, state).await?;
-    tauri::async_runtime::spawn_blocking(move || crate::default_browser::open_route(&path))
-        .await
-        .map_err(|_| Message::new("error.operation"))?
 }
 
 #[cfg(test)]

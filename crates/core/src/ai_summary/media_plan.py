@@ -1,6 +1,9 @@
 """先验证少量样本，再冻结可复用的批量参数；模型不能绕过试提取直接启动批量任务。"""
 import json
 from pathlib import Path
+import runpy
+
+DIALOGUE = runpy.run_path(str(Path(__file__).with_name('media_dialogue.py')))
 
 
 def archive_members(agent, result):
@@ -85,6 +88,10 @@ def extracted_sample(agent, archive, name):
 def test_extraction(agent, args):
     agent.progress('sampling')
     members = listing(agent,args)
+    key = 'sample-'+str(len(agent.tested)+1)
+    recipe = dict(mode=args['mode'],path=args['path'],pattern=args['pattern'],members=members)
+    if agent.kind == 'dialogue':
+        recipe.update(id=key, dialogue=DIALOGUE['decoder'](agent, args.get('dialogue')))
     selected = list(dict.fromkeys([members[0], members[len(members)//2], members[-1]]))
     samples = []
     for name in selected:
@@ -98,12 +105,16 @@ def test_extraction(agent, args):
             if result['failed'] or not pngs:
                 raise ValueError('CG sample did not decode successfully; resolve its format before batching')
             validation = dict(format='png',frames=len(pngs))
-        else:
+        elif agent.kind == 'audio':
             validation = dict(format=audio_probe(path),validation='container header; original encoded audio retained')
             agent.files_api['export'](agent,dict(root=root,path=relative))
-        samples.append(dict(name=name,sha256=agent.files_api['digest'](path),**validation))
-    key = 'sample-'+str(len(agent.tested)+1)
-    recipe = dict(mode=args['mode'],path=args['path'],pattern=args['pattern'],members=members,samples=samples)
+        else:
+            path = agent.files_api['source'](agent, root, relative)
+            validation = DIALOGUE['extract'](agent, path, recipe, name)
+        if 'sha256' not in validation:
+            validation['sha256'] = agent.files_api['digest'](path)
+        samples.append(dict(name=name,**validation))
+    recipe['samples'] = samples
     agent.tested[key] = recipe
     agent.emit(key+'.json',recipe)
     return dict(test=key,selected=len(members),tested=len(samples),samples=samples,
@@ -117,8 +128,17 @@ def start_batch(agent, args):
     scope, warnings = args.get('scope'), args.get('warnings')
     if not isinstance(scope,str) or not scope.strip() or not isinstance(warnings,list) or len(warnings)>64 or any(not isinstance(w,str) or len(w)>2000 for w in warnings):
         raise ValueError('Describe the actual scope and explicit unsupported resources')
+    recipes = [agent.tested[test] for test in tests]
+    if agent.kind == 'dialogue':
+        seen = set()
+        for recipe in recipes:
+            if not set(recipe['dialogue']['speaker_tests']).issubset(seen):
+                raise ValueError('Include the verified companion table tests before their dependent scripts')
+            seen.add(recipe['id'])
+        if all(recipe['dialogue']['reader'] == 'speakers' for recipe in recipes):
+            raise ValueError('Include at least one verified dialogue script')
     agent.check_inputs()
-    plan = dict(schema=1,kind=agent.kind,scope=scope[:8000],warnings=warnings,recipes=[agent.tested[test] for test in tests],
+    plan = dict(schema=1,kind=agent.kind,scope=scope[:8000],warnings=warnings,recipes=recipes,
         input_stamps=agent.input_stamps,documents=agent.host.documents)
     agent.emit('media-plan.json',plan)
     agent.done = dict(schema=1,kind=agent.kind,batch_plan='media-plan.json',tested_samples=sum(len(recipe['samples']) for recipe in plan['recipes']))

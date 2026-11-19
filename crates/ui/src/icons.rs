@@ -17,6 +17,9 @@ pub(super) fn google(name: &str) -> Option<&'static str> {
         "mic" => {
             include_str!("../../../src-tauri/icons/mic_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg")
         }
+        "text_snippet" => include_str!(
+            "../../../src-tauri/icons/text_snippet_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg"
+        ),
         "home" => {
             include_str!("../../../src-tauri/icons/home_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg")
         }

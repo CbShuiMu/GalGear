@@ -116,7 +116,9 @@ pub(crate) fn dispatch(app: &mut App, action: &str, _value: &str) -> bool {
                 .game_edits
                 .get(&id)
                 .is_some_and(|e| e.ai_summary);
-            if !(app.ai_available || action == "toggle-ai-summary" && enabled) {
+            if !(app.ai_available
+                || matches!(action, "toggle-ai-summary" | "route-map-open") && enabled)
+            {
                 return true;
             }
             if action == "route-map-open" {
@@ -461,6 +463,16 @@ mod tests {
         assert!(busy(&app, &game.id));
         assert!(!busy(&app, "other-game"));
         assert!(!app.busy());
+    }
+
+    #[test]
+    fn a_prepared_map_can_be_opened_without_the_analysis_runtime() {
+        let mut app = App::default();
+        let game = selected_game(&mut app, true);
+        app.ai_available = false;
+        take_requests();
+        dispatch(&mut app, "route-map-open", &game.id);
+        assert_eq!(take_requests()[0].1, "open_ai_route_map");
     }
 
     #[test]

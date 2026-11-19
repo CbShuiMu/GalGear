@@ -69,7 +69,7 @@ def select(agent, args):
             continue
         relative = path.relative_to(agent.host.roots[args['root']])
         if args['root'] == 'game' and ('.galgear-ai-summary' in relative.parts or
-                len(relative.parts) >= 3 and relative.parts[0].casefold() in ('cgs', 'audios')
+                len(relative.parts) >= 3 and relative.parts[0].casefold() in ('cgs', 'audios', 'dialogues')
                 and relative.parts[1].startswith('media-') and (agent.host.roots['game'] / relative.parts[0] / relative.parts[1] / 'manifest.json').is_file()):
             continue
         if not path.is_file() or path.stat().st_size == 0:
@@ -100,14 +100,33 @@ def copy_member(agent, path, relative, provenance):
     if digest(target) != before or digest(path) != before:
         target.unlink()
         raise ValueError('Media source changed while copying')
-    agent.files.append(dict(path=target.relative_to(agent.delivery).as_posix(), size=target.stat().st_size,
-                            sha256=before, source=provenance))
+    record_member(agent, target, before, provenance)
     return True
+
+
+def record_member(agent, target, sha256, provenance):
+    agent.files.append(dict(path=target.relative_to(agent.delivery).as_posix(), size=target.stat().st_size,
+                            sha256=sha256, source=provenance))
+
+
+def write_member(agent, relative, value, provenance):
+    content = json.dumps(value, ensure_ascii=False, allow_nan=False, indent=2).encode('utf-8')
+    target = agent.delivery / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    checked(target.parent, agent.delivery)
+    sha256 = hashlib.sha256(content).hexdigest()
+    if target.exists():
+        if digest(checked(target, agent.delivery)) == sha256:
+            return
+        raise ValueError('Different resources would overwrite the same media path')
+    with target.open('xb') as output:
+        output.write(content)
+    record_member(agent, target, sha256, provenance)
 
 
 def export(agent, args):
     directory, paths = select(agent, args)
-    extensions = IMAGE_EXTENSIONS if agent.kind == 'cg' else AUDIO_EXTENSIONS
+    extensions = {'cg': IMAGE_EXTENSIONS, 'audio': AUDIO_EXTENSIONS}[agent.kind]
     if any(path.suffix.casefold() not in extensions for path in paths):
         raise ValueError('Selection contains unrecognized media extensions; narrow the glob or decode images with convert_images')
     group = hashlib.sha256(str(directory).encode()).hexdigest()[:12]

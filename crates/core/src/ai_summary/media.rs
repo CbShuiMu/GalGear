@@ -16,6 +16,7 @@ use std::{
 pub enum Kind {
     Cg,
     Audio,
+    Dialogue,
 }
 
 impl Kind {
@@ -23,6 +24,7 @@ impl Kind {
         match self {
             Self::Cg => "CGs",
             Self::Audio => "audios",
+            Self::Dialogue => "dialogues",
         }
     }
 }
@@ -200,7 +202,7 @@ fn publish(
     Ok((output, manifest))
 }
 
-/// 按当前 AI 配置调用内置 Skill 提取媒体，成功后保存到 CGs/audios 下的独立任务目录。
+/// 按当前 AI 配置调用内置 Skill 提取资源，成功后在 CGs、audios 或 dialogues 中发布独立批次。
 /// 发布成功后清理本次工作目录。无需开启游戏剧情分析，不读取存档或执行游戏。
 /// 同一游戏的任务互斥由桌面编排层负责。
 pub fn extract(
@@ -305,12 +307,13 @@ mod tests {
             ("fixture-model", "ai.invalid_token"),
         ] {
             settings.ai_models.insert("openai".into(), model.into());
-            for kind in [Kind::Cg, Kind::Audio] {
+            for kind in [Kind::Cg, Kind::Audio, Kind::Dialogue] {
                 let error = extract(&game, &settings, &config, &root, kind, &|_| {}).unwrap_err();
                 assert_eq!(error.key, expected);
                 assert!(!root.join(super::super::FOLDER).exists());
                 assert!(!root.join("CGs").exists());
                 assert!(!root.join("audios").exists());
+                assert!(!root.join("dialogues").exists());
             }
         }
     }
@@ -326,6 +329,7 @@ mod tests {
         let kind = match std::env::var("GALGEAR_MEDIA_TEST_KIND").as_deref() {
             Ok("cg") => Kind::Cg,
             Ok("audio") => Kind::Audio,
+            Ok("dialogue") => Kind::Dialogue,
             _ => panic!("explicit kind"),
         };
         let home = Path::new(env!("CARGO_MANIFEST_DIR"))

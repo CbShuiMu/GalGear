@@ -7,8 +7,9 @@ Linux 启动由 `core::runtime::proton` 生成 umu 命令，桌面 `tools` 保�
 媒体提取由 `ui::media_extract` 管理入口和响应，`ai_summary::media` 负责工作目录与校验发布。
 `media_agent.py` 只使用内置 Skill 试提取少量样本并冻结批量计划，规划进程退出后再由
 `media_batch.py` 独立执行；批量进程不接收模型凭据，也不拥有网络权限。两阶段共用桌面任务
-互斥及进度通知，输出分别发布到游戏目录 `CGs`、`audios` 的独立批次目录。
-详见 [CG 与音频提取](ai-summary.md#cg-与音频提取)。
+互斥及进度通知，输出分别发布到游戏目录 `CGs`、`audios`、`dialogues` 的独立批次目录。
+台词由 `media_dialogue.py` 复用脚本读取器及原始字节证据校验，并单独保存已验证的说话人表。
+详见 [CG、音频与台词提取](ai-summary.md#cg音频与台词提取)。
 
 AI 剧情分析默认由 core 的 `ai_summary::skill_analysis` 调用宿主 `analysis_agent.py`，
 将静态路线与当前提要作为一次任务交付。批量读取器在 `analysis_reads.py` 中复用已安装 Skill，

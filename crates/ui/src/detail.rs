@@ -225,7 +225,6 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
             "graph_1",
             "secondary icon-only ai-route-map-button",
             app.busy()
-                || !app.ai_available
                 || !game.available
                 || crate::ai_summary::busy(app, &game.id),
         ));

@@ -65,7 +65,7 @@ test('Extract resources follows Edit with or without AI preparation', async () =
   assert.ok(app.html.indexOf('data-action="detail-edit"') < app.html.indexOf('media-tools-anchor'));
   assert.doesNotMatch(app.html, /data-action="summary-run"|data-action="route-map-open"/);
   await app.ready();
-  for (const action of ['summary-run','route-map-open','extract-cg','extract-audio']) {
+  for (const action of ['summary-run','route-map-open','extract-cg','extract-audio','extract-dialogue']) {
     const tag = [...app.html.matchAll(/<button\b[^>]*>/g)].map(match => match[0]).find(tag => tag.includes(`data-action="${action}"`));
     assert.match(tag, /icon-only/);
     assert.match(tag, /aria-label="[^"]+"/);
@@ -76,9 +76,9 @@ test('Extract resources follows Edit with or without AI preparation', async () =
   assert.ok(app.html.indexOf('data-action="detail-edit"') < app.html.indexOf('media-tools-anchor'));
 });
 
-test('both media actions start without preparation and report missing AI configuration', async () => {
+test('all media actions start without preparation and report missing AI configuration', async () => {
   const app = await fixture();
-  for (const kind of ['cg','audio']) {
+  for (const kind of ['cg','audio','dialogue']) {
     app.ui.dispatch(`extract-${kind}`,'');
     const request = app.pending.at(-1);
     assert.equal(request.command,'extract_game_media');
@@ -94,7 +94,7 @@ test('both media actions start without preparation and report missing AI configu
 test('media extraction serializes per game, survives navigation and validates the final response', async () => {
   const app = await fixture();
   await app.ready();
-  for (const kind of ['cg','audio']) {
+  for (const [kind, folder, label] of [['cg','CGs','CG'],['audio','audios','音频'],['dialogue','dialogues','台词']]) {
     app.ui.dispatch(`extract-${kind}`,'');
     const request = app.pending.at(-1), count = app.pending.length;
     assert.equal(request.command,'extract_game_media');
@@ -103,7 +103,7 @@ test('media extraction serializes per game, survives navigation and validates th
     app.ui.dispatch('summary-run','');
     assert.equal(app.pending.length,count);
     app.progress(request.id,1,[{stage:'extracting',status:'running'}],'fixture','extracting');
-    assert.match(app.html,/4\/5 · 正在后台批量提取/);
+    assert.ok(app.html.includes(`4/5 · 正在后台批量提取 ${label}`) || app.html.includes(`4/5 · 正在后台批量提取${label}`));
     app.ui.ai_summary_progress(JSON.stringify({request_id:request.id,game_id:'fixture',progress:{sequence:2,current_stage:'extracting',stages:[{stage:'extracting',status:'running'}],batch:{completed:1,total:3,files:42}}}));
     assert.match(app.html,/批次 1\/3，已提取 42 个文件/);
     const current = app.html;
@@ -111,7 +111,7 @@ test('media extraction serializes per game, survives navigation and validates th
     assert.equal(app.html,current);
     app.ui.dispatch('close-detail','');
     assert.ok(app.notice);
-    app.complete(request.id,true,{game_id:'fixture',kind,output:`F:/Fixture/${kind === 'cg' ? 'CGs' : 'audios'}/media-1`,files:2,warnings:[]});
+    app.complete(request.id,true,{game_id:'fixture',kind,output:`F:/Fixture/${folder}/media-1`,files:2,warnings:[]});
     assert.equal(app.notice,false);
     assert.match(app.html,/已提取 2 个文件/);
     app.ui.dispatch('game-detail','fixture');

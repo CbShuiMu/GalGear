@@ -17,6 +17,7 @@ use std::fmt::Write;
 pub(crate) enum Kind {
     Cg,
     Audio,
+    Dialogue,
 }
 
 impl Kind {
@@ -24,6 +25,7 @@ impl Kind {
         match self {
             Self::Cg => "media.extracting_cg",
             Self::Audio => "media.extracting_audio",
+            Self::Dialogue => "media.extracting_dialogue",
         }
     }
 }
@@ -46,6 +48,7 @@ pub(crate) fn shortcuts(html: &mut String, app: &App, game: &Game) {
     for (action, label, glyph) in [
         ("extract-cg", "media.cg", "image_search"),
         ("extract-audio", "media.audio", "mic"),
+        ("extract-dialogue", "media.dialogue", "text_snippet"),
     ] {
         html.push_str(&button(
             action,
@@ -63,6 +66,7 @@ pub(crate) fn dispatch(app: &mut App, action: &str) -> bool {
     let kind = match action {
         "extract-cg" => Kind::Cg,
         "extract-audio" => Kind::Audio,
+        "extract-dialogue" => Kind::Dialogue,
         _ => return false,
     };
     let Some(game) = app
