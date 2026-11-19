@@ -25,7 +25,9 @@ pub fn load(game: &Game, settings: &Settings, config: &Path) -> Result<Document,
     }
     if skill_analysis::exists(game, settings) {
         let graph = skill_analysis::graph(game, settings)?;
-        return route_html::data(&graph, &game.title, settings.language).map(Document::Interactive);
+        let mut data = route_html::data(&graph, &game.title, settings.language)?;
+        data["revision"] = Value::String(graph.revision()?);
+        return Ok(Document::Interactive(data));
     }
     let path = route_map::route_map(game, settings, config)?;
     let svg = String::from_utf8(read(&path, 2 * 1024 * 1024)?).map_err(super::io)?;

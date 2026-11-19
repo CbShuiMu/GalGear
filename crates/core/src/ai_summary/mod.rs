@@ -10,6 +10,7 @@ mod report;
 mod resources;
 mod route_graph;
 mod route_html;
+pub mod route_location;
 mod route_map;
 pub mod route_view;
 mod sandbox;
@@ -391,7 +392,7 @@ fn manifest(game: &Game, language: Language) -> Result<Manifest, Message> {
     }
     // Match the canonical root used when this manifest was prepared.
     let root = Path::new(&game.folder).canonicalize().map_err(io)?;
-    if resources::source_inventory(&root)? != value.inventory {
+    if !resources::inventory_matches(&root, &value.inventory)? {
         return Err(invalid());
     }
     Ok(value)

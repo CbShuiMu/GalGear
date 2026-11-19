@@ -2,28 +2,11 @@
 use super::{io, route_graph::Graph};
 use galgear_i18n::{Language, Message, tr};
 use serde_json::{Value, json};
-use std::collections::BTreeSet;
 
 pub(super) fn data(graph: &Graph, title: &str, language: Language) -> Result<Value, Message> {
     graph.validate()?;
-    let mut data = serde_json::to_value(graph).map_err(io)?;
-    let mut reached = BTreeSet::new();
-    for node in data["nodes"].as_array().into_iter().flatten() {
-        if node["kind"] == "start" {
-            reached.insert(node["id"].as_str().unwrap_or_default().to_owned());
-        }
-    }
-    loop {
-        let count = reached.len();
-        for edge in data["edges"].as_array().into_iter().flatten() {
-            if reached.contains(edge["from"].as_str().unwrap_or_default()) {
-                reached.insert(edge["to"].as_str().unwrap_or_default().to_owned());
-            }
-        }
-        if count == reached.len() {
-            break;
-        }
-    }
+    let mut data = graph.display_data()?;
+    let reached = graph.reachable();
     let mut validation = Vec::new();
     for node in data["nodes"].as_array_mut().into_iter().flatten() {
         if !reached.contains(node["id"].as_str().unwrap_or_default()) {
@@ -44,6 +27,10 @@ pub(super) fn data(graph: &Graph, title: &str, language: Language) -> Result<Val
     for key in [
         "hint",
         "canvas",
+        "routeFilter",
+        "allRoutes",
+        "entryChoices",
+        "possiblePaths",
         "legend",
         "review",
         "expand",

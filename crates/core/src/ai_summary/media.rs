@@ -10,6 +10,8 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+const BATCH_PREFIX: &str = "media-";
+
 /// 提取类别决定唯一的游戏目录直属输出位置，调用方不能指定任意路径。
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +29,23 @@ impl Kind {
             Self::Dialogue => "dialogues",
         }
     }
+}
+
+/// GalGear 提取批次位于游戏目录直属的类别目录内。路径相对于游戏根目录。
+pub(super) fn is_published_batch(relative: &Path) -> bool {
+    let mut parts = relative.components();
+    let (Some(Component::Normal(folder)), Some(Component::Normal(batch))) =
+        (parts.next(), parts.next())
+    else {
+        return false;
+    };
+    [Kind::Cg, Kind::Audio, Kind::Dialogue]
+        .iter()
+        .any(|kind| folder.eq_ignore_ascii_case(kind.folder()))
+        && batch.to_str().is_some_and(|name| {
+            name.strip_prefix(BATCH_PREFIX)
+                .is_some_and(|suffix| !suffix.is_empty())
+        })
 }
 
 /// 已经校验并发布的产物，附带提取范围、转换或清理的警告。
@@ -164,7 +183,7 @@ fn check_work(root: &Path, work: &Path) -> Result<(), Message> {
         || !work
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with("media-"))
+            .is_some_and(|name| name.starts_with(BATCH_PREFIX))
     {
         return Err(Message::new("media.unsafe_path"));
     }
@@ -232,7 +251,7 @@ pub fn extract(
     let base = directory(&root, super::FOLDER)?;
     // 保留失败工作目录与诊断，让失败不会伪装成一次空的成功导出。
     let work = tempfile::Builder::new()
-        .prefix("media-")
+        .prefix(BATCH_PREFIX)
         .tempdir_in(base)
         .map_err(io)?
         .keep();

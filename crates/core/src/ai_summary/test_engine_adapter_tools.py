@@ -64,7 +64,7 @@ class EngineAdapterToolTests(unittest.TestCase):
         catalog = self.agent.dispatch('engine_adapter_contract', {})
         self.assertEqual(catalog['adapters'][0]['id'], 'entis_cotopha')
         description = self.agent.dispatch('engine_adapter_contract', dict(adapter='entis_cotopha'))
-        self.assertEqual(description['adapter_version'], 1)
+        self.assertEqual(description['adapter_version'], 2)
         self.assertEqual(description['contract']['profile']['variant'], 'synthetic')
         self.assertLessEqual(len(json.dumps(description, ensure_ascii=False).encode()), 8192)
         self.assertEqual(self.agent.programs, {})
@@ -162,7 +162,7 @@ class EngineAdapterToolTests(unittest.TestCase):
 
     def test_unsupported_save_guidance_survives_reads_and_restart_until_input_changes(self):
         import test_entis_adapter as fixtures
-        data, unused = fixtures.fixture(version=7)
+        data, unused = fixtures.fixture(version=7, title_class='UnfamiliarTitle')
         path = self.root / 'save/current.sav'
         path.write_bytes(data)
         self.implementation['inspect_save'] = fixtures.ADAPTER['inspect_save']
@@ -189,6 +189,20 @@ class EngineAdapterToolTests(unittest.TestCase):
         path.write_bytes(fixtures.fixture()[0])
         restored.research.set_inputs(restored.input_description('inspect_engine_adapter', arguments))
         self.assertEqual(restored.work_guidance()['adapter_fallbacks'], [])
+
+    def test_legacy_version_only_rejection_does_not_block_reuse_after_update(self):
+        arguments = dict(adapter='entis_cotopha', kind='save', root='save', path='current.sav')
+        rejection = dict(ok=False, inspection=dict(status='unsupported_variant',
+            reason='unsupported_title_profile', next_action='write_save_parser',
+            observed_title=dict(class_name='SaveDataTitle', version=20250210)))
+        record = self.agent.research.observe('legacy-version-rejection',
+            dict(name='inspect_engine_adapter', arguments=arguments), rejection,
+            inputs=self.agent.input_description('inspect_engine_adapter', arguments))
+        self.agent.research.records[record['ref']]['adapter_fallback'].pop('reason')
+        self.agent.research._persist()
+        restored = host.Agent(self.agent.config)
+        self.assertEqual(restored.research.adapter_fallbacks(), [])
+        self.assertEqual(restored.research.adapter_attempts(), [])
 
     def test_stamped_adapter_inspection_can_support_speaker_review_with_real_inventory(self):
         self.agent.parts['fixture-script'] = [dict(source='member.bin', position=0, text='Current', speaker=None)]
@@ -227,7 +241,7 @@ class EngineAdapterToolTests(unittest.TestCase):
         digest = hashlib.sha256(source.encode()).hexdigest()
         self.assertEqual(result['source_sha256'], digest)
         self.assertEqual(result['sha256'], digest)
-        self.assertEqual((result['adapter_id'], result['adapter_version']), ('entis_cotopha', 1))
+        self.assertEqual((result['adapter_id'], result['adapter_version']), ('entis_cotopha', 2))
         self.assertEqual(result['requires_test'], 'script')
         self.assertEqual(self.agent.tests, {})
         self.assertEqual(self.agent.parts, {})

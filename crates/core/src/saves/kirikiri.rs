@@ -31,6 +31,41 @@ fn read_document(path: &Path) -> Option<Value> {
     Parser::new(&read_text(path)?).parse()
 }
 
+/// 只取活动书签和紧邻它的历史台词；历史中也可能保存其他场景的播放器对象。
+pub(crate) struct Bookmark {
+    pub scene: Option<String>,
+    pub caption: String,
+    pub preceding: Vec<String>,
+}
+
+pub(crate) fn bookmark(bytes: &[u8]) -> Option<Bookmark> {
+    let value = Parser::new(&text_stream(bytes)?).parse()?;
+    let core = value.get("core")?;
+    let caption = core.pointer("/bookMarkInfo/lastText")?.as_str()?.trim();
+    if caption.is_empty() || caption.len() > 4096 || !has_execution(core) {
+        return None;
+    }
+    let scene = core
+        .pointer("/scenePlayer/scene")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
+    let preceding = core
+        .pointer("/historyData/data")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .rev()
+        .take(4)
+        .map(|row| row["text"].as_str().unwrap_or_default().trim().to_owned())
+        .collect();
+    Some(Bookmark {
+        scene,
+        caption: caption.to_owned(),
+        preceding,
+    })
+}
+
 fn read_text(path: &Path) -> Option<String> {
     text_stream(&read_bytes(path)?)
 }

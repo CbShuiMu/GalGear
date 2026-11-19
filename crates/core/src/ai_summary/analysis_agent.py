@@ -5,6 +5,7 @@
 """
 import hashlib
 import json
+import math
 import os
 import re
 import runpy
@@ -41,11 +42,11 @@ Query with def analyze(documents): documents is the dictionary itself, with no d
 Use actual localized/patch evidence when choosing between versions. A patch may override only same-named members; compare member sets before discarding base-only scripts/endings. Set scope.script_indexes and resource_selection to the effective batches so duplicate versions are not double-counted. Disclose uncertain loading precedence; avoid scanning unrelated art or re-reading successful batches.
 
 PLAYER-FACING ROUTE
-Source character names from actual speakers/name tables or attributed local guides, never infer kanji from romanized identifiers. Register graph.characters=[{id,name,source,pointer}] and use {char:id}; the host expands source-bound names and locates an existing original name quote if its pointer is mistyped. Group long ordinary narration, while keeping distinct decisions, endings, unlocks, shared targets and the current save marker. Use readable story titles; keep technical paths/flags in pc/evidence.
+Source character names from actual speakers/name tables or attributed local guides, never infer kanji from romanized identifiers. Register graph.characters=[{id,name,source,pointer}] and use {char:id}; the host expands source-bound names and locates an existing original name quote if its pointer is mistyped. Group long ordinary narration, while keeping distinct decisions, endings, unlocks and shared targets. Use readable story titles; keep technical paths/flags in pc/evidence.
 Each actual STORY choice is its own kind=choice edge with original wording. Automatic flag/affection conditions use flow. A dispatch on a story UI return value is still a player choice. Follow script -> invoked interface -> image/frame/button event -> return value -> destination. Interface readers may be separate from story readers. Extract only the referenced STORY button images and use read_ui_images when the script does not already supply the displayed text. Do not inventory/OCR settings, ordinary title buttons, save/load controls, galleries or unrelated UI. A linear story needs no invented choice and no UI-image work. Inspect a title dispatch only when it determines an actual route/EXTRA/GRAND entry or unlock; its ordinary START caption needs no OCR. native_frame_id, when present, is the engine ID; ordinal is only converter order. For other formats join origin.offset to the original frame header.
 For labels not already in known_options, provide text_basis={source,pointer,kind:script|ocr|icon,binding:actual menu/event-to-target location}. A script pointer may address a larger string containing the exact label; quote is optional. Query JSON is not original evidence. Textless portraits use kind=icon, character_id and the whole inspected frame, producing 'name（人物图标）'. Keep location/navigation hints separate from option wording. OCR is imperfect: a corrected label may cite correction_basis={source,pointer} to an actual registered text source; retain the raw OCR and its uncertainty. Do not mechanically publish OCR garbage or invent text for an icon.
-Nodes have stable id,label,kind,evidence. Edges have from,to,label,inferred and optional pc/condition. Shared targets use one ID; back jumps must have real script evidence. A helper loop is not a player walkthrough: preserve separate timepoints where available choices or route consequences differ, and keep each recommended selection step. Use decision_kind=player|condition when known. Each ending needs terminal_basis={kind:end_command|credits_transition|ending_flag|local_guide,ref:successful O-number,locator}. scope.flow_basis uses kind=script_control_flow|local_guide|unresolved, ref and locator. Unresolved flow is inferred, not a proven path. A local guide can support route order if explicitly attributed.
-EXTRA/GRAND use extra/grand nodes. A guide's instruction to LOAD an earlier save starts an alternative path at that save; its position after an END in the document does not make it a post-ending unlock. Unlock edges require an actual prerequisite and unlock_basis={kind:script_condition|local_guide,ref,locator}; do not invent prior-ending requirements. Unknown unlocks remain explicitly unresolved. Each known story menu location belongs in the route; list only non-story/system menus in scope.excluded_menus with source and reason. A save marker must attach to its corresponding scene; use inferred=true for caption candidates.
+Nodes have stable id,label,kind,evidence. For PSB scene nodes with a verified label, use the exact native coordinate in pc, e.g. "chapter.ks.scn *label". A node covering an entire Siglus script can use its exact .dat filename in pc. Keep jump targets in edge evidence. Edges have from,to,label,inferred and optional pc/condition. Shared targets use one ID; back jumps must have real script evidence. A helper loop is not a player walkthrough: preserve separate timepoints where available choices or route consequences differ, and keep each recommended selection step. Use decision_kind=player|condition when known. Each ending needs terminal_basis={kind:end_command|credits_transition|ending_flag|local_guide,ref:successful O-number,locator}. scope.flow_basis uses kind=script_control_flow|local_guide|unresolved, ref and locator. Unresolved flow is inferred, not a proven path. A local guide can support route order if explicitly attributed.
+EXTRA/GRAND use extra/grand nodes. A guide's instruction to LOAD an earlier save starts an alternative path at that save; its position after an END in the document does not make it a post-ending unlock. Unlock edges require an actual prerequisite and unlock_basis={kind:script_condition|local_guide,ref,locator}; do not invent prior-ending requirements. Unknown unlocks remain explicitly unresolved. Each known story menu location belongs in the route; list only non-story/system menus in scope.excluded_menus with source and reason. Keep saves out of the story graph. When the analyzed save uniquely matches a reachable story node, bind its ID in save_position.node. For each evidenced character route supply graph.guides with a continuous walk from a start to the first personal scene. Resolve LOAD/SAVE instructions into the original common-route prefix. Check stat thresholds, priority and fallback conditions. Cite the script or walkthrough. Select each parallel option by exact wording; if unresolved, disclose it instead of guessing.
 
 CURRENT RECAP AND DELIVERY
 Inspect the newest relevant save from the supplied save roots, including AppData. Unknown saves are pre-read with reader=probe: initial_reads includes quoted text candidates from UTF-8/UTF-16/legacy encodings in raw and complete decompressed views, with actual pointers. Reuse those candidates and query their scene identifiers before writing new scans; they are candidate evidence, not active state. Global settings are not progress merely because they are newest. For compressed data, decompress once and search candidate encodings efficiently (UTF-8, UTF-16, legacy encodings); save text can use a different encoding from scripts. Prefer an actual displayed caption/last backlog entry plus scene hint, not arbitrary UI prompts or guessed integer fields.
@@ -58,9 +59,32 @@ For repeated decisions or a large graph, use query_data to build the complete ro
 SYSTEM += '''
 ROUTE COMPLETENESS: Budget is 256 nodes, 512 edges and 262144 UTF-8 graph bytes, independent of model reply size. For repeated decisions use query_data to assemble the full payload from the menu inventory, then submit_route(route_file=output). Keep a separate decision per source occurrence, even for repeated/cosmetic wording or common targets. Reduce narration/evidence repetition, never delete menu occurrences to fit a reply. Repair a saved route file instead of retyping it.
 Use decision_kind=player for displayed choices (including UI-return dispatch) and decision_kind=condition for automatic flag/affection tests. The latter use kind=flow edges with readable conditions, never kind=choice; keep the decision before branch-specific narration. A menu option with an enabled condition is still a player choice.
+When options return to the same main story after a short reaction, use one shared target and one edge per option. Keep the shared node title about the common story only. Record each option's proven numeric changes in its own effects array ({stat,delta}, signed number, all affected stats); cite the assignment in that edge's evidence. Use a source-supported stat name or the original variable. Never infer points or current totals from dialogue, route names or thresholds.
+At a required menu use scene -> decision -> option targets. A later chapter or common continuation cannot also be a direct exit from the scene unless a separate control path bypasses the decision. Record the actual bypass condition and its location when it exists. Title the decision with what the player decides, without repeating the preceding scene title. Unconditional automatic flow uses label=""; a bare arrow is sufficient. Use condition for real automatic branches. Keep verbatim captions exclusively on player choices.
 The analysis host automatically reads small same-archive text control sets as control_script_reads; reuse those indexes and control_sources, including entry/setup overrides. Read companion_scripts from archive output and control_sources from read_resources: these preview ALL relevant text files, not only the first six. The full source remains in the reader JSON /text. Follow referenced functions/assignments in the corresponding companion scripts; keywords and file names are search hints, not semantic proof.
 UNLOCK TRACE: An observed true/extra entry selector proves dispatch, not unlock. Before marking its prerequisite unknown, batch-search that selector's ASSIGNMENTS, then inspect the originating menu/button enabled condition and the WRITERS of its persistent clear flags. Include title/menu/system scripts, not just scenario dialogue; extract only the relevant readable text/scripts using the same archive tool. Follow aliases/callbacks one step when the target is assigned indirectly. Link supported prerequisites with unlock edges; report unknown only with the search scope and remaining gap. This is evidence gathering, not an additional review API call or completion gate.
 '''
+
+def check_menu_bypasses(nodes, edges):
+    """若章节顺序和选择汇合重复连线，要求从脚本说明额外的直达路径。"""
+    choices = {}
+    automatic = {}
+    for edge in edges:
+        if edge.get('kind') == 'choice':
+            choices.setdefault(edge['from'], []).append(edge['to'])
+        elif edge.get('kind', 'flow') == 'flow' and not edge.get('condition', '').strip():
+            automatic.setdefault(edge['from'], set()).add(edge['to'])
+    for node in nodes:
+        if node['kind'] not in ('start', 'scene'):
+            continue
+        targets = automatic.get(node['id'], set())
+        for menu in targets.intersection(choices):
+            exits = choices[menu]
+            if len(exits) >= 2 and len(set(exits)) == 1 and exits[0] in targets:
+                raise ValueError(f"Possible duplicate flow {node['id']} -> {exits[0]} around menu {menu}. "
+                                 "Remove a chapter-order shortcut. For a real alternative, record its script condition "
+                                 "and evidence on the bypass or on entry to the optional menu.")
+
 
 def tools(api):
     # 已知格式统一经 read_resources，确保格式观察与提要选择共享同一登记表。
@@ -80,7 +104,7 @@ def tools(api):
     result.append(tool('report_progress', 'Update the user-visible analysis stage. Report running before work and completed only after successful evidence. This does not finish the task or provide evidence.',
         dict(stage=dict(type='string',enum=list(PROGRESS_STAGES)),status=dict(type='string',enum=['running','completed']),
              evidence_refs=dict(type='array',items=string,maxItems=16)), ['stage','status']))
-    node=dict(type='object',properties=dict(id=string,label=dict(type='string',description='Player-facing story description, never a bare script filename/range; use pc/evidence for source identities.'),kind=dict(type='string',enum=['start','scene','choice','save','ending','extra','grand']),
+    node=dict(type='object',properties=dict(id=string,label=dict(type='string',description='Player-facing story description, never a bare script filename/range; use pc/evidence for source identities.'),kind=dict(type='string',enum=['start','scene','choice','ending','extra','grand']),
         evidence=string,pc=string,terminal_basis=dict(type='object',properties=dict(kind=dict(type='string',enum=['end_command','credits_transition','ending_flag','local_guide']),ref=string,locator=string),required=['kind','ref','locator'])),required=['id','label','kind','evidence'])
     edge=dict(type='object',properties={'from':string,'to':string,'label':string,'evidence':string,'inferred':dict(type='boolean'),
         'kind':dict(type='string',enum=['flow','choice','unlock','reference']), 'pc':string, 'condition':dict(type='string',description='Readable gameplay prerequisite; keep filenames, target labels, selidx and command syntax in evidence/pc.'),
@@ -89,8 +113,13 @@ def tools(api):
     text_basis['properties']['correction_basis']=dict(type='object',properties=dict(source=string,pointer=string),required=['source','pointer'],description='Optional original text source corroborating an OCR correction; raw OCR is preserved.')
     node['properties']['decision_kind']=dict(type='string',enum=['player','condition'],description='Optional classification. UI return-value dispatch is player. When omitted, the host derives it from edge kinds.')
     edge['properties']['text_basis']=text_basis
+    edge['properties']['effects']=dict(type='array',items=dict(type='object',properties=dict(
+        stat=dict(type='string',maxLength=48),delta=dict(type='number')),required=['stat','delta']),
+        description='Observed changes caused by this choice. Preserve the original label and cite the assignment in evidence.')
     character=dict(type='object',properties=dict(id=string,name=string,source=string,pointer=string),required=['id','name','source','pointer'])
     graph=dict(type='object',properties=dict(characters=dict(type='array',items=character,maxItems=32),nodes=dict(type='array',items=node,minItems=1,maxItems=256),edges=dict(type='array',items=edge,maxItems=512),uncertainties=dict(type='array',items=string,maxItems=16)),required=['characters','nodes','edges','uncertainties'])
+    step=dict(type='object',properties=dict(to=string,via=dict(type='string',description='Exact visible option or branch condition; required to distinguish parallel edges.')),required=['to'])
+    graph['properties']['guides']=dict(type='array',items=dict(type='object',properties=dict(name=string,start=string,path=dict(type='array',items=step,minItems=1,maxItems=512),evidence=string),required=['name','start','path','evidence']))
     result.extend([
         tool('read_resources', 'Batch parse the selected files using installed readers; the host manages the bounded worker, so do not drop scripts to satisfy a file count. root/path identifies a file or directory; pattern is a glob (recursive ** allowed), or paths is an explicit list relative to root or the supplied directory (ambiguous matches rejected). auto detects AST/Siglus/PSB/TJS/text from bytes. Saves full parsed JSON and an index. This is static analysis, not runtime verification. Use query_data with the returned index to inspect ALL results in one request. options accepts reader parameters or {document:{syntax:psb,view:[]}} / {encoding:cp932}. custom is for unsupported formats only, never replace an existing native reader.',
              dict(root=root, path=string, pattern=string, paths=dict(type='array', items=string),
@@ -107,7 +136,7 @@ def tools(api):
         tool('finish_analysis', 'Submit save_position AFTER select_recap_context succeeds. Include script_language, graph, evidence_refs, scope and limitations unless submit_route already accepted them. Host generates recap in a fresh context with ONLY that window. Evidence refs must be successful O-numbers. level=candidate or decoded_active. script_language is a language code such as zh-CN. Every ending node needs terminal_basis={kind:end_command|credits_transition|ending_flag|local_guide,ref:O-number,locator:precise location}; sorted filenames do not prove endings. Edges require label:string and inferred:boolean. Cite actual coverage and limitations.',
              dict(script_language=string,
                   graph=graph, evidence_refs=dict(type='array', items=string),
-                  save_position=dict(type='object', properties=dict(root=root, path=string, level=dict(type='string', enum=['candidate','decoded_active']), locator=string, explanation=string), required=['root','path','level','locator','explanation']),
+                  save_position=dict(type='object', properties=dict(root=root, path=string, level=dict(type='string', enum=['candidate','decoded_active']), locator=string, explanation=string,node=dict(type='string',description='Existing reachable story node uniquely matched by the save evidence. Omit if uncertain.')), required=['root','path','level','locator','explanation']),
                   scope=dict(type='object',properties=dict(
                       script_indexes=dict(type='array',items=string,description='Optional effective script read_resources indexes; selects the original/localized/patch set actually analyzed, not every inspected version.'),
                       resource_selection=dict(type='string',description='Evidence/reason for selected script set and known or unresolved language/patch precedence.'),
@@ -348,7 +377,9 @@ class AnalysisAgent:
             self.emit('route-input.json', args)
             raise ValueError('Graph needs 1..256 unique nodes, <=512 edges, <=262144 bytes. Full draft saved as route-input.json. Repair with query_data and route_file; group narration/repeated evidence only, never omit choice occurrences.')
         for node in nodes:
-            if node.get('kind') not in ('start','scene','choice','save','ending','extra','grand') or not node.get('evidence') or not node.get('label'):
+            if node.get('kind') == 'save':
+                raise ValueError('Bind the save to an existing story node in save_position.node; remove standalone save nodes.')
+            if node.get('kind') not in ('start','scene','choice','ending','extra','grand') or not node.get('evidence') or not node.get('label'):
                 raise ValueError('Node kind, label and evidence required')
             if not re.fullmatch(r'[A-Za-z0-9_-]{1,32}',node['id']) or len(node['label'])>80 or len(node['evidence'])>240:
                 raise ValueError('Node IDs <=32 ASCII identifier characters; label <=80 and evidence <=240 characters')
@@ -370,6 +401,15 @@ class AnalysisAgent:
         for edge in edges:
             if edge.get('kind','flow') not in ('flow','choice','unlock','reference') or (edge.get('kind')=='unlock' and not edge.get('condition')):
                 raise ValueError('Unlock edges need a readable prerequisite condition; valid kinds: flow/choice/unlock/reference')
+            effects = edge.get('effects', [])
+            if not isinstance(effects, list) or (effects and edge.get('kind') != 'choice'):
+                raise ValueError('effects must be an array of numeric changes on a choice edge')
+            for effect in effects:
+                if not isinstance(effect, dict) or not isinstance(effect.get('stat'), str) or not effect['stat'].strip() or len(effect['stat']) > 48:
+                    raise ValueError('Each effect needs a stat name of 1..48 characters')
+                delta = effect.get('delta')
+                if type(delta) not in (int, float) or not math.isfinite(delta):
+                    raise ValueError('Each effect needs a finite signed numeric delta')
             if edge['from']==edge['to'] and (edge.get('kind')!='reference' or edge['inferred']):
                 raise ValueError('Grouping scenes must remove internal edges, not create a self-loop: '+edge['from']+'. Only an observed script back-jump may use a self-reference with kind=reference and inferred=false; internal narration belongs in node evidence.')
             if any(not isinstance(edge.get(k,''),str) or len(edge.get(k,''))>limit for k,limit in [('pc',240),('condition',160)]):
@@ -410,7 +450,7 @@ class AnalysisAgent:
             if any(source and source in item['source'] for item in excluded):continue
             if not any(text in labels for text in option['variants']):
                 raise ValueError('Reader already decoded this enabled option; preserve its verbatim text instead of an undecoded placeholder: '+source+option['pointer']+' '+json.dumps(option['variants'],ensure_ascii=False)+'. Query choice_texts for target/condition/language; only system/UI menus may be excluded with their source path.')
-        # Long narration chains are not a usable guide. Preserve decisions and save anchors;
+        # Long narration chains are not a usable guide. Preserve decisions;
         # ask the model to group only ordinary linear segments, without deleting source evidence.
         by_id = {n['id']: n for n in nodes}
         basis=args.get('scope',{}).get('flow_basis',{})
@@ -418,19 +458,12 @@ class AnalysisAgent:
             raise ValueError('scope.flow_basis requires kind=script_control_flow/local_guide/unresolved, successful ref and precise locator. Use actual dispatcher call/jump instructions or a guide, NOT scene-name table ordering.')
         if basis['kind']=='unresolved' and any(e.get('kind','flow')=='flow' and not e['inferred'] for e in edges):
             raise ValueError('Unresolved execution order requires inferred=true on flow edges; query dispatcher instructions for an actual control-flow basis.')
-        reached={n['id'] for n in nodes if n['kind']=='start'}
-        while True:
-            expanded=reached|{e['to'] for e in edges if e['from'] in reached}
-            if expanded==reached:break
-            reached=expanded
-        if any(n['kind']=='save' and n['id'] not in reached for n in nodes):
-            raise ValueError('Current save marker must be reachable from a start node. Attach its corresponding story scene -> save (inferred if only a caption candidate), not a separate save -> scene root.')
         for node in nodes:
             if node.get('decision_kind')=='condition':
                 for edge in edges:
                     if edge['from']==node['id'] and edge.get('kind')=='choice':
                         edge['kind']='flow'
-            flow=[e for e in edges if e['from']==node['id'] and e.get('kind','flow') not in ('unlock','reference') and by_id[e['to']]['kind']!='save']
+            flow=[e for e in edges if e['from']==node['id'] and e.get('kind','flow') not in ('unlock','reference')]
             if node['kind']=='choice':
                 if node.get('decision_kind') not in ('player','condition'):
                     node['decision_kind']='player' if any(e.get('kind')=='choice' for e in flow) else 'condition'
@@ -438,7 +471,8 @@ class AnalysisAgent:
                     raise ValueError('Player menu edges must be kind=choice with original text_basis, not flow labelled with internal variables: '+node['id'])
             if node['kind']=='scene' and len({e['to'] for e in flow})>1 and any(e.get('condition') for e in flow):
                 node.update(kind='choice',decision_kind='player' if any(e.get('kind')=='choice' for e in flow) else 'condition')
-        outgoing = {n['id']: [e['to'] for e in edges if e['from']==n['id'] and by_id[e['to']]['kind']!='save'] for n in nodes}
+        check_menu_bypasses(nodes, edges)
+        outgoing = {n['id']: [e['to'] for e in edges if e['from']==n['id']] for n in nodes}
         incoming = {n['id']: sum(e['to']==n['id'] for e in edges) for n in nodes}
         for node in nodes:
             cursor=node['id']; seen=set()
@@ -454,6 +488,25 @@ class AnalysisAgent:
             raise ValueError('Scope and limitations required')
         guide_bases=[args['scope'].get('flow_basis',{})]+[n.get('terminal_basis',{}) for n in nodes]+[e.get('unlock_basis',{}) for e in edges]
         ROUTE_TEXT['bind_graph'](self,graph,readable_options,[b['ref'] for b in guide_bases if b.get('kind')=='local_guide' and b.get('ref')])
+        entries = set()
+        for guide in graph.get('guides', []):
+            start = guide.get('start')
+            if (by_id.get(start, {}).get('kind') != 'start' or not isinstance(guide.get('name'), str)
+                    or not 1 <= len(guide['name'].strip()) <= 80 or not isinstance(guide.get('evidence'), str)
+                    or not 1 <= len(guide['evidence'].strip()) <= 240 or not isinstance(guide.get('path'), list)
+                    or not 1 <= len(guide['path']) <= 512):
+                raise ValueError('Each guide needs a name, start, continuous path and source evidence')
+            cursor = start
+            for step in guide['path']:
+                matches = [e for e in edges if e['from'] == cursor and e['to'] == step['to']
+                           and e.get('kind') not in ('unlock','reference')
+                           and (not step.get('via') or step['via'] in (e['label'],e.get('condition')))]
+                if len(matches) != 1:
+                    raise ValueError('Guide must identify exactly one edge at '+cursor+'; use verbatim option/condition in via')
+                cursor = step['to']
+            if cursor in entries:
+                raise ValueError('Each guide must identify a distinct route entry')
+            entries.add(cursor)
         self.check_inputs()
         self.route_draft = {key:args[key] for key in ('script_language','graph','evidence_refs','scope','limitations')}
         self.emit('route-draft.json', dict(self.route_draft, status='partial', recap_status='pending',
@@ -485,6 +538,15 @@ class AnalysisAgent:
             raise ValueError('Selected save differs from the recap context anchor')
         if position['level'] != 'candidate' and (self.recap_context.get('custom_decoder') or self.recap_context.get('translation_alignment')):
             raise ValueError('Custom decoder or translated-caption fields only support candidate save positions')
+        if 'node' in position:
+            graph = args['graph']
+            reached = {n['id'] for n in graph['nodes'] if n['kind'] == 'start'}
+            while True:
+                expanded = reached | {e['to'] for e in graph['edges'] if e['from'] in reached}
+                if expanded == reached: break
+                reached = expanded
+            if position['node'] not in reached:
+                raise ValueError('save_position.node needs a reachable story node matching the save evidence')
         position.update(file=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest(), runtime_verified=False)
         for stage in ('resources', 'scripts', 'save'):
             self.progress(stage, 'completed')

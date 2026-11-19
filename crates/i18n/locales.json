@@ -3644,6 +3644,51 @@
     "ja-JP": "ルートマップを書き出せませんでした：{detail}",
     "en-US": "Could not export the route map: {detail}"
   },
+  "route.locate": {
+    "zh-CN": "定位",
+    "ja-JP": "現在地",
+    "en-US": "Locate"
+  },
+  "route.locating": {
+    "zh-CN": "正在读取最新存档并匹配剧情…",
+    "ja-JP": "最新のセーブを読み込み、シナリオと照合しています…",
+    "en-US": "Reading the latest save and matching its story position…"
+  },
+  "route.locate_current": {
+    "zh-CN": "最新存档位置",
+    "ja-JP": "最新のセーブ位置",
+    "en-US": "Latest save position"
+  },
+  "route.locate_line": {
+    "zh-CN": "{file} · {script} {scene} · 台词索引 {index}（从 0 计）　{text}",
+    "ja-JP": "{file} · {script} {scene} · 台詞番号 {index}（0 始まり）　{text}",
+    "en-US": "{file} · {script} {scene} · Dialogue index {index} (zero-based)　{text}"
+  },
+  "route.locate_cached": {
+    "zh-CN": "{file} 与路线分析时的存档内容一致，已标出当时匹配的剧情位置。",
+    "ja-JP": "{file} はルート解析時のセーブと内容が一致しました。当時照合した位置を表示しています。",
+    "en-US": "{file} matches the save used in the route analysis. Its recorded story position is highlighted."
+  },
+  "route.locate_ambiguous": {
+    "zh-CN": "有多个存档或剧情位置符合定位条件，无法确定唯一位置。",
+    "ja-JP": "該当するセーブまたはシナリオ上の位置が複数あり、現在地を特定できません。",
+    "en-US": "More than one save or story position matches. The location is ambiguous."
+  },
+  "route.locate_unmatched": {
+    "zh-CN": "现有脚本和路线图中缺少可唯一对应这份存档的剧情证据。",
+    "ja-JP": "現在のスクリプトとルートマップでは、このセーブに対応する位置を特定できません。",
+    "en-US": "The available script and route map do not identify a matching story position for this save."
+  },
+  "route.locate_unsupported": {
+    "zh-CN": "已找到最新存档 {file}，目前无法从中读取可用于定位的剧情信息。",
+    "ja-JP": "最新のセーブ {file} が見つかりましたが、現在地を特定する情報を読み取れません。",
+    "en-US": "Found the latest save, {file}, but could not read a supported story position from it."
+  },
+  "route.locate_map_changed": {
+    "zh-CN": "路线图已更新，请关闭并重新打开此窗口后再定位。",
+    "ja-JP": "ルートマップが更新されました。ウィンドウを開き直してから現在地を確認してください。",
+    "en-US": "The route map has changed. Reopen this window to locate your save."
+  },
   "route.failed": {
     "zh-CN": "AI路线图操作失败：{detail}",
     "ja-JP": "AIルートマップの処理に失敗しました：{detail}",
@@ -5096,6 +5141,26 @@
     "zh-CN": "点击节点展开分支 · 拖动画布 · 路线图包含剧透",
     "ja-JP": "ノードをクリックして展開・ドラッグで移動・ネタバレあり",
     "en-US": "Click nodes to expand · Drag to pan · Contains spoilers"
+  },
+  "route.html.routeFilter": {
+    "zh-CN": "选择要高亮的路线",
+    "ja-JP": "強調するルートを選択",
+    "en-US": "Choose a route to highlight"
+  },
+  "route.html.allRoutes": {
+    "zh-CN": "全部路线",
+    "ja-JP": "すべてのルート",
+    "en-US": "All routes"
+  },
+  "route.html.entryChoices": {
+    "zh-CN": "入线选项（点击可定位）",
+    "ja-JP": "ルートに入る選択肢（クリックで移動）",
+    "en-US": "Choices to enter this route (select to locate)"
+  },
+  "route.html.possiblePaths": {
+    "zh-CN": "已高亮图中通往此结局的路径，具体选项组合尚待确认。",
+    "ja-JP": "このエンディングにつながる経路を表示中。選択肢の組み合わせは未確認です。",
+    "en-US": "Showing paths leading to this ending. The exact choice sequence is unconfirmed."
   },
   "route.html.canvas": {
     "zh-CN": "路线画布，方向键平移",

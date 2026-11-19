@@ -17,8 +17,12 @@
   const data = document.createElement('script');
   data.type = 'application/json';
   data.id = 'route-data';
-  data.textContent = JSON.stringify(host.document.interactive);
+  const {revision, ...graph} = host.document.interactive;
+  data.textContent = JSON.stringify(graph);
   document.body.append(data);
+  host.locate = () => window.__TAURI__.core.invoke('locate_route', {
+    id: host.gameId, language: host.language, revision
+  });
   host.export = async (kind, contents) => {
     try {
       await window.__TAURI__.core.invoke('export_route', {kind, contents});

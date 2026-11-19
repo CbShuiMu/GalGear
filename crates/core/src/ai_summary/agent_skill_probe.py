@@ -106,8 +106,7 @@ def inspect(config):
     report, decoded = helper['inspect'](path, paths[2])
     adapter = runpy.run_path(str(pathlib.Path(__file__).with_name('entis_adapter.py')))
     observations = adapter['observed_save_fields'](data, decoded)
-    # Keep the raw decoded file available for focused reads; no current-caption
-    # or current-PC semantics are assigned to a previously unknown save version.
+    # Keep the decoded file for focused reads and independent node checks.
     output = pathlib.Path(config['output']).resolve()
     output.mkdir(parents=True, exist_ok=True)
     write_artifact(output / 'context.bin', decoded)
@@ -115,7 +114,7 @@ def inspect(config):
                 tool='scripts/inspect_cotomi_save.py', input_sha256=hashlib.sha256(data).hexdigest(),
                 report=report, **observations,
                 decoded_path=str(output / 'context.bin'),
-                instruction='Reuse this decoded context and raw field evidence. Infer no current node from title/stack names alone. Write only missing version semantics, then test_program with independent evidence.')
+                instruction='Reuse this decoded context and raw field evidence. Prefer the bundled save parser for a matching layout. A current node requires the audited caller, return slot and caption relation, followed by test_program.')
 
 
 class SkillProbes:

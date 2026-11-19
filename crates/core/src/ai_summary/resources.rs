@@ -1,4 +1,4 @@
-use super::{invalid, io, read, write_json};
+use super::{invalid, io, media, read, write_json};
 #[cfg(test)]
 use galgear_i18n::Language;
 use galgear_i18n::Message;
@@ -54,6 +54,19 @@ pub fn source_inventory(root: &Path) -> Result<Vec<Stamp>, Message> {
         .collect()
 }
 
+pub(super) fn inventory_matches(root: &Path, saved: &[Stamp]) -> Result<bool, Message> {
+    // 老缓存可能已把媒体导出清单写入源文件列表，比较时沿用同一批次路径规则。
+    let display_root = crate::config::display_path(root);
+    let saved = saved.iter().filter(|stamp| {
+        !Path::new(&stamp.path)
+            .strip_prefix(&display_root)
+            .ok()
+            .and_then(Path::parent)
+            .is_some_and(media::is_published_batch)
+    });
+    Ok(source_inventory(root)?.iter().eq(saved))
+}
+
 pub fn stamp(path: &Path) -> Result<Stamp, Message> {
     let metadata = fs::metadata(path).map_err(io)?;
     Ok(Stamp {
@@ -69,10 +82,15 @@ pub fn stamp(path: &Path) -> Result<Stamp, Message> {
     })
 }
 
-pub fn files(root: &Path, depth: usize) -> Result<Vec<PathBuf>, Message> {
+fn files(root: &Path, depth: usize) -> Result<Vec<PathBuf>, Message> {
     let mut output = Vec::new();
-    fn visit(root: &Path, depth: usize, output: &mut Vec<PathBuf>) -> Result<(), Message> {
-        for entry in fs::read_dir(root).map_err(io)?.take(4096) {
+    fn visit(
+        root: &Path,
+        directory: &Path,
+        depth: usize,
+        output: &mut Vec<PathBuf>,
+    ) -> Result<(), Message> {
+        for entry in fs::read_dir(directory).map_err(io)?.take(4096) {
             let entry = entry.map_err(io)?;
             let kind = entry.file_type().map_err(io)?;
             let name = entry.file_name().to_string_lossy().to_lowercase();
@@ -91,12 +109,15 @@ pub fn files(root: &Path, depth: usize) -> Result<Vec<PathBuf>, Message> {
                 return Err(invalid());
             }
             if kind.is_dir() && depth > 0 {
-                visit(&entry.path(), depth - 1, output)?;
+                let path = entry.path();
+                if !path.strip_prefix(root).is_ok_and(media::is_published_batch) {
+                    visit(root, &path, depth - 1, output)?;
+                }
             }
         }
         Ok(())
     }
-    visit(root, depth, &mut output)?;
+    visit(root, root, depth, &mut output)?;
     output.sort();
     Ok(output)
 }
@@ -416,6 +437,30 @@ pub fn save_inputs(paths: &[PathBuf], home: &Path, scratch: &Path) -> Result<Vec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn media_exports_preserve_old_inventories_but_script_changes_invalidate_them() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        fs::create_dir(root.join("CGs")).unwrap();
+        let script = root.join("CGs/media-scene.ks");
+        fs::write(&script, "Original script").unwrap();
+        let original = source_inventory(&root).unwrap();
+        assert_eq!(original, [stamp(&script).unwrap()]);
+
+        let batch = root.join("CGs/media-test");
+        fs::create_dir(&batch).unwrap();
+        let manifest = batch.join("manifest.json");
+        fs::write(&manifest, "{}").unwrap();
+        assert!(inventory_matches(&root, &original).unwrap());
+
+        let mut legacy = vec![stamp(&manifest).unwrap()];
+        legacy.extend(original);
+        assert!(inventory_matches(&root, &legacy).unwrap());
+
+        fs::write(&script, "Patched script with new content").unwrap();
+        assert!(!inventory_matches(&root, &legacy).unwrap());
+    }
 
     #[test]
     fn matching_language_wins_even_when_a_foreign_patch_is_loose() {

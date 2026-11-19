@@ -8,8 +8,8 @@ mod paths;
 mod steam;
 
 use crate::{Game, GameEdit, config::display_path};
+pub(crate) use kirikiri::{Bookmark, backup_identity, bookmark};
 pub use kirikiri::{SaveKind, classify};
-pub(crate) use kirikiri::backup_identity;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeSet,

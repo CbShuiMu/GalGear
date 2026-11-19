@@ -41,6 +41,7 @@ fn fingerprint() -> String {
         include_bytes!("analysis_reads.py").as_slice(),
         include_bytes!("analysis_recap.py").as_slice(),
         include_bytes!("route_graph.rs").as_slice(),
+        include_bytes!("route_focus.rs").as_slice(),
         include_bytes!("route_html.rs").as_slice(),
         include_bytes!("../../../../web/route-map.html").as_slice(),
         include_bytes!("../../../../web/route-map.js").as_slice(),
@@ -86,7 +87,11 @@ fn validate(result: &Value) -> Result<route_graph::Graph, Message> {
     Ok(graph)
 }
 
-fn load(game: &Game, settings: &Settings, check_save: bool) -> Result<Record, Message> {
+fn load(
+    game: &Game,
+    settings: &Settings,
+    check_save: bool,
+) -> Result<(Record, route_graph::Graph), Message> {
     let record: Record =
         serde_json::from_slice(&read(&record_path(game, settings), 4 * 1024 * 1024)?)
             .map_err(io)?;
@@ -95,11 +100,11 @@ fn load(game: &Game, settings: &Settings, check_save: bool) -> Result<Record, Me
     if record.schema != 1
         || (check_save && record.policy != fingerprint())
         || record.game_id != game.id
-        || record.inventory != resources::source_inventory(Path::new(&game.folder))?
+        || !resources::inventory_matches(Path::new(&game.folder), &record.inventory)?
     {
         return Err(invalid());
     }
-    validate(&record.result)?;
+    let graph = validate(&record.result)?;
     if check_save {
         let candidates =
             serde_json::to_value(super::preparation_save_inputs(game, settings)?.candidates)
@@ -112,7 +117,7 @@ fn load(game: &Game, settings: &Settings, check_save: bool) -> Result<Record, Me
             return Err(Message::new("summary.save_changed"));
         }
     }
-    Ok(record)
+    Ok((record, graph))
 }
 
 fn setup(game: &Game, settings: &Settings, result: &Value, reused: bool) -> Setup {
@@ -134,7 +139,7 @@ pub(super) fn prepare(
     home: &Path,
     progress: &mut Reporter<'_>,
 ) -> Result<Setup, Message> {
-    if let Ok(record) = load(game, settings, true) {
+    if let Ok((record, _)) = load(game, settings, true) {
         progress.stage(Stage::Checking, StageStatus::Completed);
         return Ok(setup(game, settings, &record.result, true));
     }
@@ -223,7 +228,7 @@ pub(super) fn summarize(
     home: &Path,
     progress: &mut Reporter<'_>,
 ) -> Result<Summary, Message> {
-    let (record, cached) = match load(game, settings, true) {
+    let ((record, _), cached) = match load(game, settings, true) {
         Ok(record) => (record, true),
         Err(_) => {
             prepare(game, settings, config, home, progress)?;
@@ -269,8 +274,15 @@ pub(super) fn summarize(
 }
 
 pub(super) fn graph(game: &Game, settings: &Settings) -> Result<route_graph::Graph, Message> {
-    let record = load(game, settings, false)?;
-    validate(&record.result)
+    load(game, settings, false).map(|(_, graph)| graph)
+}
+
+pub(super) fn location_inputs(
+    game: &Game,
+    settings: &Settings,
+) -> Result<(route_graph::Graph, Value, Value), Message> {
+    let (record, graph) = load(game, settings, false)?;
+    Ok((graph, record.result, record.save_candidates))
 }
 
 pub(super) fn route(game: &Game, settings: &Settings) -> Result<PathBuf, Message> {

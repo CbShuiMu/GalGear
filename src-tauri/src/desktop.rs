@@ -189,6 +189,7 @@ fn builder() -> tauri::Builder<tauri::Wry> {
             ai_summary::summarize_game,
             ai_summary::prepare_ai_route_map,
             crate::route_window::open_ai_route_map,
+            crate::route_window::locate_route,
             crate::route_window::export_route,
             ai_summary::extract_game_media,
             game_setup::choose_setup_executable,

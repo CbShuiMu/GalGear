@@ -96,9 +96,13 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(len(self.agent.done['graph']['nodes']),11)
         value['graph']['nodes']=value['graph']['nodes'][:2]
         value['graph']['edges']=[dict(**{'from':'s','to':'n0'},kind='choice',label=label,inferred=False,evidence='O1') for label in ['答应','拒绝']]
+        effects = [dict(stat='信赖', delta=2), dict(stat='体力', delta=-1)]
+        value['graph']['edges'][0]['effects'] = effects
         self.agent.emit('fixture-index.json',dict(records=[dict(name='menu',known_options=[dict(variants=['答应']),dict(variants=['拒绝'])])]))
         self.agent.finish(value)
         self.assertEqual(len(self.agent.done['graph']['edges']),2)
+        self.assertEqual(self.agent.done['graph']['edges'][0]['effects'], effects)
+        self.assertNotIn('effects', self.agent.done['graph']['edges'][1])
 
     def test_unlock_requires_a_readable_prerequisite(self):
         value=self.result()
@@ -157,13 +161,18 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(self.agent.done['graph']['nodes'][1]['kind'],'choice')
         self.assertEqual(self.agent.done['graph']['nodes'][1]['decision_kind'],'condition')
 
-    def test_save_marker_cannot_point_back_from_a_disconnected_root(self):
-        value=self.result()
+    def test_save_binds_to_a_reachable_story_node_outside_the_graph(self):
+        value = self.result()
         value['graph']['nodes'].append(dict(id='sv',kind='save',label='当前存档',evidence='O1'))
-        value['graph']['edges']=[dict(**{'from':'sv','to':'s'},label='字幕位置',inferred=True,evidence='O1')]
-        with self.assertRaisesRegex(ValueError,'must be reachable'):self.agent.finish(value)
-        value['graph']['edges'][0].update({'from':'s','to':'sv'})
+        with self.assertRaisesRegex(ValueError,'standalone save'):
+            self.agent.submit_route(value)
+        value['graph']['nodes'].pop()
+        value['save_position']['node'] = 'sv'
+        with self.assertRaisesRegex(ValueError,'reachable story node'):
+            self.agent.finish(value)
+        value['save_position']['node'] = 's'
         self.agent.finish(value)
+        self.assertEqual(self.agent.done['save_position']['node'],'s')
 
     def test_player_menu_cannot_disguise_clicks_as_automatic_flow(self):
         value=self.result()

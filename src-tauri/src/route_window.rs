@@ -1,6 +1,6 @@
 //! 独立路线图窗口仅加载打包页面，游戏目录中的内容始终作为数据传递。
 use crate::state::{AppState, find_game, snapshot};
-use galgear_core::ai_summary::route_view;
+use galgear_core::ai_summary::{route_location, route_view};
 use galgear_i18n::{Language, Message, tr};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -37,34 +37,65 @@ pub(crate) async fn open_ai_route_map(
         tauri::async_runtime::spawn_blocking(move || route_view::load(&game, &settings, &config))
             .await
             .map_err(open_error)??;
-    let result = build_window(&app, &label, &title, lang, document);
+    let result = build_window(&app, &id, &title, lang, document);
     drop(guard);
     result.map(|_| ())
 }
 
 fn build_window(
     app: &AppHandle,
-    label: &str,
+    id: &str,
     title: &str,
     lang: Language,
     document: route_view::Document,
 ) -> Result<WebviewWindow, Message> {
     let payload = serde_json::json!({
-        "document": document, "title": title, "language": lang.code(),
+        "document": document, "title": title, "language": lang.code(), "gameId": id,
+        "locateLabel": tr(lang, "route.locate"), "locating": tr(lang, "route.locating"),
+        "current": tr(lang, "route.locate_current"),
+        "mapChanged": tr(lang, "route.locate_map_changed"),
         "exportError": tr(lang, "route.export_failed"),
     });
     let script = format!("window.GalGearRoute = {payload};");
-    let mut builder =
-        WebviewWindowBuilder::new(app, label, WebviewUrl::App("route-map.html".into()))
-            .initialization_script(script)
-            .title(title)
-            .inner_size(1080.0, 760.0)
-            .min_inner_size(360.0, 360.0)
-            .center();
+    let mut builder = WebviewWindowBuilder::new(
+        app,
+        window_label(id),
+        WebviewUrl::App("route-map.html".into()),
+    )
+    .initialization_script(script)
+    .title(title)
+    .inner_size(1080.0, 760.0)
+    .min_inner_size(360.0, 360.0)
+    .center();
     if let Some(main) = app.get_webview_window("main") {
         builder = builder.parent(&main).map_err(open_error)?;
     }
     builder.build().map_err(open_error)
+}
+
+#[tauri::command]
+pub(crate) async fn locate_route(
+    id: String,
+    revision: String,
+    language: Language,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<route_location::Location, String> {
+    let localize = |error: Message| error.render(language);
+    if window.label() != window_label(&id) {
+        return Err(localize(Message::new("error.game_missing")));
+    }
+    let game = find_game(&state, &id).map_err(localize)?;
+    let mut settings = snapshot(&state).map_err(localize)?;
+    settings.language = language;
+    let guard = state.summaries.begin(&id).map_err(localize)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = guard;
+        route_location::locate(&game, &settings, &revision)
+    })
+    .await
+    .map_err(|e| localize(open_error(e)))?
+    .map_err(localize)
 }
 
 #[derive(Deserialize)]

@@ -12,6 +12,8 @@ import tempfile
 import unittest
 from unittest import mock
 
+from test_entis_adapter import fixture, identity_decoder, selection_script_fixture
+
 
 spec = importlib.util.spec_from_file_location('resource_discovery_host', pathlib.Path(__file__).with_name('agent_host.py'))
 host = importlib.util.module_from_spec(spec)
@@ -426,6 +428,75 @@ class ResourceDiscoveryTests(unittest.TestCase):
             self.assertNotEqual(before, self.agent.script_dependencies(self.archive))
             with self.assertRaisesRegex(ValueError, 'Distinct candidates'):
                 self.agent.verify_resource_selection(args)
+
+    def test_same_name_csx_selects_unique_save_match_and_rejects_ambiguity(self):
+        match, address = selection_script_fixture()
+        save = self.root / 'sample.bmp'
+        raw, _ = fixture(returned=address, callee='WitchWizard::OutMsg')
+        save.write_bytes(raw)
+        self.agent.required = {str(save)}
+        for name in ('other.arc', 'copy.arc'):
+            path = self.root / name
+            path.write_bytes(name.encode())
+            self.agent.config['inventory'].append(dict(path=str(path)))
+        samples = {'data.arc': selection_script_fixture(padding=b'\0')[0], 'other.arc': match, 'copy.arc': match}
+        listing = dict(exit_code=0, stdout=' [00000000] 7 sub/script.csx\n')
+
+        def run_skill(tool, args):
+            self.assertEqual(tool, 'run_skill')
+            if args['command'] == 'l':
+                return listing
+            self.assertEqual(args['filter'], r'^sub/script\.csx$')
+            output = pathlib.Path(args['archive']).stem
+            relative = output + '/sub/script.csx'
+            path = self.agent.work / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(samples[args['archive']])
+            return dict(exit_code=0, output=output, sample_output=relative)
+
+        adapter = host.ADAPTER_LIBRARY['_implementation']('entis_cotopha')
+        args = dict(script_name='script.csx', selected='data.arc', configuration='fake.cfg', priority='first')
+        with mock.patch.dict(adapter['selection_anchor'].__globals__, codec_decode=identity_decoder), \
+                mock.patch.object(self.agent, 'dispatch', side_effect=run_skill):
+            result = self.agent.verify_resource_selection(args)
+            self.assertEqual(result['selected'], str(self.root / 'other.arc'))
+            self.assertEqual(result['script_input'], dict(root='work', path='other/sub/script.csx'))
+            self.assertEqual(result['matched_saves'], 1)
+            self.assertIsNone(result['configuration'])
+            self.assertEqual(self.agent.verify_resource_selection(dict(script_name='script.csx'))['selected'],
+                             result['selected'])
+            self.agent.require_current_extraction(self.agent.work / result['script_input']['path'])
+            with self.assertRaisesRegex(ValueError, 'bytes differ'):
+                self.agent.require_current_extraction(self.agent.work / 'data/sub/script.csx')
+            save.write_bytes(raw + b'changed')
+            with self.assertRaisesRegex(ValueError, 'current saves'):
+                self.agent.require_current_extraction(self.agent.work / result['script_input']['path'])
+            save.write_bytes(raw)
+            self.agent.resource_selections.clear()
+            samples['data.arc'] = selection_script_fixture(extra=b'distinct script bytes')[0]
+            with self.assertRaisesRegex(ValueError, 'exactly one') as failure:
+                self.agent.verify_resource_selection(args)
+            self.assertEqual(failure.exception.error_details['matched_scripts'], 2)
+            self.assertFalse(self.agent.resource_selections)
+            samples.update({name: selection_script_fixture(scope='unrelated')[0] for name in samples})
+            with self.assertRaisesRegex(ValueError, 'exactly one') as failure:
+                self.agent.verify_resource_selection(args)
+            self.assertEqual(failure.exception.error_details['matched_scripts'], 0)
+            self.assertFalse(self.agent.resource_selections)
+
+    def test_transcript_family_reads_structured_archive_inventory(self):
+        extracted = self.agent.work / 'unpacked'
+        self.agent.extracted_from[str(extracted)] = str(self.archive)
+        inventory = self.agent.work / 'members.json'
+        inventory.write_text(json.dumps({'members': ['sub/script.csx', 'other.csx', 'image.eri']}),
+                             encoding='utf-8')
+        with mock.patch.object(self.agent, 'dispatch', return_value=dict(
+                exit_code=0, stdout='', member_inventory=inventory.name)):
+            self.agent.require_script_family(extracted / 'sub/script.csx')
+            self.assertEqual(self.agent.required_script_sets[str(self.archive) + '|.csx']['members'],
+                             ['other.csx', 'sub/script.csx'])
+            with self.assertRaisesRegex(ValueError, 'verified archive transcript set'):
+                self.agent.require_script_family(extracted / 'unlisted/script.csx')
 
     def test_conflicting_sources_reject_directory_binary_and_generated_configuration(self):
         patch = self.root / 'patch.arc'

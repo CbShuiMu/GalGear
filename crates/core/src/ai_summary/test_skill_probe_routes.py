@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from test_entis_adapter import fixture, header, section, text
+from test_entis_adapter import fixture, header, identity_decoder, section, text
 
 HERE = pathlib.Path(__file__).resolve().parent
 HOST = runpy.run_path(str(HERE / 'agent_host.py'))
@@ -17,8 +17,8 @@ PROBE = HOST['SKILL_PROBE']
 ROUTES = HOST['NATIVE_ROUTES']
 
 
-def slot_fixture(version=20250210):
-    return b'BM' + struct.pack('<I', 64) + bytes(58) + fixture(version=version)[0]
+def slot_fixture(version=20250210, **settings):
+    return b'BM' + struct.pack('<I', 64) + bytes(58) + fixture(version=version, **settings)[0]
 
 
 class SkillProbeRoutesTests(unittest.TestCase):
@@ -44,8 +44,10 @@ class SkillProbeRoutesTests(unittest.TestCase):
             skill=str(self.skill), work=str(self.root / 'game/work'), title='Fixture', language='en-US',
             provider='deepseek', model='never-called', max_turns=0, required_saves=[str(self.save)]))
 
-    def test_automatic_probe_survives_unknown_version_without_granting_progress(self):
-        probes = self.agent.automatic_probes()
+    def test_automatic_probe_proposes_reuse_by_layout_without_granting_progress(self):
+        adapter = HOST['ADAPTER_LIBRARY']['_implementation']('entis_cotopha')
+        with mock.patch.dict(adapter['inspect_save'].__globals__, codec_decode=identity_decoder):
+            probes = self.agent.automatic_probes()
         self.assertEqual(len(probes), 1)
         result = json.loads((self.agent.work / probes[0]['skill_result']).read_text(encoding='utf-8'))['result']
         self.assertEqual(result['raw_title']['fields'][0]['value'], 20250210)
@@ -54,12 +56,15 @@ class SkillProbeRoutesTests(unittest.TestCase):
         self.assertEqual(self.agent.programs, {})
         self.assertEqual(self.agent.tests, {})
         self.assertFalse(self.agent.preflight_status()['ready_for_script_sample'])
-        self.assertTrue(self.agent.research.adapter_fallbacks())
-        # The negative adapter result remains readable at its advertised pointer.
+        self.assertFalse(self.agent.research.adapter_fallbacks())
+        self.assertEqual(probes[0]['save_reuse_profile']['vm_profile'], 'cotopha-frame-vector-v1')
+        self.assertNotIn('version', probes[0]['save_reuse_profile']['title_profile'])
+        self.assertNotIn('save_template', probes[0])
         attempt = self.agent.research.adapter_attempts()[-1]
-        self.assertTrue(attempt)
+        self.assertTrue(attempt['successful'])
         archived = json.loads((self.agent.work / probes[0]['adapter_result']).read_text(encoding='utf-8'))
-        self.assertEqual(archived['result']['inspection']['status'], 'unsupported_variant')
+        self.assertEqual(archived['result']['inspection']['reuse_profile'], probes[0]['save_reuse_profile'])
+        self.assertFalse(archived['result']['verified_current_node'])
         self.agent.workflow.stage = 'resources'
         self.agent.workflow.pending_validation.add('script')
         self.agent.check_model_tool('read_json', dict(root='work', path=probes[0]['skill_result']))
@@ -141,6 +146,7 @@ class SkillProbeRoutesTests(unittest.TestCase):
             self.agent.dispatch('record_save_preflight', args)
 
     def test_ready_template_bounds_only_post_preflight_save_program_research(self):
+        self.save.write_bytes(slot_fixture(title_class='UnknownTitle'))
         self.agent.automatic_probes()
         self.agent.workflow.stage = 'save_program'
         self.agent.workflow.inspection_turns = {1, 2, 3}
@@ -187,7 +193,7 @@ class SkillProbeRoutesTests(unittest.TestCase):
     def test_unknown_header_and_missing_skill_do_not_block_model_fallback(self):
         self.save.write_bytes(b'not a Cotomi save')
         self.assertEqual(self.agent.automatic_probes(), [])
-        self.save.write_bytes(slot_fixture())
+        self.save.write_bytes(slot_fixture(title_class='UnknownTitle'))
         (self.skill / 'scripts/inspect_cotomi_save.py').unlink()
         result = self.agent.automatic_probes()[0]
         self.assertIn('lacks', result['skill_failure'])

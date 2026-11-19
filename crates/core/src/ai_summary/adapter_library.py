@@ -14,8 +14,8 @@ MAX_PROFILE = 64 * 1024
 MAX_OUTPUT = 64 * 1024 * 1024
 MAX_PROGRAM = 128000
 _REGISTRY = {
-    'entis_cotopha': dict(module='entis_adapter.py', version=1,
-        summary='Bounded Entis/CSX tables and versioned Cotopha save state; explicit semantic profile and independent byte proofs required.'),
+    'entis_cotopha': dict(module='entis_adapter.py', version=2,
+        summary='Bounded Entis/CSX tables and structurally matched Cotopha saves; explicit call semantics and independent byte proofs required.'),
 }
 _LOADED = {}
 

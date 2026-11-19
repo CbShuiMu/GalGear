@@ -137,6 +137,8 @@ def bind_graph(agent, graph, readable_options, guide_refs=()):
     for edge in graph['edges']:
         edge['label'] = expand(edge['label'])
         if 'condition' in edge: edge['condition']=expand(edge['condition'])
+        for effect in edge.get('effects', []):
+            effect['stat'] = expand(effect['stat'])
         if edge.get('kind')!='choice': continue
         basis = edge.get('text_basis')
         if not basis and edge['label'] in known: continue

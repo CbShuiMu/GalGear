@@ -16,7 +16,7 @@ if not HOST_PATH.exists():
     HOST_PATH = HERE.parents[2] / 'crates/core/src/ai_summary/agent_host.py'
 HOST = runpy.run_path(str(HOST_PATH))
 ADAPTER = runpy.run_path(str(HERE / 'entis_adapter.py'))
-TITLE = {'class': 'SaveDataTitle', 'version': 20140121, 'caption_field': 3}
+TITLE = {'class': 'SaveDataTitle', 'caption_field': 3}
 SAVE_PROFILE = dict(message_callees=['synthetic_handler'], title_profile=TITLE,
                     text_argument=2, vm_profile='cotopha-frame-vector-v1')
 SCRIPT_PROFILE = dict(message_callees=['synthetic_handler'], scalar_arguments=1,
@@ -71,14 +71,14 @@ def frame(name, base, names):
 
 def fixture(*, version=20140121, argument='control:caption', caller='synthetic_scope', bridge_base=0,
             extra_callee=False, return_trailer=b'\xff' * 8, return_tag=4, returned=77,
-            title_class='SaveDataTitle'):
-    title = obj(title_class, [number(version), obj('Time', [number(0)] * 7),
-        string('chapter'), string('caption'), number(0), number(0)])
+            title_class='SaveDataTitle', time_fields=7, caption='caption', callee='synthetic_handler'):
+    title = obj(title_class, [number(version), obj('Time', [number(0)] * time_fields),
+        string('chapter'), string(caption), number(0), number(0)])
     returned_value = bytes([return_tag]) + struct.pack('<Q', returned) + return_trailer
     reference = b'\x01' + b'\0' * 24 + b'\xff'
     values = [returned_value, reference, string('speaker'), string(argument)]
     frames = [frame(caller, 0, []), frame('', bridge_base, []),
-              frame('synthetic_handler', 1, ['this', 'speaker', 'message'])]
+              frame(callee, 1, ['this', 'speaker', 'message'])]
     if extra_callee:
         frames.append(frame('synthetic_handler', 1, ['this', 'speaker', 'message']))
     stack = u32(len(values)) + b''.join(values) + u32(len(frames)) + b''.join(frames)
@@ -102,10 +102,28 @@ def script_fixture():
         + section('conststr',pool) + section('funcinfo',funcs)), len(sequence)
 
 
+def selection_script_fixture(*, padding=b'', caption='caption', scope='synthetic_scope', extra=b''):
+    push = b'\x02\x00\x06\0\0\0\x80'
+    receiver = padding + b'\x02\x03\x04\0\0\0\0'
+    speaker_ref = len(receiver) + len(push)
+    code = receiver + push + u32(0)
+    text_ref = len(code) + len(push)
+    code += push + u32(1) + b'\x02\x00\x02'
+    code += (b'\x02\x00\x04' + u32(3)) * 4
+    code += b'\x11' + u32(8) + b'\0\x04' + u32(128)
+    pool = u32(2) + text('speaker') + u32(1) + u32(speaker_ref)
+    pool += text(caption) + u32(1) + u32(text_ref)
+    funcs = u32(2)
+    for name, address in [('module@' + scope, 0), ('WitchWizard::OutMsg', 128)]:
+        funcs += struct.pack('<IIII', 0, address, 0xffffffff, 0) + text(name)
+    return (header('Cotopha Image file') + section('image', code.ljust(256, b'\0'))
+            + section('conststr', pool) + section('funcinfo', funcs) + section('data', extra)), len(code)
+
+
 class EntisAdapterTests(unittest.TestCase):
     def extract(self, data, rows):
         return ADAPTER['save_frame_adapter'](data, {'dialogue': rows}, decode=identity_decoder,
-            title_profile=TITLE, message_callees=SAVE_PROFILE['message_callees'], text_argument=2)
+            message_callees=SAVE_PROFILE['message_callees'], text_argument=2)
 
     def test_native_script_projection_is_independently_attested(self):
         raw, returned = script_fixture()
@@ -133,12 +151,48 @@ class EntisAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'matches=2'):
             self.extract(data, [row, duplicate])
 
-    def test_unknown_version_wrong_argument_and_ambiguous_callee_reject(self):
-        for settings in (dict(version=7), dict(argument='other message'), dict(extra_callee=True)):
+    def test_wrong_layout_argument_and_ambiguous_callee_reject(self):
+        for settings in (dict(time_fields=6), dict(argument='other message'), dict(extra_callee=True)):
             with self.subTest(settings=settings):
                 data, row = fixture(**settings)
                 with self.assertRaises(ValueError):
                     self.extract(data, [row])
+
+    def test_same_snapshot_reuses_title_layout_across_versions(self):
+        source = ADAPTER['program']('save', SAVE_PROFILE)
+        HOST['validate_program'](source)
+        namespace = {}
+        with mock.patch.dict(sys.modules, galgear_codecs=types.SimpleNamespace(decode=identity_decoder)):
+            exec(source, namespace)
+        for version in (20140121, 20250210, 20140101, 7):
+            with self.subTest(version=version):
+                legacy_profile = dict(SAVE_PROFILE, title_profile=dict(TITLE, version=version))
+                self.assertEqual(ADAPTER['program']('save', legacy_profile), source)
+                data, row = fixture(version=version)
+                result = self.inspect_save(data, SAVE_PROFILE)
+                self.assertEqual(result['observed_title']['version'], version)
+                self.assertEqual(result['reuse_profile'], SAVE_PROFILE)
+                self.assertEqual(namespace['extract'](data, {'dialogue': [row]})['line'], 5)
+
+    def test_wrong_return_or_script_caption_rejects_matching_layout(self):
+        data, row = fixture(version=20250210)
+        wrong_return = dict(row, _native=[dict(row['_native'][0], value=78)])
+        with self.assertRaisesRegex(ValueError, 'matches=0'):
+            self.extract(data, [wrong_return])
+        with self.assertRaisesRegex(ValueError, 'disagrees with the current-title'):
+            self.extract(data, [dict(row, text='different caption')])
+
+    def test_script_selection_requires_exact_scope_return_and_text(self):
+        script, address = selection_script_fixture()
+        save, _ = fixture(version=20250210, returned=address, callee='WitchWizard::OutMsg')
+        function = ADAPTER['selection_anchor']
+        with mock.patch.dict(function.__globals__, codec_decode=identity_decoder):
+            anchor = function(save)
+        self.assertEqual(ADAPTER['matches_selection_anchors'](script, [anchor]), [0])
+        for changes in (dict(padding=b'\0'), dict(scope='other_scope'), dict(caption='other caption')):
+            with self.subTest(changes=changes):
+                candidate, _ = selection_script_fixture(**changes)
+                self.assertEqual(ADAPTER['matches_selection_anchors'](candidate, [anchor]), [])
 
     def test_return_slot_requires_integer_type_and_valid_trailer(self):
         for settings in (dict(return_trailer=b'\0' * 8), dict(return_tag=5)):
@@ -240,35 +294,24 @@ class EntisAdapterTests(unittest.TestCase):
         self.assertEqual([item['role'] for item in default['observations']], ['current_caption'])
         self.assertNotIn('current_call', default)
 
-    def test_inspection_rejects_matching_unknown_class_or_version_profiles(self):
-        variants = [(dict(version=7), dict(TITLE,version=7)),
-                    (dict(title_class='UnknownTitle'),dict(TITLE,**{'class':'UnknownTitle'}))]
-        for fixture_profile,title_profile in variants:
-            with self.subTest(title_profile=title_profile):
-                data,unused = fixture(**fixture_profile)
-                result = self.inspect_save(data, dict(title_profile=title_profile))
+    def test_inspection_rejects_unsupported_layout(self):
+        for settings in (dict(time_fields=6), dict(title_class='UnknownTitle')):
+            with self.subTest(settings=settings):
+                data,unused = fixture(version=7, **settings)
+                result = self.inspect_save(data, {})
                 self.assertFalse(result['ok'])
                 self.assertEqual(result['status'], 'unsupported_variant')
+                self.assertEqual(result['reason'], 'unsupported_title_layout')
                 self.assertNotIn('current_call', result)
                 self.assertNotIn('observations', result)
-                with self.assertRaisesRegex(ValueError, 'unsupported current-title class/version/API profile'):
-                    ADAPTER['program']('save',dict(SAVE_PROFILE,title_profile=title_profile))
-
-    def test_inspection_rejects_unknown_native_title_under_default_profile(self):
-        for fixture_profile in (dict(version=7),dict(title_class='UnknownTitle')):
-            with self.subTest(fixture_profile=fixture_profile):
-                data,unused=fixture(**fixture_profile)
-                result = self.inspect_save(data,{})
-                self.assertFalse(result['ok'])
                 self.assertEqual(result['next_action'], 'write_save_parser')
                 observed = result['observed_title']
                 proof = observed['version_proof']
                 self.assertEqual(int.from_bytes(data[proof['offset']:proof['offset'] + proof['width']], 'little'), observed['version'])
-                self.assertEqual(observed['version'], fixture_profile.get('version', TITLE['version']))
-                self.assertEqual(observed['class_name'], fixture_profile.get('title_class', TITLE['class']))
+                self.assertEqual(observed['version'], 7)
 
-    def test_unknown_title_does_not_decode_or_accept_a_forged_profile(self):
-        data, unused = fixture(version=7)
+    def test_unknown_title_layout_does_not_decode(self):
+        data, unused = fixture(version=7, title_class='UnknownTitle')
         with mock.patch.dict(ADAPTER['inspect_save'].__globals__,
                 codec_decode=lambda *args, **kwargs: self.fail('Unknown title must be diagnosed before decoding')):
             for profile in ({}, dict(title_profile=TITLE), dict(save=dict(title_profile=dict(TITLE, version=7)))):
@@ -278,14 +321,23 @@ class EntisAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.inspect_save(data[:-1], {})
 
+    def test_empty_caption_keeps_structural_reuse_without_node_evidence(self):
+        data, row = fixture(version=20140101, caption='')
+        report = self.inspect_save(data, {})
+        self.assertEqual(report['reuse_profile']['title_profile'], TITLE)
+        self.assertEqual(report['observations'], [])
+        with self.assertRaisesRegex(ValueError, 'current caption is empty'):
+            self.extract(data, [row])
+
     def test_inspection_and_generation_share_strict_title_profile_types(self):
         for title_profile in (dict(TITLE,version=20140121.0),dict(TITLE,caption_field=3.0),
-                              dict(TITLE,caption_field=True),dict(TITLE,extra='unknown'),None):
+                              dict(TITLE,caption_field=True),dict(TITLE,extra='unknown'),
+                              {**TITLE, 'class': 'UnknownTitle'},None):
             with self.subTest(title_profile=title_profile):
                 data,unused=fixture()
-                with self.assertRaisesRegex(ValueError,'unsupported current-title class/version/API profile'):
+                with self.assertRaisesRegex(ValueError,'unsupported current-title layout profile'):
                     self.inspect_save(data,dict(title_profile=title_profile))
-                with self.assertRaisesRegex(ValueError,'unsupported current-title class/version/API profile'):
+                with self.assertRaisesRegex(ValueError,'unsupported current-title layout profile'):
                     ADAPTER['program']('save',dict(SAVE_PROFILE,title_profile=title_profile))
 
 

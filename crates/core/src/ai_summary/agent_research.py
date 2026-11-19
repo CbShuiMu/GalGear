@@ -429,6 +429,7 @@ class ResearchStore:
                     and isinstance(preview_value, dict) and preview_value.get('status') == 'unsupported_variant'
                     and preview_value.get('next_action') == 'write_save_parser'):
                 entry['adapter_fallback'] = dict(root=args.get('root'), path=args.get('path'),
+                    reason=preview_value.get('reason'),
                     observed_title=preview_value.get('observed_title'), supported_title=preview_value.get('supported_title'))
         if isinstance(args.get('source'), str):
             entry['analysis_source_sha256'] = hashlib.sha256(args['source'].encode('utf-8')).hexdigest()
@@ -444,9 +445,11 @@ class ResearchStore:
 
     def adapter_attempts(self):
         """Keep bounded, current adapter results visible across unrelated reads."""
+        # Legacy fallbacks lacked a reason and could reject a valid layout by version alone.
         attempts = [entry for entry in self.records.values()
                     if entry['tool'] in ('inspect_engine_adapter', 'reuse_engine_adapter')
-                    and not entry.get('stale')]
+                    and not entry.get('stale')
+                    and (not entry.get('adapter_fallback') or entry['adapter_fallback'].get('reason'))]
         return [dict(ref=entry['ref'], adapter=entry.get('adapter'), kind=entry.get('kind'),
                      successful=entry['successful'], preview=structural_preview(entry['preview'], budget=1200),
                      read_result=entry['read_preview'],
@@ -458,7 +461,7 @@ class ResearchStore:
         current = {}
         for entry in self.records.values():
             fallback = entry.get('adapter_fallback')
-            if fallback and not entry.get('stale'):
+            if fallback and fallback.get('reason') and not entry.get('stale'):
                 key = (entry.get('adapter'), fallback['root'], fallback['path'])
                 current[key] = dict(ref=entry['ref'], adapter=entry.get('adapter'),
                                     read_result=entry['read_preview'], **fallback)

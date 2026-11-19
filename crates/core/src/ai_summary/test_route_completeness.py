@@ -86,6 +86,22 @@ class RouteCompletenessTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'distinct menu locations'):
             self.agent.submit_route(value)
 
+    def test_required_menu_cannot_gain_a_shortcut_from_chapter_order(self):
+        self.options(['同意', '拒绝'])
+        value = self.payload()
+        graph = value['graph']
+        graph['nodes'].extend([dict(id='menu', label='是否同行？', kind='choice', evidence='O1'),
+                               dict(id='next', label='回到学校', kind='scene', evidence='O1')])
+        for source, target, kind, caption in [('start', 'menu', 'flow', ''), ('menu', 'next', 'choice', '同意'),
+                ('menu', 'next', 'choice', '拒绝'), ('start', 'next', 'flow', '')]:
+            graph['edges'].append({'from':source, 'to':target, 'kind':kind, 'label':caption,
+                                   'inferred':False, 'evidence':'O1'})
+        with self.assertRaisesRegex(ValueError, 'around menu menu'):
+            self.agent.submit_route(value)
+        graph['edges'][-1].update(condition='已完成约定', evidence='O1 script:12 conditional jump')
+        self.agent.submit_route(value)
+        self.assertEqual(len(self.agent.route_draft['graph']['edges']), 4)
+
     def test_archive_companion_is_read_and_registered_without_another_model_call(self):
         (self.agent.host.roots['game']/'story.arc').write_bytes(b'fixture')
         document=self.agent.host.roots['skill']/'commands/garbro.md'

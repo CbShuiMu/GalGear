@@ -1,7 +1,7 @@
-"""Reusable Entis/Cotopha byte adapter for explicitly audited variant profiles.
+"""Reusable Entis/Cotopha byte adapter for structurally matched inputs.
 
-The supported title and frame serialization variant is deliberately bounded;
-unknown versions, object-prefix layouts and ambiguous native nodes fail closed.
+The supported title and frame layouts are bounded. Unknown layouts,
+unsupported object prefixes and ambiguous native nodes fail closed.
 Application display callees and calling ABI require an explicit audited profile.
 All returned evidence is replayed by a separate verifier. Generated parser
 snapshots retain their own source identity and never import this library.
@@ -17,7 +17,7 @@ PUSH_STRING = b'\x02\x00\x06\x00\x00\x00\x80'
 NEW_ARRAY = b'\x02\x00\x02'
 ADD = b'\x0c\x00'
 PUSH_INTEGER = b'\x02\x00\x04'
-SUPPORTED_TITLE_PROFILE = {'class': 'SaveDataTitle', 'version': 20140121, 'caption_field': 3}
+SUPPORTED_TITLE_PROFILE = {'class': 'SaveDataTitle', 'caption_field': 3}
 
 class UnsupportedVariant(ValueError):
     pass
@@ -224,7 +224,7 @@ def script_candidate_adapter(data, *, message_callees, scalar_arguments, call_ar
     return dict(rows=rows, native_profiles=profiles, tables={'conststr': dict(offset=pool['offset'], length=pool['length'], count_width=4, endian='little', fields=[dict(kind='text', length_width=4, unit=2, encoding='utf-16-le'), dict(kind='skip', count_width=4, unit=4)])})
 
 def title_value(data, cursor, end, depth=0):
-    """Exact recursive title-only grammar for the explicitly versioned profile."""
+    """Read the bounded title-only object grammar."""
     if depth > 8 or cursor >= end:
         raise ValueError('invalid title recursion or truncated type tag')
     tag = data[cursor]
@@ -308,21 +308,25 @@ def raw_save_observations(data, decode):
     return observed_save_fields(data, state['data'])
 
 
-def current_title(data, section, profile):
-    """A class/version/schema profile must have an independently audited API role."""
+def read_title(data, section):
     start, end = (section['offset'], section['offset'] + section['length'])
     value, after = title_value(data, start, end)
-    if after != end or value.get('kind') != 'object' or value.get('name') != profile.get('class'):
+    if after != end:
+        raise UnsupportedVariant('title object does not consume its complete section')
+    return value
+
+
+def title_fields(value):
+    """Validate the complete title layout before reading the caption field."""
+    if value.get('kind') != 'object' or value.get('name') != 'SaveDataTitle':
         raise UnsupportedVariant('unsupported complete title object')
     fields = value['fields']
-    if len(fields) != 6 or [field['kind'] for field in fields] != ['integer', 'object', 'string', 'string', 'integer', 'integer']:
+    if [field['kind'] for field in fields] != ['integer', 'object', 'string', 'string', 'integer', 'integer']:
         raise UnsupportedVariant('unsupported title field schema')
     time = fields[1]
-    if time['name'] != 'Time' or len(time['fields']) != 7 or any((field['kind'] != 'integer' for field in time['fields'])) or (fields[0]['value'] != profile.get('version')) or (profile.get('caption_field') != 3):
-        raise UnsupportedVariant('unsupported title version or caption policy')
-    if not fields[3]['value']:
-        raise UnsupportedVariant('current caption is empty')
-    return fields[3]
+    if time['name'] != 'Time' or [field['kind'] for field in time['fields']] != ['integer'] * 7:
+        raise UnsupportedVariant('unsupported title Time field schema')
+    return fields
 
 def stack_frame_suffixes(data, section):
     """Complete bounded frame-vector suffix, without inspecting integer values."""
@@ -404,19 +408,9 @@ def stack_prefix(data, section, frame_start, count):
             raise ValueError('native value exceeds its vector boundary')
     return result
 
-def save_frame_adapter(data, metadata, *, decode, title_profile, message_callees, text_argument=2):
-    """Variant-specific current call slot; independent host replays every proof.
-
-    The title API and frame base-1 convention require the audited profile. The
-    complete global object graph is intentionally not claimed to be decoded.
-    """
-    state = saved_context(data, decode)
-    title_section = state['raw_sections'].get('title')
-    if title_section is None:
-        raise UnsupportedVariant('native title section is absent')
-    caption = current_title(data, title_section, title_profile)
-    clear, sections = (state['data'], state['sections'])
-    frame_vector = stack_frame_suffixes(clear, sections['stack'])
+def current_call(state, frame_vector, caption, message_callees, text_argument):
+    if not caption['value']:
+        raise UnsupportedVariant('current caption is empty')
     selected = [(index, frame) for index, frame in enumerate(frame_vector['frames']) if frame['name'] in message_callees]
     if len(selected) != 1:
         raise UnsupportedVariant('display call frame is absent or ambiguous')
@@ -425,7 +419,8 @@ def save_frame_adapter(data, metadata, *, decode, title_profile, message_callees
         raise ValueError('display call has no caller return slot')
     if type(text_argument) is not int or not 0 <= text_argument < frame['local_count'] or frame['local_count'] < 3:
         raise UnsupportedVariant('unsupported display-call argument profile')
-    values = stack_prefix(clear, sections['stack'], frame_vector['offset'], frame['base'] + text_argument + 1)
+    values = stack_prefix(state['data'], state['sections']['stack'],
+                          frame_vector['offset'], frame['base'] + text_argument + 1)
     return_slot = values[frame['base'] - 1]
     if return_slot['kind'] != 'integer':
         raise UnsupportedVariant('display call return slot is not an Integer')
@@ -443,6 +438,73 @@ def save_frame_adapter(data, metadata, *, decode, title_profile, message_callees
     argument = values[frame['base'] + text_argument]
     if argument['kind'] != 'string' or not argument['value'].endswith(caption['value']):
         raise UnsupportedVariant('current-caption API disagrees with the display-call text argument')
+    return frame, caller, return_slot, argument
+
+
+def selection_anchor(data):
+    """Read one audited OutMsg anchor without consulting any candidate script."""
+    state = saved_context(data, codec_decode)
+    title = state['raw_sections'].get('title')
+    if title is None:
+        raise UnsupportedVariant('native title section is absent')
+    caption = title_fields(read_title(data, title))[3]
+    vector = stack_frame_suffixes(state['data'], state['sections']['stack'])
+    callee, caller, returned, _ = current_call(state, vector, caption, {'WitchWizard::OutMsg'}, 2)
+    return dict(callee=callee['name'], caller=caller['name'], address=returned['value'], caption=caption['value'])
+
+
+def matches_selection_anchors(data, anchors):
+    """Check the actual call ending at each saved address in one CSX image."""
+    module = parse_csx(data)
+    code, strings = module['code'], module['strings']
+    functions = sorted(module['functions'], key=lambda item: item['address'])
+    starts = [item['address'] for item in functions]
+    targets = {item['address']: item['name'] for item in functions}
+    if 'WitchWizard::OutMsg' not in targets.values():
+        raise UnsupportedVariant('candidate lacks the audited OutMsg function')
+
+    def matches(anchor):
+        end = anchor['address']
+        if not 11 <= end <= len(code) or code[end - 11:end - 4] != b'\x11\x08\0\0\0\0\x04':
+            return False
+        if targets.get(uint(code, end - 4)) != anchor['callee']:
+            return False
+        # This bound follows from the actual OutMsg operand widths and the
+        # supported array limit. The return address itself is never translated.
+        max_length = 11 + 3 + 16 * 13 + 4 * 7 + 11
+        begin = max(0, end - max_length)
+        start = code.find(PUSH_STRING, begin, end)
+        while start >= 0:
+            operand = start + len(PUSH_STRING)
+            if (start >= 18 and operand + 4 <= end
+                    and code[start - 18:start - 11] == b'\x02\x03\x04\0\0\0\0'
+                    and code[start - 11:start - 4] == PUSH_STRING
+                    and uint(code, start - 4) < len(strings)):
+                index = uint(code, operand)
+                if index < len(strings) and operand in strings[index]['refs'] and strings[index]['text'] == anchor['caption']:
+                    owner = bisect.bisect_right(starts, start) - 1
+                    if (owner >= 0 and starts[owner] <= start - 18
+                            and (owner + 1 == len(starts) or end <= starts[owner + 1])):
+                        name = functions[owner]['name']
+                        if name.rsplit('@', 1)[-1] == anchor['caller']:
+                            tail = _call_tail(code, operand + 4, strings, scalar_arguments=4, call_arity=8)
+                            if tail and tail['end'] == end:
+                                return True
+            start = code.find(PUSH_STRING, start + len(PUSH_STRING), end)
+        return False
+
+    return [index for index, anchor in enumerate(anchors) if matches(anchor)]
+
+
+def save_frame_adapter(data, metadata, *, decode, message_callees, text_argument=2):
+    """Bind the saved call frame to a single attested script node."""
+    state = saved_context(data, decode)
+    title_section = state['raw_sections'].get('title')
+    if title_section is None:
+        raise UnsupportedVariant('native title section is absent')
+    caption = title_fields(read_title(data, title_section))[3]
+    frame_vector = stack_frame_suffixes(state['data'], state['sections']['stack'])
+    _, caller, return_slot, _ = current_call(state, frame_vector, caption, message_callees, text_argument)
     rows = metadata.get('dialogue', [])
     if isinstance(rows, dict):
         rows = rows.get('rows', [])
@@ -548,13 +610,14 @@ def bisect_right(values, value):
     return lo
 
 def checked_title_profile(profile):
-    """Only the audited title API may assign a current-caption field role."""
-    supported = SUPPORTED_TITLE_PROFILE
-    if (not isinstance(profile, dict) or profile != supported
-            or type(profile.get('version')) is not int
-            or type(profile.get('caption_field')) is not int):
-        raise ValueError('unsupported current-title class/version/API profile')
-    return dict(supported)
+    """Accept legacy version metadata while selecting the parser by layout."""
+    if (not isinstance(profile, dict) or set(profile) - {'class', 'caption_field', 'version'}
+            or profile.get('class') != SUPPORTED_TITLE_PROFILE['class']
+            or type(profile.get('caption_field')) is not int
+            or profile['caption_field'] != SUPPORTED_TITLE_PROFILE['caption_field']
+            or ('version' in profile and type(profile['version']) is not int)):
+        raise ValueError('unsupported current-title layout profile')
+    return dict(SUPPORTED_TITLE_PROFILE)
 
 
 def checked_profile(kind, profile):
@@ -574,7 +637,7 @@ def checked_profile(kind, profile):
     elif kind == 'save':
         if profile.get('vm_profile') != 'cotopha-frame-vector-v1':
             raise ValueError('the audited native frame serialization profile must be explicit')
-        checked_title_profile(profile.get('title_profile'))
+        profile = dict(profile, title_profile=checked_title_profile(profile.get('title_profile')))
         if type(profile.get('text_argument')) is not int or not 0 <= profile['text_argument'] <= 16:
             raise ValueError('explicit native display text argument is required')
     else:
@@ -612,7 +675,7 @@ def assemble(template, kind, profile):
     elif raw:
         source += "def inspect_save_state(data):\n    return raw_save_observations(data, galgear_codecs.decode)\n"
     else:
-        source += "def extract(data, metadata):\n    return save_frame_adapter(data, metadata, decode=galgear_codecs.decode, title_profile=PROFILE['title_profile'], message_callees=PROFILE['message_callees'], text_argument=PROFILE['text_argument'])\n"
+        source += "def extract(data, metadata):\n    return save_frame_adapter(data, metadata, decode=galgear_codecs.decode, message_callees=PROFILE['message_callees'], text_argument=PROFILE['text_argument'])\n"
     return source
 BISECT_SOURCE = 'def bisect_right(values, value):\n    lo, hi = 0, len(values)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if value < values[mid]:\n            hi = mid\n        else:\n            lo = mid + 1\n    return lo\n'
 
@@ -626,8 +689,8 @@ def codec_decode(codec, data, expected_size):
 
 
 def describe():
-    return dict(id='entis_cotopha', version=1,
-        scope='One explicitly audited Cotopha title/frame serialization variant; unknown layouts fail closed.',
+    return dict(id='entis_cotopha', version=2,
+        scope='Reuse the same Cotopha parser when the actual title/frame layout matches. Saved version integers are diagnostic only.',
         profile=dict(script=dict(message_callees=['<audited native callee>'], scalar_arguments='<integer 0..16>',
             call_arity='<integer 1..32>', speaker_argument='<boolean>',
             scope_transform=dict(kind='last_component', separator='@')),
@@ -655,12 +718,12 @@ def describe():
             ],
             entry_source='Start def extract(data, metadata) with state = inspect_save_state(data). Raw save observations are NOT in metadata. metadata["dialogue"] is a LIST of verified rows with source,position,text,speaker,_native. The returned state has raw_title.fields, native_stack.frames, primitive_candidates.values; all proofs already include their standard view when needed. This template only decodes fields; the entry must establish the current native relation and pass test_program.'),
         guarantees=['Complete conststr and funcinfo table walk', 'Actual native call sequence and return coordinate',
-            'Complete current-title object and version check', 'Unique complete frame-vector suffix and typed value prefix',
+            'Complete current-title layout check', 'Unique complete frame-vector suffix and typed value prefix',
             'Caller short name and return Integer proofs; caption only crosschecks the uniquely selected native node'],
         inspection=dict(script=dict(profile=dict(inspection=dict(function_names=['<exact names>'],
             contains='<optional substring>',offset=0,limit=12),message_callees=['<optional chosen callee names>']),
             note='Default 12 functions; limit 1..20. Exact message_callees also returns up to three real call ABI summaries per callee.'),
-            save=dict(note='Raw caption/version profile and proof are returned first. Supply message_callees and text_argument to project caller/return/text proof without a transcript. Outputs are analysis evidence, not verification receipts.')),
+            save=dict(note='A successful inspection returns the matched layout profile. Supply the audited message_callees and text_argument to inspect the current caller, return slot and caption. Reuse this parser and run test_program on actual inputs.')),
         limitations=['Native object payloads and nonempty array prefixes are unsupported',
             'Frame base-1 caller convention and title API role require the explicitly audited variant',
             'Display-call semantic ABI is caller supplied; this is not a universal Entis engine decoder'])
@@ -702,61 +765,38 @@ def extract_script(data, metadata, profile):
 
 
 def inspect_save(data, metadata, profile):
-    # Inspection may precede callee/argument discovery, but it must not let a
-    # caller label an unsupported title class/version as the current caption.
+    title_profile = checked_title_profile(profile.get('title_profile', SUPPORTED_TITLE_PROFILE))
     section = save_sections(data).get('title')
     if section is None:
         raise UnsupportedVariant('missing title section')
-    end = section['offset'] + section['length']
-    title, after = title_value(data, section['offset'], end)
-    if after != end or title.get('kind') != 'object' or not title['fields'] or title['fields'][0]['kind'] != 'integer':
-        raise UnsupportedVariant('unsupported complete title object or version field')
-    version = title['fields'][0]
-    if title['name'] != SUPPORTED_TITLE_PROFILE['class'] or version['value'] != SUPPORTED_TITLE_PROFILE['version']:
+    title = read_title(data, section)
+    fields = title.get('fields', [])
+    observed_title = dict(class_name=title.get('name'), field_kinds=[field['kind'] for field in fields])
+    if fields and fields[0]['kind'] == 'integer':
+        observed_title.update(version=fields[0]['value'], version_proof=fields[0]['proof'])
+    try:
+        fields = title_fields(title)
+    except UnsupportedVariant as error:
         return dict(ok=False, analysis_only=True, status='unsupported_variant',
-            reason='unsupported_title_profile', next_action='write_save_parser',
-            observed_title=dict(class_name=title['name'], version=version['value'], version_proof=version['proof']),
-            supported_title=dict(SUPPORTED_TITLE_PROFILE),
-            instruction='The actual title class/version is outside this bundled adapter. Stop retrying profile values. '
-                        'Use reuse_engine_adapter(kind="save", profile={"mode":"raw_observations"}, entry_source=<your entry>) '
-                        'to reuse raw fields and their byte proofs; inspect only the missing native state relation, '
-                        'then test_program on this save. '
-                        'These observations do not establish a current caption or verified node.')
-    title_profile=checked_title_profile(profile.get('title_profile', SUPPORTED_TITLE_PROFILE))
+            reason='unsupported_title_layout', detail=str(error), next_action='write_save_parser',
+            observed_title=observed_title, supported_title=title_profile,
+            instruction='Investigate the observed layout difference. Reuse the raw_observations template for structural decoding and test the audited node relation.')
     state = saved_context(data, codec_decode)
     vector = stack_frame_suffixes(state['data'], state['sections']['stack'])
-    caption=current_title(data,state['raw_sections']['title'],title_profile)
-    result=dict(analysis_only=True,sections=state['sections'],value_slots=vector['slots'],
+    caption = fields[3]
+    result=dict(analysis_only=True, sections=state['sections'], value_slots=vector['slots'],
+        observed_title=observed_title,
+        reuse_profile=dict(title_profile=title_profile, vm_profile='cotopha-frame-vector-v1'),
         title=dict(caption=caption['value'],proof=caption['proof'],profile=title_profile),
-        observations=[dict(role='current_caption',proof=caption['proof'],value=caption['value'])],
+        observations=[dict(role='current_caption',proof=caption['proof'],value=caption['value'])] if caption['value'] else [],
         frames=[dict(name=item['name'],base=item['base'],locals=item['local_count'],variables=item['names'])
             for item in vector['frames']],
-        requires='An explicit supported title/VM profile and the same audited message callee as the script parser.')
+        requires='Use reuse_profile with the same audited message callee as the script parser and the actual text argument slot. Validate the current node independently.')
     names=profile.get('message_callees',[])
     if names:
-        selected=[(index,item) for index,item in enumerate(vector['frames']) if item['name'] in names]
-        if len(selected)!=1:
-            raise ValueError('chosen display frame is absent or ambiguous')
-        index,callee=selected[0]
         argument=profile.get('text_argument',2)
-        if type(argument) is not int or not 0<=argument<callee['local_count'] or callee['base']<1:
-            raise ValueError('invalid native text_argument')
-        previous=index-1
-        while previous>=0 and not vector['frames'][previous]['name']:
-            bridge=vector['frames'][previous]
-            if bridge['local_count'] or bridge['base']!=callee['base']-1:
-                raise ValueError('unsupported anonymous caller-frame transition')
-            previous-=1
-        if previous<0:
-            raise ValueError('no named native caller frame')
-        caller=vector['frames'][previous]
-        if caller['local_count'] or caller['base']!=callee['base']-1:
-            raise ValueError('unsupported named caller-frame transition')
-        values=stack_prefix(state['data'],state['sections']['stack'],vector['offset'],callee['base']+argument+1)
-        returned=values[callee['base']-1]
-        message=values[callee['base']+argument]
-        if returned['kind']!='integer' or message['kind']!='string' or not message['value'].endswith(caption['value']):
-            raise ValueError('native current-call values disagree with title API')
+        callee, caller, returned, message = current_call(state, vector, caption, names, argument)
+        result['reuse_profile'].update(message_callees=names, text_argument=argument)
         scope_proof=dict(caller['proof'],view=state['view'])
         position_proof=dict(returned['proof'],view=state['view'])
         text_proof=dict(message['proof'],view=state['view'])
@@ -772,5 +812,5 @@ def inspect_save(data, metadata, profile):
 def extract_save(data, metadata, profile):
     profile = checked_profile('save', profile)
     return save_frame_adapter(data, metadata, decode=codec_decode,
-        title_profile=profile['title_profile'], message_callees=profile['message_callees'],
+        message_callees=profile['message_callees'],
         text_argument=profile['text_argument'])

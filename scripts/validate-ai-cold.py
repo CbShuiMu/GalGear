@@ -381,7 +381,9 @@ def audit_prepared(host, config, checkpoint, result):
         for folder, archive in checkpoint.get('extracted_from', {}).items():
             if Path(name).is_relative_to(Path(folder)):
                 covered_members.add((archive, Path(name).relative_to(folder).as_posix().casefold()))
-    complete = (bool(expected_members) and expected_members.issubset(covered_members)
+    loose_only = bool(script_checks) and all(Path(item['path']).is_relative_to(game)
+                 and not Path(item['path']).is_relative_to(work) for item in script_checks)
+    complete = ((bool(expected_members) or loose_only) and expected_members.issubset(covered_members)
                 and not coverage.get('pending_members')
                 and coverage.get('expected_members') == len(expected_members)
                 and coverage.get('covered_members') == len(expected_members & covered_members))
