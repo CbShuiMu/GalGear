@@ -66,10 +66,10 @@ pub async fn set_ai_summary(
     if enabled {
         let settings = snapshot(&state)?;
         let config = state.store.path.clone();
-        let (home, resources) = runtime_home(&state)?;
+        let skills = state.skills.clone();
         tauri::async_runtime::spawn_blocking(move || {
             let _guard = guard;
-            let _resources = resources;
+            let (home, _resources) = skills.prepare_analysis()?;
             ai_summary::prepare_with_progress(&game, &settings, &config, &home, &|progress| {
                 report(&app, request_id.unwrap_or(0), &game.id, progress)
             })
@@ -93,11 +93,11 @@ pub async fn summarize_game(
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
     let config = state.store.path.clone();
-    let (home, resources) = runtime_home(&state)?;
+    let skills = state.skills.clone();
     let guard = state.summaries.begin(&id)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _guard = guard;
-        let _resources = resources;
+        let (home, _resources) = skills.prepare_analysis()?;
         ai_summary::summarize_with_progress(&game, &settings, &config, &home, &|progress| {
             report(&app, request_id.unwrap_or(0), &game.id, progress)
         })

@@ -35,7 +35,9 @@
   function showDetail(b){
     selected=b;
     detail.textContent=[b.node.title,
-      ...b.options.flatMap(({edge}) => [edgeText(edge),edge.pc,edge.evidence]),
+      ...b.options.flatMap(({edge}) => [edgeText(edge),edge.pc,edge.evidence,
+        ...(edge.scenes || []).flatMap(scene =>
+          [scene.title, scene.pc, scene.evidence, scene.transition_pc, scene.transition_evidence])]),
       b.node.pc,b.node.evidence].filter(Boolean).join('\n');
   }
   function create(id, incoming=[], parent=null){
@@ -113,7 +115,8 @@
     if (!b.expanded || !b.children.length) return [node];
 
     const labelTop = b.childLabelTop = bottom + 28;
-    const childTop = labelTop + Math.max(...b.children.map(c => c.labelHeight)) + 28;
+    b.childLabelHeight = Math.max(...b.children.map(c => c.labelHeight));
+    const childTop = labelTop + b.childLabelHeight + 28;
     const placed = [];
     let offset = 0;
     for (const c of b.children) {
@@ -141,12 +144,16 @@
       region.left -= center;
       region.right -= center;
     }
-    // 并排选项可能宽于共同剧情框，预留通往最外侧标签的曲线空间。
+    // 并排选项可能宽于共同剧情框，为分支横杆和竖线预留空间。
     return [node, {
       left: Math.min(0, ...b.children.map(c => c.offset - c.labelWidth / 2)),
       right: Math.max(0, ...b.children.map(c => c.offset + c.labelWidth / 2)),
       top: bottom, bottom: labelTop
     }, ...placed];
+  }
+
+  function verticalLink(fromX, toX, turnY, endY) {
+    return (fromX === toX ? '' : ` V${turnY} H${toX}`) + ` V${endY}`;
   }
 
   function place(b, x, rootTop) {
@@ -156,6 +163,7 @@
     b.element.style.top = b.y + 'px';
     if (!b.expanded || !b.children.length) return;
     const labelY = rootTop + b.childLabelTop;
+    const rowBottom = labelY + b.childLabelHeight;
     for (const c of b.children) {
       place(c, x + c.offset, rootTop);
       c.options.forEach((option, index) => {
@@ -164,12 +172,19 @@
           option.label.style.left = (labelX - option.w / 2) + 'px';
           option.label.style.top = labelY + 'px';
         }
-        const sy = b.y + b.h, ey = c.y - 2, bend = (sy + labelY) / 2;
-        const labelBottom = labelY + option.h, rowBottom = labelY + c.labelHeight;
-        const mergeY = (rowBottom + ey) / 2;
+        const sy = b.y + b.h, ey = c.y - 2;
         const port = c.x + c.w * ((index + 1) / (c.options.length + 1) - 0.5);
         const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-        path.setAttribute('d',`M${b.x} ${sy} C${b.x} ${bend} ${labelX} ${bend} ${labelX} ${labelY} M${labelX} ${labelBottom} L${labelX} ${rowBottom} C${labelX} ${mergeY} ${port} ${mergeY} ${port} ${ey}`);
+        let line = `M${b.x} ${sy}`;
+        // 混合标签行中的无标签分支亦保持竖直，横向转折只发生在标签行外。
+        if (b.childLabelHeight) {
+          line += verticalLink(b.x, labelX, (sy + labelY) / 2, labelY);
+          if (option.label) line += ` M${labelX} ${labelY + option.h}`;
+          line += verticalLink(labelX, port, (rowBottom + ey) / 2, ey);
+        } else {
+          line += verticalLink(b.x, port, (sy + ey) / 2, ey);
+        }
+        path.setAttribute('d', line);
         path.setAttribute('class',`wire ${option.edge.kind==='unlock'?'unlock':option.edge.inferred?'inferred':''}`);
         path.setAttribute('marker-end','url(#arrow)');
         path.dataset.from=b.id;path.dataset.to=c.id;
@@ -239,6 +254,7 @@
       for (const id of route.nodes) {
         for (let b = entries.get(id); b; b = b.parent) open.add(b.id);
       }
+      if (route.prerequisite) guidePanel.append(el('p', 'route-prerequisite', route.prerequisite));
       if (route.choices?.length) {
         const summary = el('summary', '', t.entryChoices);
         const steps = el('ol', 'route-steps');
@@ -257,7 +273,7 @@
         guidePanel.append(details);
       } else if (!route.guided) {
         guidePanel.append(el('p', '', t.possiblePaths));
-      } else {
+      } else if (!route.prerequisite) {
         guidePanel.hidden = true;
       }
     }

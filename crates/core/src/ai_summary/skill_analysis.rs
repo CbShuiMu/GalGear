@@ -41,6 +41,7 @@ fn fingerprint() -> String {
         include_bytes!("analysis_reads.py").as_slice(),
         include_bytes!("analysis_recap.py").as_slice(),
         include_bytes!("route_graph.rs").as_slice(),
+        include_bytes!("route_compact.rs").as_slice(),
         include_bytes!("route_focus.rs").as_slice(),
         include_bytes!("route_html.rs").as_slice(),
         include_bytes!("../../../../web/route-map.html").as_slice(),

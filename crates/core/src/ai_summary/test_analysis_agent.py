@@ -86,13 +86,14 @@ class AnalysisTests(unittest.TestCase):
         value['save_position']['level']='static_consistent'
         with self.assertRaisesRegex(ValueError,'precise locator'): self.agent.finish(value)
 
-    def test_long_linear_catalog_warns_without_blocking_and_shared_options_survive(self):
+    def test_long_linear_catalog_preserves_source_nodes_and_shared_options(self):
         value=self.result()
         value['graph']['nodes'] += [dict(id='n'+str(i),label='场景',kind='scene',evidence='O1') for i in range(10)]
         value['graph']['edges']=[dict(**{'from':a,'to':b},label='',inferred=True,evidence='O1')
             for a,b in zip(['s']+['n'+str(i) for i in range(9)],['n'+str(i) for i in range(10)])]
+        uncertainties = value['graph']['uncertainties'].copy()
         self.agent.finish(value)
-        self.assertTrue(any('Long narration chain' in item for item in self.agent.done['graph']['uncertainties']))
+        self.assertEqual(self.agent.done['graph']['uncertainties'], uncertainties)
         self.assertEqual(len(self.agent.done['graph']['nodes']),11)
         value['graph']['nodes']=value['graph']['nodes'][:2]
         value['graph']['edges']=[dict(**{'from':'s','to':'n0'},kind='choice',label=label,inferred=False,evidence='O1') for label in ['答应','拒绝']]
@@ -173,6 +174,21 @@ class AnalysisTests(unittest.TestCase):
         value['save_position']['node'] = 's'
         self.agent.finish(value)
         self.assertEqual(self.agent.done['save_position']['node'],'s')
+
+    def test_route_guide_requires_verified_edges_and_preserves_the_playthrough_prerequisite(self):
+        value = self.result()
+        graph = value['graph']
+        graph['nodes'].append(dict(id='later', kind='scene', label='再次见面', evidence='O1'))
+        graph['edges'] = [{'from': 's', 'to': 'later', 'kind': 'flow',
+                          'label': '', 'inferred': True, 'evidence': 'O1'}]
+        graph['guides'] = [dict(name='再会', start='s', path=[dict(to='later')],
+                                evidence='O1', prerequisite='达成前置结局后重新开始')]
+        with self.assertRaisesRegex(ValueError, 'Guide cannot use an inferred edge'):
+            self.agent.submit_route(value)
+        graph['edges'][0]['inferred'] = False
+        self.agent.submit_route(value)
+        self.assertEqual(self.agent.route_draft['graph']['guides'][0]['prerequisite'],
+                         '达成前置结局后重新开始')
 
     def test_player_menu_cannot_disguise_clicks_as_automatic_flow(self):
         value=self.result()
@@ -461,6 +477,31 @@ class AnalysisTests(unittest.TestCase):
             self.agent.submit_route(dict(route_file='query-route.json'))
         with self.assertRaisesRegex(ValueError,'outside allowed root'):
             self.agent.submit_route(dict(route_file='../outside.json'))
+
+    def test_route_file_cites_its_successful_query_alongside_explicit_refs(self):
+        payload = self.result()
+        self.agent.observations['O1']['tool'] = 'read_resources'
+        self.agent.emit('route-source.json', payload)
+        result = self.agent.query(dict(files=['route-source.json'],
+            source='def analyze(documents): return documents["route-source.json"]'))
+        self.agent.observations['O2'] = dict(tool='query_data', result=result, error=None)
+
+        for refs in (['O1'], ['O1', 'O2']):
+            with self.subTest(refs=refs):
+                submission = dict(route_file='./' + result['output'], evidence_refs=refs)
+                self.assertTrue(self.agent.dispatch('submit_route', submission)['accepted'])
+                persisted = json.loads((self.agent.work / 'route-draft.json').read_text('utf-8'))
+                self.assertEqual(persisted['evidence_refs'], ['O1', 'O2'])
+
+    def test_route_file_does_not_auto_cite_unrelated_or_failed_queries(self):
+        payload = self.result()
+        self.agent.observations['O1']['tool'] = 'read_resources'
+        self.agent.emit('route.json', payload)
+        self.agent.observations['O2'] = dict(tool='query_data', result=dict(output='other.json'), error=None)
+        self.agent.observations['O3'] = dict(tool='query_data', result=dict(output='route.json'), error='failed')
+
+        with self.assertRaisesRegex(ValueError, 'query actual story/flow evidence'):
+            self.agent.dispatch('submit_route', dict(route_file='route.json'))
 
     def test_fresh_format_review_reruns_patch_without_claiming_analysis_success(self):
         source='def analyze(inputs, metadata):\n return {"result": inputs["archive"][1:].hex()}'

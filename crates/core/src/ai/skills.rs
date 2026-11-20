@@ -70,7 +70,7 @@ pub struct Updated {
     pub changed: bool,
 }
 
-/// 用户主动检查时同步 main；相同且完整的安装跳过下载。
+/// 同步上游 main；相同且完整的安装跳过下载。
 /// 下载或校验失败保留原版本。调用方须确保没有任务正在使用资源目录。
 pub fn sync(home: &Path) -> Result<Updated, Message> {
     sync_from(home, &client()?, MAIN_URL, ARCHIVE_URL)

@@ -160,9 +160,15 @@ pub fn locate(game: &Game, settings: &Settings, revision: &str) -> Result<Locati
     if latest(&saves::discover(game, edit), &families)? != slot {
         return Err(Message::new("summary.save_changed"));
     }
+    let folded = graph.visible_node(node)?;
+    let mut detail = message.arg("file", name).render(settings.language);
+    if folded.is_some() {
+        detail.push(' ');
+        detail.push_str(galgear_i18n::tr(settings.language, "route.locate_folded"));
+    }
     Ok(Location {
-        node: node.into(),
-        detail: message.arg("file", name).render(settings.language),
+        node: folded.unwrap_or_else(|| node.into()),
+        detail,
     })
 }
 

@@ -42,11 +42,11 @@ Query with def analyze(documents): documents is the dictionary itself, with no d
 Use actual localized/patch evidence when choosing between versions. A patch may override only same-named members; compare member sets before discarding base-only scripts/endings. Set scope.script_indexes and resource_selection to the effective batches so duplicate versions are not double-counted. Disclose uncertain loading precedence; avoid scanning unrelated art or re-reading successful batches.
 
 PLAYER-FACING ROUTE
-Source character names from actual speakers/name tables or attributed local guides, never infer kanji from romanized identifiers. Register graph.characters=[{id,name,source,pointer}] and use {char:id}; the host expands source-bound names and locates an existing original name quote if its pointer is mistyped. Group long ordinary narration, while keeping distinct decisions, endings, unlocks and shared targets. Use readable story titles; keep technical paths/flags in pc/evidence.
+Source character names from actual speakers/name tables or attributed local guides, never infer kanji from romanized identifiers. Register graph.characters=[{id,name,source,pointer}] and use {char:id}; the host expands source-bound names and locates an existing original name quote if its pointer is mistyped. Use a decision-first graph. Group continuous material around the next decision, branch, merge or ending. Ordinary one-in/one-out scene runs fold into arrow details, including cosmetic narration after a choice. Use readable story titles; keep technical paths/flags in pc/evidence.
 Each actual STORY choice is its own kind=choice edge with original wording. Automatic flag/affection conditions use flow. A dispatch on a story UI return value is still a player choice. Follow script -> invoked interface -> image/frame/button event -> return value -> destination. Interface readers may be separate from story readers. Extract only the referenced STORY button images and use read_ui_images when the script does not already supply the displayed text. Do not inventory/OCR settings, ordinary title buttons, save/load controls, galleries or unrelated UI. A linear story needs no invented choice and no UI-image work. Inspect a title dispatch only when it determines an actual route/EXTRA/GRAND entry or unlock; its ordinary START caption needs no OCR. native_frame_id, when present, is the engine ID; ordinal is only converter order. For other formats join origin.offset to the original frame header.
 For labels not already in known_options, provide text_basis={source,pointer,kind:script|ocr|icon,binding:actual menu/event-to-target location}. A script pointer may address a larger string containing the exact label; quote is optional. Query JSON is not original evidence. Textless portraits use kind=icon, character_id and the whole inspected frame, producing 'name（人物图标）'. Keep location/navigation hints separate from option wording. OCR is imperfect: a corrected label may cite correction_basis={source,pointer} to an actual registered text source; retain the raw OCR and its uncertainty. Do not mechanically publish OCR garbage or invent text for an icon.
 Nodes have stable id,label,kind,evidence. For PSB scene nodes with a verified label, use the exact native coordinate in pc, e.g. "chapter.ks.scn *label". A node covering an entire Siglus script can use its exact .dat filename in pc. Keep jump targets in edge evidence. Edges have from,to,label,inferred and optional pc/condition. Shared targets use one ID; back jumps must have real script evidence. A helper loop is not a player walkthrough: preserve separate timepoints where available choices or route consequences differ, and keep each recommended selection step. Use decision_kind=player|condition when known. Each ending needs terminal_basis={kind:end_command|credits_transition|ending_flag|local_guide,ref:successful O-number,locator}. scope.flow_basis uses kind=script_control_flow|local_guide|unresolved, ref and locator. Unresolved flow is inferred, not a proven path. A local guide can support route order if explicitly attributed.
-EXTRA/GRAND use extra/grand nodes. A guide's instruction to LOAD an earlier save starts an alternative path at that save; its position after an END in the document does not make it a post-ending unlock. Unlock edges require an actual prerequisite and unlock_basis={kind:script_condition|local_guide,ref,locator}; do not invent prior-ending requirements. Unknown unlocks remain explicitly unresolved. Each known story menu location belongs in the route; list only non-story/system menus in scope.excluded_menus with source and reason. Keep saves out of the story graph. When the analyzed save uniquely matches a reachable story node, bind its ID in save_position.node. For each evidenced character route supply graph.guides with a continuous walk from a start to the first personal scene. Resolve LOAD/SAVE instructions into the original common-route prefix. Check stat thresholds, priority and fallback conditions. Cite the script or walkthrough. Select each parallel option by exact wording; if unresolved, disclose it instead of guessing.
+EXTRA/GRAND use extra/grand nodes. A guide's instruction to LOAD an earlier save starts an alternative path at that save; its position after an END in the document does not make it a post-ending unlock. Unlock edges require an actual prerequisite and unlock_basis={kind:script_condition|local_guide,ref,locator}; do not invent prior-ending requirements. Unknown unlocks remain explicitly unresolved. Each known story menu location belongs in the route; list only non-story/system menus in scope.excluded_menus with source and reason. Keep saves out of the story graph. When the analyzed save uniquely matches a reachable story node, bind its ID in save_position.node. For each evidenced character route supply graph.guides with a continuous walk from a start to the first personal scene. Resolve LOAD/SAVE instructions into the original common-route prefix. Trace each menu result through event returns and state changes into the dispatcher. Verify branch priority and fallback, state before the run, route entry and ending independently. For later playthroughs, trace the persistent flag write, the title or New Game entry, and the condition that reads the flag. Put the required previously cleared ending or persistent state in guides[].prerequisite. Replays, unlockable episodes and changed scenes during a new playthrough are distinct. A guide cannot use inferred edges. If the exact walk is unresolved, keep the evidence in uncertainties and omit the guide.
 
 CURRENT RECAP AND DELIVERY
 Inspect the newest relevant save from the supplied save roots, including AppData. Unknown saves are pre-read with reader=probe: initial_reads includes quoted text candidates from UTF-8/UTF-16/legacy encodings in raw and complete decompressed views, with actual pointers. Reuse those candidates and query their scene identifiers before writing new scans; they are candidate evidence, not active state. Global settings are not progress merely because they are newest. For compressed data, decompress once and search candidate encodings efficiently (UTF-8, UTF-16, legacy encodings); save text can use a different encoding from scripts. Prefer an actual displayed caption/last backlog entry plus scene hint, not arbitrary UI prompts or guessed integer fields.
@@ -119,7 +119,7 @@ def tools(api):
     character=dict(type='object',properties=dict(id=string,name=string,source=string,pointer=string),required=['id','name','source','pointer'])
     graph=dict(type='object',properties=dict(characters=dict(type='array',items=character,maxItems=32),nodes=dict(type='array',items=node,minItems=1,maxItems=256),edges=dict(type='array',items=edge,maxItems=512),uncertainties=dict(type='array',items=string,maxItems=16)),required=['characters','nodes','edges','uncertainties'])
     step=dict(type='object',properties=dict(to=string,via=dict(type='string',description='Exact visible option or branch condition; required to distinguish parallel edges.')),required=['to'])
-    graph['properties']['guides']=dict(type='array',items=dict(type='object',properties=dict(name=string,start=string,path=dict(type='array',items=step,minItems=1,maxItems=512),evidence=string),required=['name','start','path','evidence']))
+    graph['properties']['guides']=dict(type='array',items=dict(type='object',properties=dict(name=string,start=string,path=dict(type='array',items=step,minItems=1,maxItems=512),evidence=string,prerequisite=dict(type='string',maxLength=240,description='Required state before starting the walk, e.g. a specific earlier clear.')),required=['name','start','path','evidence']))
     result.extend([
         tool('read_resources', 'Batch parse the selected files using installed readers; the host manages the bounded worker, so do not drop scripts to satisfy a file count. root/path identifies a file or directory; pattern is a glob (recursive ** allowed), or paths is an explicit list relative to root or the supplied directory (ambiguous matches rejected). auto detects AST/Siglus/PSB/TJS/text from bytes. Saves full parsed JSON and an index. This is static analysis, not runtime verification. Use query_data with the returned index to inspect ALL results in one request. options accepts reader parameters or {document:{syntax:psb,view:[]}} / {encoding:cp932}. custom is for unsupported formats only, never replace an existing native reader.',
              dict(root=root, path=string, pattern=string, paths=dict(type='array', items=string),
@@ -147,7 +147,7 @@ def tools(api):
     finish = result[-1]['function']['parameters']['properties']
     route_fields = ('script_language', 'graph', 'evidence_refs', 'scope', 'limitations')
     route_properties={key:finish[key] for key in route_fields}
-    route_properties['route_file']=dict(type='string',description='Optional work-relative JSON file from query_data containing the full submit_route payload. Build repeated nodes/edges with Python loops instead of manually emitting a large graph. Same source/graph checks apply.')
+    route_properties['route_file']=dict(type='string',description='Optional work-relative JSON file from query_data containing the full submit_route payload. The host adds its successful query observation to evidence_refs. Same source/graph checks apply.')
     result.append(tool('submit_route', 'Validate and checkpoint the static route independently of the recap. Supply the fields directly OR route_file from query_data. For large graphs, query_data can build/patch the payload programmatically using actual reader evidence; then submit its returned output file. Partial only; finish_analysis may then supply only save_position.',
         route_properties, []))
     result.extend(FORMATS['tool_schemas'](api))
@@ -345,6 +345,7 @@ class AnalysisAgent:
         self.delivery_started=True
         # 同一内容的嵌套差异不值得再请求模型重发整张图；语义检查仍使用统一结构。
         args=dict(args)
+        query_ref = None
         if args.get('route_file'):
             path=self.host.path('work',args['route_file'])
             if path.stat().st_size>512*1024:
@@ -352,6 +353,10 @@ class AnalysisAgent:
             payload=json.loads(path.read_text('utf-8-sig'))
             if not isinstance(payload,dict):raise ValueError('route_file must contain the submit_route object, without a result wrapper.')
             args=dict(payload,**{k:v for k,v in args.items() if k!='route_file'})
+            query_ref = next((ref for ref, observation in self.observations.items()
+                if observation.get('tool') == 'query_data' and not observation.get('error')
+                and (output := observation.get('result', {}).get('output'))
+                and self.work / output == path), None)
         if not args.get('graph') and isinstance(args.get('nodes'),list):
             args['graph']={key:args[key] for key in ('characters','nodes','edges','uncertainties') if key in args}
         images=IMAGES['prepare_route_images'](self,args.get('graph',{}))
@@ -366,6 +371,8 @@ class AnalysisAgent:
             if not isinstance(args.get(key), str) or not args[key].strip() or len(args[key].encode()) > limit:
                 raise ValueError('Missing or oversized ' + key)
         refs = args.get('evidence_refs', [])
+        if query_ref and isinstance(refs, list) and query_ref not in refs:
+            refs = args['evidence_refs'] = [*refs, query_ref]
         if not isinstance(refs, list) or not refs or any(r not in self.observations or self.observations[r].get('error') for r in refs):
             valid=[(r,o['tool']) for r,o in self.observations.items() if not o.get('error')]
             raise ValueError('Invalid refs '+str([r for r in refs if r not in self.observations or self.observations[r].get('error')])+
@@ -450,8 +457,6 @@ class AnalysisAgent:
             if any(source and source in item['source'] for item in excluded):continue
             if not any(text in labels for text in option['variants']):
                 raise ValueError('Reader already decoded this enabled option; preserve its verbatim text instead of an undecoded placeholder: '+source+option['pointer']+' '+json.dumps(option['variants'],ensure_ascii=False)+'. Query choice_texts for target/condition/language; only system/UI menus may be excluded with their source path.')
-        # Long narration chains are not a usable guide. Preserve decisions;
-        # ask the model to group only ordinary linear segments, without deleting source evidence.
         by_id = {n['id']: n for n in nodes}
         basis=args.get('scope',{}).get('flow_basis',{})
         if basis.get('kind') not in ('script_control_flow','local_guide','unresolved') or basis.get('ref') not in self.observations or self.observations[basis['ref']].get('error') or not basis.get('locator'):
@@ -472,16 +477,6 @@ class AnalysisAgent:
             if node['kind']=='scene' and len({e['to'] for e in flow})>1 and any(e.get('condition') for e in flow):
                 node.update(kind='choice',decision_kind='player' if any(e.get('kind')=='choice' for e in flow) else 'condition')
         check_menu_bypasses(nodes, edges)
-        outgoing = {n['id']: [e['to'] for e in edges if e['from']==n['id']] for n in nodes}
-        incoming = {n['id']: sum(e['to']==n['id'] for e in edges) for n in nodes}
-        for node in nodes:
-            cursor=node['id']; seen=set()
-            while cursor not in seen and by_id[cursor]['kind']=='scene' and len(outgoing[cursor])==1 and incoming[cursor]<=1:
-                seen.add(cursor); cursor=outgoing[cursor][0]
-            if len(seen)>8:
-                warning='Long narration chain from '+node['id']+': consider grouping ordinary scenes while retaining decisions.'
-                if warning not in graph.setdefault('uncertainties',[]):graph['uncertainties'].append(warning)
-                break
         if not self.batches or not any(self.observations[r].get('tool') == 'query_data' for r in refs):
             raise ValueError('Read the script set and query actual story/flow evidence before finishing')
         if not isinstance(args.get('limitations'),list) or not isinstance(args.get('scope'),dict):
@@ -491,6 +486,9 @@ class AnalysisAgent:
         entries = set()
         for guide in graph.get('guides', []):
             start = guide.get('start')
+            prerequisite = guide.get('prerequisite', '')
+            if not isinstance(prerequisite, str) or len(prerequisite) > 240:
+                raise ValueError('Guide prerequisite must be at most 240 characters')
             if (by_id.get(start, {}).get('kind') != 'start' or not isinstance(guide.get('name'), str)
                     or not 1 <= len(guide['name'].strip()) <= 80 or not isinstance(guide.get('evidence'), str)
                     or not 1 <= len(guide['evidence'].strip()) <= 240 or not isinstance(guide.get('path'), list)
@@ -503,6 +501,8 @@ class AnalysisAgent:
                            and (not step.get('via') or step['via'] in (e['label'],e.get('condition')))]
                 if len(matches) != 1:
                     raise ValueError('Guide must identify exactly one edge at '+cursor+'; use verbatim option/condition in via')
+                if matches[0]['inferred']:
+                    raise ValueError('Guide cannot use an inferred edge from '+cursor+' to '+step['to']+'. Verify the full path or omit the guide.')
                 cursor = step['to']
             if cursor in entries:
                 raise ValueError('Each guide must identify a distinct route entry')

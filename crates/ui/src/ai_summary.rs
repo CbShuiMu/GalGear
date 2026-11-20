@@ -249,6 +249,9 @@ pub(crate) fn resolve(
         }
         _ => return false,
     }
+    if matches!(kind, Pending::SummarySetup(_, true) | Pending::Summary(_)) {
+        crate::skill_update::refresh_runtime(app);
+    }
     true
 }
 pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
@@ -413,8 +416,9 @@ mod tests {
         );
 
         let requests = take_requests();
-        assert_eq!(requests.len(), 1);
+        assert_eq!(requests.len(), 2);
         assert_eq!(requests[0].1, "prepare_ai_route_map");
+        assert_eq!(requests[1].1, "get_ai_runtime");
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(&requests[0].2).unwrap(),
             json!({"id":"game"})
@@ -438,7 +442,9 @@ mod tests {
             "failed",
         );
 
-        assert!(take_requests().is_empty());
+        let requests = take_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].1, "get_ai_runtime");
         assert!(!app.settings.game_edits["game"].ai_summary);
     }
 

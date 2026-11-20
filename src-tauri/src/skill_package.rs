@@ -1,9 +1,12 @@
-//! 查询本地和远端 Skill 版本；资源下载与替换仅由更新卡片显式触发。
+//! 查询 Skill 版本，协调手动更新、分析前同步与运行中的资源读取。
 use crate::state::AppState;
 use galgear_core::ai::{runtime, skills};
 use galgear_i18n::Message;
 use serde::Serialize;
-use std::sync::{Arc, Mutex};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tauri::State;
 
 #[derive(Default)]
@@ -13,7 +16,7 @@ struct Usage {
 }
 
 /// 资源替换与 AI 任务互斥；锁仅用于登记，后台工作由租约保证生命周期。
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct Access(Arc<Mutex<Usage>>);
 pub(crate) struct Lease {
     access: Arc<Mutex<Usage>>,
@@ -23,6 +26,25 @@ impl Access {
     pub(crate) fn read(&self) -> Result<Lease, Message> {
         self.acquire(false)
     }
+
+    /// 在后台启动分析前检查上游。仅在需要安装时独占资源，随后保留读取租约。
+    pub(crate) fn prepare_analysis(&self) -> Result<(PathBuf, Lease), Message> {
+        let home = runtime::home()
+            .filter(|home| cfg!(windows) && runtime::host(home).is_some())
+            .ok_or_else(|| Message::new("summary.tools_missing"))?;
+        let lease = self.read()?;
+        let latest = skills::latest_commit()?;
+        if skills::status(&home)?.commit.as_deref() == Some(latest.as_str()) {
+            return Ok((home, lease));
+        }
+
+        drop(lease);
+        let mut lease = self.acquire(true)?;
+        skills::sync(&home)?;
+        lease.begin_reading()?;
+        Ok((home, lease))
+    }
+
     fn acquire(&self, update: bool) -> Result<Lease, Message> {
         let mut usage = self.0.lock().map_err(|_| Message::new("error.operation"))?;
         if usage.updating || update && usage.readers > 0 {
@@ -40,6 +62,19 @@ impl Access {
     }
     fn updating(&self) -> bool {
         self.0.lock().map_or(true, |usage| usage.updating)
+    }
+}
+impl Lease {
+    fn begin_reading(&mut self) -> Result<(), Message> {
+        let mut usage = self
+            .access
+            .lock()
+            .map_err(|_| Message::new("error.operation"))?;
+        // 安装完成后原子地转成读取，避免分析启动前插入另一轮更新。
+        usage.updating = false;
+        usage.readers += 1;
+        self.update = false;
+        Ok(())
     }
 }
 impl Drop for Lease {
@@ -133,6 +168,17 @@ mod tests {
         assert!(access.acquire(true).is_err());
         drop(update);
         assert!(access.read().is_ok());
+        assert!(access.acquire(true).is_ok());
+    }
+
+    #[test]
+    fn updated_package_is_protected_until_analysis_releases_it() {
+        let access = Access::default();
+        let mut lease = access.acquire(true).unwrap();
+        lease.begin_reading().unwrap();
+        assert!(access.read().is_ok());
+        assert!(access.acquire(true).is_err());
+        drop(lease);
         assert!(access.acquire(true).is_ok());
     }
 }

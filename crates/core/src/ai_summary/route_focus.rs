@@ -11,6 +11,8 @@ pub(super) struct Guide {
     start: String,
     path: Vec<Step>,
     evidence: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    prerequisite: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -40,6 +42,21 @@ fn trace<'a>(
 }
 
 impl Guide {
+    pub(super) fn ends_at(&self, id: &str) -> bool {
+        self.path.last().is_some_and(|step| step.to == id)
+    }
+
+    pub(super) fn fold(&mut self, id: &str, successor: &str) {
+        let mut index = 0;
+        while index + 1 < self.path.len() {
+            if self.path[index].to == id && self.path[index + 1].to == successor {
+                self.path[index].to = successor.to_owned();
+                self.path.remove(index + 1);
+            }
+            index += 1;
+        }
+    }
+
     fn resolve(&self, graph: &Graph) -> Result<Vec<usize>, Message> {
         let invalid = || {
             Message::detail(
@@ -49,6 +66,7 @@ impl Guide {
         };
         if !text_ok(&self.name, 80, false)
             || !text_ok(&self.evidence, 240, false)
+            || !text_ok(&self.prerequisite, 240, true)
             || self.path.is_empty()
             || self.path.len() > 512
             || !graph
@@ -100,16 +118,29 @@ pub(super) fn routes(graph: &Graph) -> Result<Value, Message> {
     let accessible = trace(starts, &forward, &empty);
     let mut routes = Vec::new();
     let mut covered = BTreeSet::new();
-    let entries: BTreeSet<_> = graph
-        .guides
-        .iter()
-        .filter_map(|g| g.path.last().map(|s| s.to.as_str()))
-        .collect();
-    if entries.len() != graph.guides.len() {
-        return Err(super::super::invalid());
-    }
+    // 旧图可保留推断连线，但旧攻略经过这些连线时降级为结局路径。
+    let mut reviewed = Vec::new();
     for guide in &graph.guides {
         let walk = guide.resolve(graph)?;
+        if walk.iter().all(|&i| !graph.edges[i].inferred) {
+            reviewed.push((guide, walk));
+        }
+    }
+    let entries: BTreeSet<_> = reviewed
+        .iter()
+        .filter_map(|(g, _)| g.path.last().map(|s| s.to.as_str()))
+        .collect();
+    if entries.len() != reviewed.len() {
+        return Err(super::super::invalid());
+    }
+    let mut verified_forward = BTreeMap::<_, Vec<_>>::new();
+    for edge in graph.edges.iter().filter(|e| story_edge(e) && !e.inferred) {
+        verified_forward
+            .entry(edge.from.as_str())
+            .or_default()
+            .push(edge.to.as_str());
+    }
+    for (guide, walk) in reviewed {
         let entry = guide
             .path
             .last()
@@ -124,8 +155,13 @@ pub(super) fn routes(graph: &Graph) -> Result<Value, Message> {
         let mut edges: BTreeSet<_> = walk.into_iter().collect();
         let mut others = entries.clone();
         others.remove(entry);
-        let members = trace([entry], &forward, &others);
-        covered.extend(members.iter().copied());
+        let members = trace([entry], &verified_forward, &others);
+        let mut endings = graph.nodes.iter().filter(|n| {
+            matches!(n.kind, Kind::Ending | Kind::Grand) && members.contains(n.id.as_str())
+        });
+        if let Some(end) = endings.next().filter(|_| endings.next().is_none()) {
+            covered.insert(end.id.as_str());
+        }
         edges.extend(
             graph
                 .edges
@@ -133,6 +169,7 @@ pub(super) fn routes(graph: &Graph) -> Result<Value, Message> {
                 .enumerate()
                 .filter(|(_, e)| {
                     story_edge(e)
+                        && !e.inferred
                         && members.contains(e.from.as_str())
                         && members.contains(e.to.as_str())
                 })
@@ -141,7 +178,7 @@ pub(super) fn routes(graph: &Graph) -> Result<Value, Message> {
         let mut nodes = members.clone();
         nodes.insert(&guide.start);
         nodes.extend(guide.path.iter().map(|s| s.to.as_str()));
-        routes.push(json!({"name":guide.name,"entry":entry,"nodes":nodes,"edges":edges,"members":members,"guided":true,"choices":choices}));
+        routes.push(json!({"name":guide.name,"entry":entry,"nodes":nodes,"edges":edges,"members":members,"guided":true,"choices":choices,"prerequisite":guide.prerequisite}));
     }
     for end in graph.nodes.iter().filter(|n| {
         matches!(n.kind, Kind::Ending | Kind::Grand)

@@ -25,6 +25,10 @@ pub(crate) fn check_on_startup(app: &mut App) {
     issue(app, Pending::SkillCheck, "check_skill_version", json!({}));
 }
 
+pub(crate) fn refresh_runtime(app: &mut App) {
+    issue(app, Pending::AiRuntime, "get_ai_runtime", json!({}));
+}
+
 pub(crate) fn update_available(app: &App) -> bool {
     let state = &app.skill_update;
     state.local_loaded
@@ -92,9 +96,16 @@ pub(crate) fn resolve(
     }
     let result = if matches!(kind, Pending::AiRuntime) {
         serde_json::from_str::<SkillRuntimeStatus>(payload).map(|status| {
+            let version_changed = app.skill_update.local_loaded
+                && app.skill_update.local.commit != status.skill.commit;
             app.ai_available = status.available;
             app.skill_update.local = status.skill;
             app.skill_update.local_loaded = true;
+            if version_changed {
+                app.skill_update.installed_request = id;
+                app.skill_update.latest_commit = None;
+                check_on_startup(app);
+            }
             if let Some(error) = status.error {
                 show_toast(app, error, true);
             }

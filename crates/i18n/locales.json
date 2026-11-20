@@ -3669,6 +3669,11 @@
     "ja-JP": "{file} はルート解析時のセーブと内容が一致しました。当時照合した位置を表示しています。",
     "en-US": "{file} matches the save used in the route analysis. Its recorded story position is highlighted."
   },
+  "route.locate_folded": {
+    "zh-CN": "这段连续剧情已折叠，标记落在它前方的可见节点。",
+    "ja-JP": "この連続シーンは折りたたまれているため、直前の表示ノードに印を付けました。",
+    "en-US": "This scene is folded into an arrow. The marker is on the preceding visible node."
+  },
   "route.locate_ambiguous": {
     "zh-CN": "有多个存档或剧情位置符合定位条件，无法确定唯一位置。",
     "ja-JP": "該当するセーブまたはシナリオ上の位置が複数あり、現在地を特定できません。",
@@ -4695,9 +4700,9 @@
     "en-US": "Local version"
   },
   "skills.help": {
-    "zh-CN": "启动时自动检查版本，点击“更新”下载并安装最新 Skill。",
-    "ja-JP": "起動時にバージョンを自動確認します。「更新」を押すと最新の Skill をダウンロードしてインストールします。",
-    "en-US": "Versions are checked automatically at startup. Click Update to download and install the latest Skill."
+    "zh-CN": "开始 AI 分析前会检查并安装 Skill 更新。也可点击“更新”立即同步。",
+    "ja-JP": "AI 分析の開始前に Skill の更新を確認し、適用します。「更新」から手動でも同期できます。",
+    "en-US": "Skill updates are checked and installed before AI analysis. Click Update to sync now."
   },
   "skills.updated": {
     "zh-CN": "Skill 已更新。",

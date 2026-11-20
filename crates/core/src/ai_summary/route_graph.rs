@@ -1,4 +1,6 @@
 //! 模型只描述有证据的节点和连线；布局、转义和绘制由本地确定性完成。
+#[path = "route_compact.rs"]
+mod compact;
 #[path = "route_focus.rs"]
 mod focus;
 
@@ -9,7 +11,7 @@ use std::sync::LazyLock;
 
 pub(super) const RULES: &str = r#"Return ONLY compact JSON, never SVG or layout coordinates:
 {"nodes":[{"id":"n1","label":"short scene/choice/ending label","kind":"scene","evidence":"source:position"}],"edges":[{"from":"n1","to":"n2","label":"choice or condition","inferred":true,"evidence":"source:position; missing condition"}],"uncertainties":["missing branch evidence"]}.
-Use 1..256 nodes, at most 512 edges and 16 uncertainties, at most 262144 UTF-8 bytes overall. Node kinds: start, scene, choice, ending, extra, grand. IDs: 1..32 ASCII letters/digits/_/-. Labels: at most 80 characters; evidence: at most 240 characters; uncertainties: at most 240 characters. Every edge must reference existing unique node IDs. Preserve supported branches/endings; group minor scenes if necessary and disclose omitted detail. Store save positions separately from story nodes. A candidate byte pattern, function name, source adjacency or dialogue inference cannot prove a connection: set inferred=true. Evidence is mandatory for nodes and edges. Do not connect disconnected evidence merely to make a tree. Missing choices/conditions must remain in uncertainties. Use requested language for node titles and uncertainties. Edge labels for choices MUST preserve the verbatim option text in the analyzed script language; never combine multiple options with / into one edge. Keep each option as one edge, even when targets are identical. Options that rejoin the same main scene after a brief reaction use the SAME target ID and retain separate arrows. Keep the title specific to the shared scene. For every proven numeric change on a choice, add effects:[{stat,delta}] to its edge. Use the observed stat name or script variable and signed numeric delta, and cite the assignment in evidence. Preserve the verbatim option label. Put filenames, byte offsets and raw flags in evidence/optional pc, not visible titles. Edges may add kind: flow|choice|unlock|reference, pc:string, condition:string. Unlock edges MUST have kind=unlock and a human-readable condition stating prerequisites, and originate at the prerequisite ending. EXTRA/after-story nodes use kind=extra and attach below their prerequisite ending. GRAND/true endings use kind=grand; inspect title/menu dispatch and persistent flags to identify cross-playthrough entry, never infer unlocks from filenames. Back jumps keep the same target ID; renderer creates reference nodes, never duplicate a subtree. Use empty labels on automatic flow and put real branch conditions in condition. A mandatory choice is the only path from its scene to its option targets. Only draw a bypass with independent control-flow evidence. Describe the decision itself in its title. Group ordinary linear scenes between choices, not the choices themselves. Preserve each known choice and ending. Check every ending's reachability from start nodes; investigate missing entry once, and explicitly disclose unresolved entries instead of inventing edges. Use official ending names when known."#;
+Use 1..256 nodes, at most 512 edges and 16 uncertainties, at most 262144 UTF-8 bytes overall. Node kinds: start, scene, choice, ending, extra, grand. IDs: 1..32 ASCII letters/digits/_/-. Labels: at most 80 characters; evidence: at most 240 characters; uncertainties: at most 240 characters. Every edge must reference existing unique node IDs. Preserve supported branches/endings; group minor scenes if necessary and disclose omitted detail. Store save positions separately from story nodes. A candidate byte pattern, function name, source adjacency or dialogue inference cannot prove a connection: set inferred=true. Evidence is mandatory for nodes and edges. Do not connect disconnected evidence merely to make a tree. Missing choices/conditions must remain in uncertainties. Use requested language for node titles and uncertainties. Edge labels for choices MUST preserve the verbatim option text in the analyzed script language; never combine multiple options with / into one edge. Keep each option as one edge, even when targets are identical. Options that rejoin the same main scene after a brief reaction use the SAME target ID and retain separate arrows. Keep the title specific to the shared scene. For every proven numeric change on a choice, add effects:[{stat,delta}] to its edge. Use the observed stat name or script variable and signed numeric delta, and cite the assignment in evidence. Preserve the verbatim option label. Put filenames, byte offsets and raw flags in evidence/optional pc, not visible titles. Edges may add kind: flow|choice|unlock|reference, pc:string, condition:string. Unlock edges MUST have kind=unlock and a human-readable condition stating prerequisites, and originate at the prerequisite ending. EXTRA/after-story nodes use kind=extra and attach below their prerequisite ending. GRAND/true endings use kind=grand; inspect title/menu dispatch and persistent flags to identify cross-playthrough entry, never infer unlocks from filenames. Back jumps keep the same target ID; renderer creates reference nodes, never duplicate a subtree. Use empty labels on automatic flow and put real branch conditions in condition. A mandatory choice is the only path from its scene to its option targets. Only draw a bypass with independent control-flow evidence. Describe the decision itself in its title. Use ordinary linear scenes only as source anchors or grouped passages; the map folds them into arrow details. Preserve decision, condition, distinct merge, ending and unlock boundaries. Preserve each known choice and ending. Check every ending's reachability from start nodes; investigate missing entry once, and explicitly disclose unresolved entries instead of inventing edges. Use official ending names when known."#;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(super) struct Graph {
@@ -67,6 +69,17 @@ struct Edge {
     condition: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     effects: Vec<ChoiceEffect>,
+    #[serde(skip)]
+    scenes: Vec<FoldedScene>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct FoldedScene {
+    title: String,
+    pc: String,
+    evidence: String,
+    transition_pc: String,
+    transition_evidence: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -256,9 +269,19 @@ impl Graph {
     }
 
     pub(super) fn display_data(&self) -> Result<serde_json::Value, Message> {
-        if let std::borrow::Cow::Owned(graph) = self.story()? {
-            return graph.display_data();
-        }
+        self.compact()?.graph.compact_data()
+    }
+
+    fn compact(&self) -> Result<compact::Projection, Message> {
+        Ok(compact::project(self.story()?.into_owned()))
+    }
+
+    /// 折叠的存档位置落在其前方可见节点，实际坐标仍由原始图验证。
+    pub(super) fn visible_node(&self, id: &str) -> Result<Option<String>, Message> {
+        Ok(self.compact()?.anchors.remove(id))
+    }
+
+    fn compact_data(&self) -> Result<serde_json::Value, Message> {
         let mut data = serde_json::to_value(self).map_err(super::io)?;
         for (edge, output) in self
             .edges
@@ -272,6 +295,9 @@ impl Graph {
             }
             if let Some(effect) = edge.legacy_effect(&self.characters) {
                 output["effects"] = serde_json::json!([effect]);
+            }
+            if !edge.scenes.is_empty() {
+                output["scenes"] = serde_json::to_value(&edge.scenes).map_err(super::io)?;
             }
         }
         data["focus_routes"] = focus::routes(self)?;
@@ -369,9 +395,10 @@ impl Graph {
     /// 按有向可达层级排列；循环和回边单独绕行，不删除分支或补造连接。
     pub(super) fn render(&self, title: &str, language: Language) -> Result<String, Message> {
         self.validate()?;
-        if let std::borrow::Cow::Owned(graph) = self.story()? {
-            return graph.render(title, language);
-        }
+        self.compact()?.graph.render_story(title, language)
+    }
+
+    fn render_story(&self, title: &str, language: Language) -> Result<String, Message> {
         let indices: BTreeMap<_, _> = self
             .nodes
             .iter()
@@ -418,7 +445,7 @@ impl Graph {
         let columns = levels.iter().map(Vec::len).max().unwrap_or(1);
         let width = (columns * 340 + 180).max(880);
         // 同一目标的多个选项标签纵向排列；层间距按真实文字高度计算，
-        // 避免并行选项与合流边的标签挤在同一个中点。图的节点和边不合并。
+        // 避免并行选项与合流边的标签挤在同一个中点。
         let edge_lines: Vec<_> = self
             .edges
             .iter()
@@ -488,23 +515,31 @@ impl Graph {
             slots[to] += 1;
             let port = f64::from(slots[to]) / f64::from(incoming[to] + 1);
             let (x1, y1, x2, y2) = (fx + 150, fy + 104, tx as f64 + 30.0 + port * 240.0, ty);
-            let path = if ty > fy {
-                format!("M{x1} {y1} C{x1} {} {x2} {} {x2} {y2}", y1 + 60, y2 - 60)
+            let path = if ranks[to] == ranks[from].map(|rank| rank + 1) {
+                format!("M{x1} {y1} V{} H{x2} V{y2}", y1 + 18)
             } else {
+                // 跨层或回跳沿右侧空白绕行，避开中间层的节点。
                 let lane = width - 16 - (number % 8) * 8;
-                format!(
-                    "M{} {} H{lane} V{} H{}",
-                    fx + 300,
-                    fy + 52,
-                    ty as f64 + 20.0 + port * 64.0,
-                    tx + 300
-                )
+                format!("M{x1} {y1} V{} H{lane} V{} H{x2} V{y2}", y1 + 18, y2 - 12,)
             };
             let dash = if edge.inferred { "7 5" } else { "none" };
-            svg.push_str(&format!(r##"<path d="{path}" fill="none" stroke="#6298ef" stroke-width="2" stroke-dasharray="{dash}" marker-end="url(#arrow)"><title>{}</title></path>"##, xml(&edge.evidence)));
+            let evidence = std::iter::once(edge.evidence.as_str())
+                .chain(edge.scenes.iter().flat_map(|scene| {
+                    [
+                        scene.title.as_str(),
+                        scene.pc.as_str(),
+                        scene.evidence.as_str(),
+                        scene.transition_pc.as_str(),
+                        scene.transition_evidence.as_str(),
+                    ]
+                }))
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join(" · ");
+            svg.push_str(&format!(r##"<path d="{path}" fill="none" stroke="#6298ef" stroke-width="2" stroke-dasharray="{dash}" marker-end="url(#arrow)"><title>{}</title></path>"##, xml(&evidence)));
         }
         // 标签在各目标节点上方占用独立矩形区域。先画全部连线，再画标签，
-        // 以背景隔开穿过文字的曲线；每条边仍保留自己的证据提示。
+        // 以背景隔开穿过文字的线段；每条边仍保留自己的证据提示。
         let mut label_offsets = vec![0; self.nodes.len()];
         for (number, (edge, lines)) in self.edges.iter().zip(&edge_lines).enumerate() {
             if lines.is_empty() {
@@ -592,12 +627,12 @@ mod tests {
             "uncertainties":[]
         })).unwrap();
         let display = graph.display_data().unwrap();
-        assert_eq!(display["nodes"].as_array().unwrap().len(), 4);
+        assert_eq!(display["nodes"].as_array().unwrap().len(), 3);
         let labels: Vec<_> = display["edges"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|e| e["to"] == "a" && e["kind"] == "choice")
+            .filter(|e| e["to"] == "b" && e["kind"] == "choice")
             .map(|e| e["label"].as_str().unwrap())
             .collect();
         assert_eq!(labels, ["选甲", "选乙"]);
@@ -612,20 +647,36 @@ mod tests {
     #[test]
     fn route_guide_selects_a_specific_parallel_choice_and_excludes_sibling_routes() {
         let mut value = serde_json::json!({
-            "nodes": ([("s","start"),("m","choice"),("gate","choice"),("a","ending"),("b","ending")]
+            "nodes": ([("s","start"),("m","choice"),("gate","choice"),("bridge","scene"),("a","ending"),("b","ending")]
                 .map(|(id,kind)| serde_json::json!({"id":id,"label":id,"kind":kind,"evidence":"script"}))),
-            "edges": ([("s","m","flow",""),("m","gate","choice","Left"),("m","gate","choice","Right"),("gate","a","flow",""),("gate","b","flow","")]
+            "edges": ([("s","m","flow",""),("m","gate","choice","Left"),("m","bridge","choice","Right"),("gate","a","flow",""),("gate","b","flow",""),("bridge","gate","flow","")]
                 .map(|(from,to,kind,label)| serde_json::json!({"from":from,"to":to,"kind":kind,"label":label,"evidence":"script","inferred":false}))),
-            "guides":[{"name":"A","start":"s","path":[{"to":"m"},{"to":"gate","via":"Right"},{"to":"a"}],"evidence":"local guide"}],
+            "guides":[{"name":"A","start":"s","path":[{"to":"m"},{"to":"bridge","via":"Right"},{"to":"gate"},{"to":"a"}],"evidence":"local guide","prerequisite":"Finish B and start a new game"}],
             "uncertainties":[]
         });
         let graph: Graph = serde_json::from_value(value.clone()).unwrap();
-        let routes = graph.display_data().unwrap()["focus_routes"].clone();
+        let display = graph.display_data().unwrap();
+        assert_eq!(graph.visible_node("bridge").unwrap().as_deref(), Some("m"));
+        assert_eq!(display["edges"][2]["scenes"][0]["title"], "bridge");
+        assert_eq!(display["edges"][2]["to"], "gate");
+        let routes = &display["focus_routes"];
         assert_eq!(routes[0]["choices"], serde_json::json!([2]));
         assert_eq!(routes[0]["edges"], serde_json::json!([0, 2, 3]));
         assert_eq!(routes[0]["members"], serde_json::json!(["a"]));
+        assert_eq!(routes[0]["prerequisite"], "Finish B and start a new game");
         assert_eq!(routes[1]["guided"], false);
-        value["guides"][0]["path"][1] = serde_json::json!({"to":"gate"});
+        let mut speculative = value.clone();
+        speculative["edges"][5]["inferred"] = true.into();
+        let speculative: Graph = serde_json::from_value(speculative).unwrap();
+        let display = speculative.display_data().unwrap();
+        let routes = display["focus_routes"].as_array().unwrap();
+        assert_eq!(routes.len(), 2);
+        assert!(
+            routes
+                .iter()
+                .all(|route| route["guided"] == false && route.get("choices").is_none())
+        );
+        value["guides"][0]["path"][1] = serde_json::json!({"to":"bridge","via":"Wrong"});
         assert!(
             serde_json::from_value::<Graph>(value)
                 .unwrap()
@@ -750,6 +801,7 @@ mod tests {
                 pc: String::new(),
                 condition: String::new(),
                 effects: Vec::new(),
+                scenes: Vec::new(),
             });
         }
         let svg = graph.render("choices", Language::Chinese).unwrap();
@@ -779,6 +831,15 @@ mod tests {
             .filter_map(|node| node.attribute("d"))
             .collect();
         assert_eq!(paths.len(), 4);
+        for path in paths {
+            let commands: Vec<_> = path.chars().filter(char::is_ascii_alphabetic).collect();
+            assert!(
+                commands
+                    .iter()
+                    .all(|command| matches!(command, 'M' | 'H' | 'V'))
+            );
+            assert_eq!(commands.last(), Some(&'V'));
+        }
     }
 
     #[test]
@@ -794,6 +855,7 @@ mod tests {
             pc: String::new(),
             condition: String::new(),
             effects: Vec::new(),
+            scenes: Vec::new(),
         });
         graph.nodes.push(Node {
             id: "c".into(),

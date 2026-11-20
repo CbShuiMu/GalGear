@@ -70,6 +70,7 @@ fn cache_key(manifest: &Manifest, model: &str) -> Result<String, Message> {
     digest.update(data);
     digest.update(include_bytes!("route_map.rs"));
     digest.update(include_bytes!("route_graph.rs"));
+    digest.update(include_bytes!("route_compact.rs"));
     digest.update(DIALOGUE_FILTER_RULE.as_bytes());
     Ok(format!("{:x}", digest.finalize()))
 }

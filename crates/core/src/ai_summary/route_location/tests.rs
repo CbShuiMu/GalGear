@@ -56,9 +56,10 @@ fn setup(root: &Path) -> (Game, Settings, String) {
         ("a", "scene", "script.ks.scn *a"),
         ("b", "scene", "script.ks.scn *b"),
         ("old", "save", "analyzed slot"),
+        ("end", "ending", "terminal"),
     ];
     let graph = json!({"nodes":nodes.map(|(id,kind,pc)|json!({"id":id,"kind":kind,"pc":pc,"label":id,"evidence":"fixture"})),
-        "edges":(["a","b","old"].map(|id| json!({"from":if id == "old" {"a"} else {"start"},"to":id,"label":"","inferred":false,"evidence":"fixture"}))),
+        "edges":([("start","a"),("start","b"),("a","old"),("b","end")].map(|(from,to)| json!({"from":from,"to":to,"label":"","inferred":false,"evidence":"fixture"}))),
         "uncertainties":[]});
     let result = json!({"schema":1,"mode":"skill_analysis","recap":"人物在港口商量次日的行程。","current_progress":"目前准备前往车站。",
         "limitations":[],"save_position":{"level":"candidate","runtime_verified":false,"file":analyzed,"sha256":format!("{:x}",Sha256::digest(b"analyzed slot"))},
@@ -115,7 +116,7 @@ fn latest_slot_refreshes_the_open_graph_and_resolves_repeated_lines_only_with_ev
         bookmark("", "Again", "Later").as_bytes(),
     );
     let found = locate().unwrap();
-    assert_eq!(found.node, "b");
+    assert_eq!(found.node, "start");
     assert!(found.detail.contains("19"));
     slot(
         &slots.join("slot3.bmp"),

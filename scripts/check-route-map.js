@@ -16,6 +16,9 @@
   const targets = Array.from(document.querySelectorAll('.node:not([hidden])'));
   const destinations = new Map();
   for (const wire of document.querySelectorAll('#links path')) {
+    const commands = wire.getAttribute('d').match(/[a-z]/gi) || [];
+    assert(commands.every(command => 'MHV'.includes(command)), 'Route arrows must be vertical or horizontal');
+    assert(commands.at(-1) === 'V', 'Arrowheads must point down into the target');
     const end = wire.getPointAtLength(wire.getTotalLength());
     const target = targets.find(box => {
       const button = box.querySelector('button');
