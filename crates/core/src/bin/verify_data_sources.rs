@@ -1,6 +1,9 @@
 //! Read-only provider verification, with optional credentials from standard input.
 //! Usage: verify_data_sources <source> <settings.json> <query> [--covers]
-use galgear_core::data_sources::{self, Credentials};
+use galgear_core::{
+    config::ConfigStore,
+    data_sources::{self, Credentials},
+};
 use std::{io::Read, path::PathBuf};
 
 fn main() {
@@ -33,10 +36,11 @@ fn run() -> Result<(), galgear_i18n::Message> {
     let source = args.first().map(String::as_str).unwrap_or("ymgal");
     let query = args.get(2).map(String::as_str).unwrap_or("千恋万花");
     let credentials = data_sources::oauth::load_fresh(&config, source)?;
-    let resources = data_sources::search(source, "https://2dfmax.top", query, &credentials)?;
+    let domain = ConfigStore::new(config).load()?.fan_domain;
+    let resources = data_sources::search(source, &domain, query, &credentials)?;
     println!("{source}: {} candidates", resources.len());
     if let Some(resource) = resources.first() {
-        let metadata = data_sources::metadata("https://2dfmax.top", &resource.url, &credentials)?;
+        let metadata = data_sources::metadata(&domain, &resource.url, &credentials)?;
         println!(
             "{} | {} | {} | story: {} chars | {} tags",
             metadata.title,
@@ -46,7 +50,7 @@ fn run() -> Result<(), galgear_i18n::Message> {
             metadata.tags.len()
         );
         if args.get(3).is_some_and(|arg| arg == "--covers") {
-            let covers = data_sources::covers("https://2dfmax.top", &resource.url, &credentials)?;
+            let covers = data_sources::covers(&domain, &resource.url, &credentials)?;
             println!("{} cover candidates", covers.len());
             if let Some(cover) = covers.first() {
                 let bytes = galgear_core::providers::cover_bytes(&cover.image_url, &cover.url)?;

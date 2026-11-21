@@ -138,7 +138,7 @@ impl Default for Settings {
             screenshot_hotkey: "Shift+S".into(),
             font_hotkey: "Shift+T".into(),
             game_fonts: BTreeMap::new(),
-            fan_domain: "https://2dfmax.top".into(),
+            fan_domain: providers::DEFAULT_FAN_DOMAIN.into(),
             metadata_checks: BTreeMap::new(),
             metadata_attempt_versions: BTreeMap::new(),
             dialog_directories: BTreeMap::new(),

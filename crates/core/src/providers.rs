@@ -123,24 +123,58 @@ pub fn client() -> Result<Client, Message> {
 fn network(e: impl ToString) -> Message {
     Message::detail("error.network", e)
 }
+/// 新安装和旧默认配置使用的 2DFan 站点。
+pub const DEFAULT_FAN_DOMAIN: &str = "https://fan2d.top";
+pub(crate) const FAN_HOSTS: &[&str] = &[
+    "fan2d.top",
+    "2dfan.top",
+    "2dfan.com",
+    "2dfmax.top",
+    "2dfdf.de",
+    "acgfan.top",
+];
+
+pub(crate) fn is_fan_site(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.port().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.host_str().is_some_and(|host| FAN_HOSTS.contains(&host))
+}
+
+/// 校验 2DFan 的站点域名。
 pub fn fan_base(domain: &str) -> Result<Url, Message> {
     let url = Url::parse(domain).map_err(network)?;
-    if url.scheme() != "https"
-        || ![
-            "2dfan.com",
-            "2dfmax.top",
-            "2dfdf.de",
-            "fan2d.top",
-            "acgfan.top",
-        ]
-        .contains(&url.host_str().unwrap_or_default())
-        || !url.username().is_empty()
-        || url.password().is_some()
-    {
-        return Err(Message::new("error.site_url"));
+    if is_fan_site(&url) {
+        Ok(url)
+    } else {
+        Err(Message::new("error.site_url"))
     }
-    Ok(url)
 }
+
+pub(crate) fn fan_site_url(base: &Url, value: &str) -> Option<Url> {
+    let mut url = base.join(value).ok()?;
+    if !url.username().is_empty() || url.password().is_some() {
+        return None;
+    }
+    if url.origin() != base.origin() {
+        if !is_fan_site(&url) || !is_fan_site(base) {
+            return None;
+        }
+        // 镜像共享词条和资源路径。重建同源 URL，避免把会话带到旧站。
+        url.set_host(base.host_str()).ok()?;
+    }
+    Some(url)
+}
+
+/// 将已保存的 2DFan 站内链接切换到当前配置域名，保留路径和页面定位。
+pub fn fan_browser_url(domain: &str, url: &Url) -> Option<Url> {
+    if !is_fan_site(url) {
+        return None;
+    }
+    fan_site_url(&fan_base(domain).ok()?, url.as_str())
+}
+
 fn selector(value: &str) -> Selector {
     Selector::parse(value).expect("static selector")
 }
@@ -187,14 +221,11 @@ pub fn parse_links(body: &str, base: &Url, prefix: &str, source: &str) -> Vec<Re
         let Some(href) = a.value().attr("href") else {
             continue;
         };
-        let Ok(url) = base.join(href) else {
+        let Some(url) = fan_site_url(base, href) else {
             continue;
         };
         let tail = url.path().strip_prefix(prefix).unwrap_or_default();
-        if url.host_str() != base.host_str()
-            || tail.is_empty()
-            || !tail.chars().all(|c| c.is_ascii_digit())
-        {
+        if tail.is_empty() || !tail.bytes().all(|c| c.is_ascii_digit()) {
             continue;
         }
         let title = a.text().collect::<Vec<_>>().join(" ").trim().to_owned();
@@ -250,10 +281,9 @@ pub fn fan_metadata(
     credentials: Option<&FanCredentials>,
 ) -> Result<Metadata, Message> {
     let base = fan_base(domain)?;
-    let url = base.join(url).map_err(network)?;
-    if url.host_str() != base.host_str() || !url.path().starts_with("/subjects/") {
-        return Err(Message::new("error.site_url"));
-    }
+    let url = fan_site_url(&base, url)
+        .filter(|url| url.path().starts_with("/subjects/"))
+        .ok_or_else(|| Message::new("error.site_url"))?;
     let body = fan_http::page(&base, url.clone(), credentials)?;
     parse_metadata(&body, &url)
 }
@@ -275,15 +305,18 @@ pub fn parse_metadata(body: &str, url: &Url) -> Result<Metadata, Message> {
         .map(|e| e.text().collect::<String>().trim().to_owned())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| content("meta[property='og:title']"));
-    let mut cover = content("meta[property='og:image']");
-    if cover.is_empty() {
-        cover = doc
-            .select(&selector("img[src]"))
-            .filter_map(|e| e.value().attr("src"))
-            .find(|s| s.contains("/subjects/") || s.contains("/covers/"))
-            .unwrap_or_default()
-            .into();
-    }
+    let cover = doc
+        .select(&selector(
+            "img.subject-cover-img[src], .subject-cover img[src]",
+        ))
+        .filter_map(|e| e.value().attr("src"))
+        .chain(
+            doc.select(&selector("meta[property='og:image'][content]"))
+                .filter_map(|e| e.value().attr("content")),
+        )
+        .filter(|src| !src.trim().is_empty())
+        .filter_map(|src| fan_site_url(base, src).or_else(|| base.join(src).ok()))
+        .find(is_cover_url);
     let description = doc
         .select(&selector(".intro-content, .subject-description"))
         .next()
@@ -322,11 +355,7 @@ pub fn parse_metadata(body: &str, url: &Url) -> Result<Metadata, Message> {
         music: field(&["音乐"]),
         singers: field(&["歌手"]),
         release_date: field(&["发售日期", "发行日期"]),
-        cover_url: if cover.is_empty() {
-            None
-        } else {
-            base.join(&cover).ok().map(Into::into)
-        },
+        cover_url: cover.map(Into::into),
         tags: crate::tags::normalize(
             doc.select(&selector(".subject-tags-inline > a.nexus-tag"))
                 .map(|e| e.text().collect::<String>()),
@@ -493,29 +522,30 @@ pub fn search_patch_sites(
     Ok(output)
 }
 
+fn is_cover_url(url: &Url) -> bool {
+    is_fan_site(url)
+        || (url.scheme() == "https"
+            && url.port().is_none()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && matches!(
+                url.host_str(),
+                Some(
+                    "img.achost.top"
+                        | "t.vndb.org"
+                        | "s.vndb.org"
+                        | "lain.bgm.tv"
+                        | "store.ymgal.games"
+                        | "image.kungal.iloveren.link"
+                )
+            ))
+}
+
 /// Download and normalize a source image with the same limits as local posters.
 pub fn cover_bytes(image_url: &str, referrer: &str) -> Result<Vec<u8>, Message> {
     use std::io::Read;
     let url = Url::parse(image_url).map_err(network)?;
-    if url.scheme() != "https"
-        || ![
-            "img.achost.top",
-            "2dfmax.top",
-            "2dfdf.de",
-            "2dfan.com",
-            "fan2d.top",
-            "acgfan.top",
-            "t.vndb.org",
-            "s.vndb.org",
-            "lain.bgm.tv",
-            "store.ymgal.games",
-            "image.kungal.iloveren.link",
-        ]
-        .contains(&url.host_str().unwrap_or_default())
-    {
-        return Err(Message::new("error.site_url"));
-    }
-    if !url.username().is_empty() || url.password().is_some() {
+    if !is_cover_url(&url) {
         return Err(Message::new("error.site_url"));
     }
     let response = Client::builder()
@@ -676,10 +706,9 @@ pub fn fan_patches(
     credentials: Option<&FanCredentials>,
 ) -> Result<Vec<Resource>, Message> {
     let base = fan_base(domain)?;
-    let url = base.join(subject_url).map_err(network)?;
-    if url.host_str() != base.host_str() || !url.path().starts_with("/subjects/") {
-        return Err(Message::new("error.site_url"));
-    }
+    let url = fan_site_url(&base, subject_url)
+        .filter(|url| url.path().starts_with("/subjects/"))
+        .ok_or_else(|| Message::new("error.site_url"))?;
     let body = fan_http::page(&base, url, credentials)?;
     Ok(parse_links(&body, &base, "/downloads/", "2DFan"))
 }
@@ -796,16 +825,40 @@ mod tests {
     }
     #[test]
     fn site_links_are_deduplicated_and_external_links_are_excluded() {
-        let base = fan_base("https://2dfmax.top").unwrap();
+        let base = fan_base(DEFAULT_FAN_DOMAIN).unwrap();
         let results = parse_links(
-            r#"<h3 class='subject-card-title'><a href='/subjects/42'>游戏 A</a><a href='/subjects/42'>重复</a><a href='https://evil.test/subjects/9'>Bad</a><a href='/subjects/search'>Search</a></h3><aside><a href='/subjects/99'>Unrelated recommendation</a></aside>"#,
+            r#"<h3 class='subject-card-title'><a href='https://2dfan.top/subjects/42'>游戏 A</a><a href='/subjects/42'>重复</a><a href='https://evil.test/subjects/9'>Bad</a><a href='/subjects/search'>Search</a></h3><aside><a href='/subjects/99'>Unrelated recommendation</a></aside>"#,
             &base,
             "/subjects/",
             "2DFan",
         );
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].title, "游戏 A");
+        assert_eq!(results[0].url, "https://fan2d.top/subjects/42");
         assert!(fan_base("https://2dfmax.top.evil.test").is_err());
+    }
+
+    #[test]
+    fn cover_comes_from_the_current_subject_and_ignores_recommendations() {
+        let page = Url::parse("https://fan2d.top/subjects/1").unwrap();
+        let cover = "<img class='subject-cover-img' src='//img.achost.top/uploads/subjects/packages/cover.jpg'>";
+        let related = "<h1>Game</h1><img class='similar-cover-img' src='/subjects/2/cover.jpg'>";
+        let social = "<meta property='og:image' content='/covers/social.jpg'>";
+        assert_eq!(
+            parse_metadata(&format!("{related}{social}{cover}"), &page)
+                .unwrap()
+                .cover_url
+                .as_deref(),
+            Some("https://img.achost.top/uploads/subjects/packages/cover.jpg")
+        );
+        assert_eq!(
+            parse_metadata(&format!("{related}{social}"), &page)
+                .unwrap()
+                .cover_url
+                .as_deref(),
+            Some("https://fan2d.top/covers/social.jpg")
+        );
+        assert!(parse_metadata(related, &page).unwrap().cover_url.is_none());
     }
     #[test]
     fn download_category_badges_cannot_replace_resource_titles() {

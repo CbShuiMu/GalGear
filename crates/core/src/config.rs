@@ -33,6 +33,12 @@ impl ConfigStore {
                 if settings.release_page.trim().is_empty() {
                     settings.release_page = crate::RELEASE_PAGE.into();
                 }
+                if reqwest::Url::parse(&settings.fan_domain).is_ok_and(|url| {
+                    crate::providers::is_fan_site(&url)
+                        && matches!(url.host_str(), Some("2dfan.top" | "2dfmax.top"))
+                }) {
+                    settings.fan_domain = crate::providers::DEFAULT_FAN_DOMAIN.into();
+                }
                 // An empty launch mode is the old untouched default; explicit
                 // user choices are stored as "normal" or "locale".
                 for edit in settings.game_edits.values_mut() {
@@ -121,6 +127,24 @@ pub fn display_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn old_fan_defaults_are_migrated_without_changing_other_mirrors() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ConfigStore::new(dir.path().join("settings.json"));
+        for (old, new) in [
+            ("https://2dfan.top/", "https://fan2d.top"),
+            ("https://2dfmax.top", "https://fan2d.top"),
+            ("https://acgfan.top", "https://acgfan.top"),
+        ] {
+            fs::write(
+                &store.path,
+                serde_json::json!({"fan_domain": old}).to_string(),
+            )
+            .unwrap();
+            assert_eq!(store.load().unwrap().fan_domain, new);
+        }
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

@@ -1,5 +1,6 @@
 //! Import an explicitly supplied historical token without copying it into commands or logs.
 use galgear_core::{
+    config::ConfigStore,
     credentials,
     fan_account::{Session, Transfer},
 };
@@ -12,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().collect();
     let config = PathBuf::from(args.get(1).ok_or("Provide settings path")?);
     let target = credentials::target(&config);
+    let domain = ConfigStore::new(config).load()?.fan_domain;
     if let Some(rollout) = args.get(2).filter(|s| !s.starts_with("--")) {
         let mut found = None;
         for line in BufReader::new(std::fs::File::open(rollout)?).lines() {
@@ -50,14 +52,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for mode in ["csrf", "bearer"] {
         let mut test = value.clone();
         test.mode = mode.into();
-        let session = Session::new("https://2dfmax.top", test)?;
+        let session = Session::new(&domain, test)?;
         let account = session.check()?;
         println!(
             "Read-only {mode} test: status={}, balance={:?}, token_saved={}, cookie_saved={}",
             account.status, account.balance, account.token_saved, account.cookie_saved
         );
     }
-    let session = Session::new("https://2dfmax.top", value)?;
+    let session = Session::new(&domain, value)?;
     if args.iter().any(|s| s == "--download-free") {
         let url = args.get(3).ok_or("Provide a free resource path")?;
         let before = session.check()?.balance;
@@ -126,12 +128,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
         return Ok(());
     }
-    let paid = session.inspect("https://2dfmax.top/downloads/23924")?;
+    let paid = session.inspect("/downloads/23924")?;
     println!(
         "Paid patch inspection: price={:?}, can_purchase={}, requires_purchase={}",
         paid.preview.price, paid.preview.can_purchase, paid.preview.requires_purchase
     );
-    let free = session.inspect("https://2dfmax.top/downloads/38576")?;
+    let free = session.inspect("/downloads/38576")?;
     println!(
         "Public file inspection: can_download={}, requires_purchase={}",
         free.preview.can_download, free.preview.requires_purchase

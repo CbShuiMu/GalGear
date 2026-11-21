@@ -1,4 +1,4 @@
-// 尺寸来自实际加载的原图；加载失败或尚未加载时不显示占位尺寸。
+// 尺寸来自实际加载的图片；加载失败或尚未加载时不显示占位尺寸。
 function syncResolution(image) {
   const badge = image.parentElement.querySelector('.cover-resolution');
   const ready = image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;

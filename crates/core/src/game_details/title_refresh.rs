@@ -57,16 +57,7 @@ pub fn lookup(
 
 fn identity(url: &str) -> Option<(String, String)> {
     let (source, id) = data_sources::source_for_url(url).ok()?;
-    if source != "2dfan" {
-        return Some((source.into(), id));
-    }
-    // 2DFan 支持自定义域名，按 subject ID 比较镜像站上的同一词条。
-    let parsed = reqwest::Url::parse(url).ok()?;
-    let id = parsed
-        .path()
-        .trim_end_matches('/')
-        .strip_prefix("/subjects/")?;
-    (!id.is_empty() && id.bytes().all(|c| c.is_ascii_digit())).then(|| (source.into(), id.into()))
+    Some((source.into(), id))
 }
 
 /// 仅接受源一致、唯一且不同于当前词条的结果；域名别名不构成新词条。

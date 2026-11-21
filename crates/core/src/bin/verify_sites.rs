@@ -1,15 +1,16 @@
 //! Read-only verification: never purchases or executes downloads.
 use galgear_core::{catalog, data_sources, providers};
+use providers::DEFAULT_FAN_DOMAIN;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let credentials = galgear_core::data_sources::Credentials {
         patch_key: std::env::var("GALGEAR_NEXTMOE_PATCH_KEY").unwrap_or_default(),
         ..Default::default()
     };
     let query = std::env::args().nth(1).unwrap_or_else(|| "千恋".into());
-    let subjects = providers::search_fan("https://2dfmax.top", &query, None)?;
+    let subjects = providers::search_fan(DEFAULT_FAN_DOMAIN, &query, None)?;
     println!("2DFan subjects: {}", subjects.len());
     if let Some(subject) = subjects.first() {
-        let metadata = providers::fan_metadata("https://2dfmax.top", &subject.url, None)?;
+        let metadata = providers::fan_metadata(DEFAULT_FAN_DOMAIN, &subject.url, None)?;
         println!(
             "2DFan metadata: {} / {} / {} / cover={}",
             metadata.title,
@@ -27,13 +28,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         let patches = providers::fan_patches(
-            "https://2dfmax.top",
+            DEFAULT_FAN_DOMAIN,
             &format!("{}/downloads", subject.url),
             None,
         )?;
         println!("2DFan resource pages: {}", patches.len());
     }
-    let combined = providers::search_patch_sites("https://2dfmax.top", &query, &credentials, None)?;
+    let combined = providers::search_patch_sites(DEFAULT_FAN_DOMAIN, &query, &credentials, None)?;
     let fan = combined
         .resources
         .iter()

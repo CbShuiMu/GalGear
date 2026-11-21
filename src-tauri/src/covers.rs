@@ -3,8 +3,10 @@ use crate::{
     data_sources, dialogs, preferences::update, state::AppState, state::find_game,
     state::persist_game, state::snapshot,
 };
+use base64::Engine;
 use galgear_core::{Game, data_sources::Cover, providers, scanner};
 use galgear_i18n::{Message, tr};
+use serde::Serialize;
 use std::path::PathBuf;
 use tauri::State;
 
@@ -78,13 +80,21 @@ fn cache_source_cover(bytes: &[u8], cache: &std::path::Path) -> Result<SourceCov
     })
 }
 
+#[derive(Serialize)]
+pub(crate) struct CoverOption {
+    #[serde(flatten)]
+    cover: Cover,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preview_url: Option<String>,
+}
+
 #[tauri::command]
-pub async fn source_covers(
+pub(crate) async fn source_covers(
     id: String,
     source: String,
     query: Option<String>,
     state: State<'_, AppState>,
-) -> Result<Vec<Cover>, Message> {
+) -> Result<Vec<CoverOption>, Message> {
     galgear_core::data_sources::validate_source(&source)?;
     let game = find_game(&state, &id)?;
     let settings = snapshot(&state)?;
@@ -113,7 +123,22 @@ pub async fn source_covers(
             };
             first.url.clone()
         };
-        galgear_core::data_sources::covers(&settings.fan_domain, &url, &credentials)
+        galgear_core::data_sources::covers(&settings.fan_domain, &url, &credentials)?
+            .into_iter()
+            .map(|cover| {
+                let preview_url = if source == "2dfan" {
+                    // 2DFan 的图片 CDN 要求站内 Referer，WebView 无法为图片设置该来源页。
+                    let bytes = providers::cover_bytes(&cover.image_url, &cover.url)?;
+                    Some(format!(
+                        "data:image/jpeg;base64,{}",
+                        base64::engine::general_purpose::STANDARD.encode(bytes)
+                    ))
+                } else {
+                    None
+                };
+                Ok(CoverOption { cover, preview_url })
+            })
+            .collect()
     })
     .await
     .map_err(|error| Message::detail("error.network", error))?
@@ -206,7 +231,6 @@ pub(crate) async fn choose_cover(
 }
 
 pub(crate) fn prepare_cover(game: &mut Game, cache: &std::path::Path) -> Result<(), Message> {
-    use base64::Engine;
     use sha2::Digest;
     use std::io::Write;
     if let Some(value) = &game.cover

@@ -148,7 +148,7 @@ fn source_url(source: &str, id: &str) -> String {
         "vndb" => format!("https://vndb.org/v{id}"),
         "bgm" | "bangumi" => format!("https://bgm.tv/subject/{id}"),
         "ymgal" => format!("https://www.ymgal.games/ga{id}"),
-        "2dfan" => format!("https://2dfan.com/subjects/{id}"),
+        "2dfan" => format!("{}/subjects/{id}", crate::providers::DEFAULT_FAN_DOMAIN),
         _ => String::new(),
     }
 }

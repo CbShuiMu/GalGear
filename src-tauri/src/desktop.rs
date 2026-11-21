@@ -8,12 +8,23 @@ use galgear_i18n::{Message, tr};
 use tauri::Manager;
 
 #[tauri::command]
-pub(crate) fn open_resource(url: String) -> Result<(), Message> {
+pub(crate) fn open_resource(url: String, app: tauri::AppHandle) -> Result<(), Message> {
     let parsed = reqwest::Url::parse(&url).map_err(|e| Message::detail("error.site_url", e))?;
     if parsed.scheme() != "https" || !parsed.username().is_empty() || parsed.password().is_some() {
         return Err(Message::new("error.site_url"));
     }
-    open::that_detached(parsed.as_str()).map_err(|e| Message::detail("error.network", e))
+    let domain = app
+        .try_state::<AppState>()
+        .and_then(|state| crate::state::snapshot(&state).ok())
+        .map(|settings| settings.fan_domain);
+    let url = galgear_core::providers::fan_browser_url(
+        domain
+            .as_deref()
+            .unwrap_or(galgear_core::providers::DEFAULT_FAN_DOMAIN),
+        &parsed,
+    )
+    .unwrap_or(parsed);
+    open::that_detached(url.as_str()).map_err(|e| Message::detail("error.network", e))
 }
 
 fn builder() -> tauri::Builder<tauri::Wry> {

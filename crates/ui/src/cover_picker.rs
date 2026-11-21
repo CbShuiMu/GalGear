@@ -23,6 +23,7 @@ struct Cover {
     title: String,
     url: String,
     image_url: String,
+    preview_url: Option<String>,
 }
 
 fn load(app: &mut App) {
@@ -166,7 +167,8 @@ pub(crate) fn render(html: &mut String, app: &App, game: &Game) {
     } else {
         html.push_str("<div class=\"cover-options\">");
         for cover in &app.cover_picker.covers {
-            write!(html,r#"<button type="button" class="cover-option" data-action="cover-select" data-value="{}" title="{}" aria-label="{}" {}><div class="cover-option-image"><img src="{}" alt="{}" loading="lazy" referrerpolicy="no-referrer"/><span class="cover-resolution" hidden></span></div><span>{}</span></button>"#,esc(&cover.image_url),esc(&cover.title),f(app,"cover.select",&[("name",&cover.title)]),if app.busy(){"disabled"}else{""},esc(&cover.image_url),esc(&cover.title),esc(&cover.title)).unwrap();
+            let preview = cover.preview_url.as_deref().unwrap_or(&cover.image_url);
+            write!(html,r#"<button type="button" class="cover-option" data-action="cover-select" data-value="{}" title="{}" aria-label="{}" {}><div class="cover-option-image"><img src="{}" alt="{}" loading="lazy" referrerpolicy="no-referrer"/><span class="cover-resolution" hidden></span></div><span>{}</span></button>"#,esc(&cover.image_url),esc(&cover.title),f(app,"cover.select",&[("name",&cover.title)]),if app.busy(){"disabled"}else{""},esc(preview),esc(&cover.title),esc(&cover.title)).unwrap();
         }
         html.push_str("</div>");
     }
@@ -201,6 +203,36 @@ mod tests {
             r#"[{"title":"Old","url":"https://vndb.org/v17","image_url":"old.jpg","thumbnail_url":"old.jpg"}]"#,
         );
         assert!(app.cover_picker.covers.is_empty() && app.cover_picker.request == Some(2));
+    }
+
+    #[test]
+    fn protected_cover_renders_local_preview_and_selects_the_original_image() {
+        let mut app = App::default();
+        app.detail.selected = Some("game".into());
+        app.cover_picker.request = Some(2);
+        let image = "https://img.achost.top/cover.jpg";
+        let url = "https://fan2d.top/subjects/1";
+        let preview = "data:image/jpeg;base64,fixture";
+        resolve(
+            &mut app,
+            2,
+            true,
+            &json!([{"title":"Game","url":url,"image_url":image,"preview_url":preview}]).to_string(),
+        );
+        let game = serde_json::from_value(json!({
+            "id":"game", "title":"Game", "folder":"F:/Game", "engine":"unknown", "modified":0
+        }))
+        .unwrap();
+        let mut html = String::new();
+        render(&mut html, &app, &game);
+        assert!(html.contains(&format!("src=\"{preview}\"")));
+
+        dispatch(&mut app, "cover-select", image);
+        let requests = crate::bridge::take_requests();
+        let payload: serde_json::Value = serde_json::from_str(&requests[0].2).unwrap();
+        assert_eq!(requests[0].1, "select_source_cover");
+        assert_eq!(payload["imageUrl"], image);
+        assert_eq!(payload["url"], url);
     }
 
     #[test]

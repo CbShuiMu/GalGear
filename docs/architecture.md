@@ -64,6 +64,8 @@ AI 剧情分析默认由 core 的 `ai_summary::skill_analysis` 调用宿主 `ana
 
 `core::fan_http` 为 2DFan 资料查询与账号会话提供共用的 Token/Cookie、超时、响应大小及同源重定向规则。桌面数据源入口从既有 `GalGear/2DFan/…` 凭据条目读取会话，`data_sources::Credentials.fan` 只在内存中传递且不参与序列化；搜索、资料、标签、封面候选和补丁列表使用该会话，没有凭据时匿名访问。CDN 图片和文件下载不携带站点凭据。
 
+2DFan 默认使用 `fan2d.top`。加载配置时将旧默认域名 `2dfmax.top` 和旧域名 `2dfan.top` 切换到新默认值；已关联的作品和补丁按原资源路径在当前域名读取。站内附件优先使用当前域名，独立 CDN 的签名链接由原站提供。待确认扣费记录跨域名检查，避免切换域名后重复扣费。2DFan 封面从当前作品的主封面读取，桌面端携带作品页 Referer 下载预览，再将图片交给 WebView 显示。
+
 ## 启动缓存与后台恢复
 
 桌面 `startup` 在 setup 中立即启动后台加载并返回消息循环。本地 settings/catalog/playtime 读取完成后，通过原有 `bootstrap` 协议发布缓存首屏；`core::catalog::apply_saved_edits` 只应用已保存资料，保留上次可用状态，不访问游戏目录。`state::load_with_preview` 在同一后台任务中继续执行路径检查、补丁恢复、封面准备、重复条目修复和备份迁移，并按阶段记录 `startup_stage` 耗时。配置和游玩记录读取失败仍返回错误，目录缓存损坏保留原有警告及手动条目回退。

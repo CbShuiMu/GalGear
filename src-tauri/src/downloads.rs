@@ -192,7 +192,6 @@ pub(crate) async fn start_fan_download(
         let audit_directory = state.store.path.with_file_name("purchases");
         let cancel = state.downloads.cancel.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            use sha2::{Digest, Sha256};
             let session = Session::new(&settings.fan_domain, credentials)?;
             let mut fresh = session.inspect(&plan.preview.source_url)?;
             if fresh.preview.requires_purchase {
@@ -203,34 +202,8 @@ pub(crate) async fn start_fan_download(
                     return Err(Message::new("download.cancelled"));
                 }
                 // A pending marker survives crashes/timeouts; never retry an uncertain charge automatically.
-                std::fs::create_dir_all(&audit_directory)
-                    .map_err(|_| Message::new("download.write"))?;
-                let marker = audit_directory.join(format!(
-                    "{:x}.pending",
-                    Sha256::digest(fresh.preview.source_url.as_bytes())
-                ));
-                use std::io::Write;
-                let mut file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&marker)
-                    .map_err(|e| {
-                        Message::new(if e.kind() == std::io::ErrorKind::AlreadyExists {
-                            "download.purchase_uncertain"
-                        } else {
-                            "download.write"
-                        })
-                    })?;
-                file.write_all(
-                    format!(
-                        "{}\n{}\n",
-                        fresh.preview.source_url,
-                        confirm_price.unwrap_or_default()
-                    )
-                    .as_bytes(),
-                )
-                .and_then(|_| file.sync_all())
-                .map_err(|_| Message::new("download.write"))?;
+                let (marker, file) =
+                    fresh.reserve_purchase(&audit_directory, confirm_price.unwrap_or_default())?;
                 let _ = app.emit(
                     "fan-download-progress",
                     Transfer {

@@ -4,8 +4,11 @@ use galgear_i18n::Message;
 use reqwest::{Url, blocking::Client, header::REFERER};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
-    path::Path,
+    fs::{self, File, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
     time::Duration,
 };
@@ -62,35 +65,26 @@ impl Session {
         Ok(account)
     }
     pub fn inspect(&self, url: &str) -> Result<DownloadPlan, Message> {
-        let url = self
-            .base
-            .join(url)
-            .map_err(|_| Message::new("error.site_url"))?;
-        let id = url.path().strip_prefix("/downloads/").unwrap_or_default();
-        if url.origin() != self.base.origin()
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || id.is_empty()
-            || !id.bytes().all(|b| b.is_ascii_digit())
-        {
-            return Err(Message::new("error.site_url"));
-        }
+        let url = self.resource_url(url)?;
         parse_download(&self.read(url.clone())?, url)
+    }
+
+    fn resource_url(&self, url: &str) -> Result<Url, Message> {
+        let mut url = providers::fan_site_url(&self.base, url)
+            .filter(|url| {
+                url.path()
+                    .strip_prefix("/downloads/")
+                    .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+            })
+            .ok_or_else(|| Message::new("error.site_url"))?;
+        url.set_query(None);
+        url.set_fragment(None);
+        Ok(url)
     }
 
     /// Read-only diagnostics for changed site markup, excluding credentials and signed URL values.
     pub fn resource_structure(&self, url: &str) -> Result<serde_json::Value, Message> {
-        let url = self
-            .base
-            .join(url)
-            .map_err(|_| Message::new("error.site_url"))?;
-        let id = url.path().strip_prefix("/downloads/").unwrap_or_default();
-        if url.origin() != self.base.origin()
-            || id.is_empty()
-            || !id.bytes().all(|b| b.is_ascii_digit())
-        {
-            return Err(Message::new("error.site_url"));
-        }
+        let url = self.resource_url(url)?;
         let body = self.read(url.clone())?;
         let doc = Html::parse_document(&body);
         let links:Vec<_>=doc.select(&sel("main a, main button, main form")).filter_map(|e| {
@@ -297,6 +291,48 @@ pub struct DownloadPlan {
     purchase_action: Option<Url>,
     csrf: Option<String>,
 }
+
+impl DownloadPlan {
+    /// 创建待确认扣费记录。切换站点域名后仍检查旧版留下的记录。
+    pub fn reserve_purchase(
+        &self,
+        directory: &Path,
+        price: u64,
+    ) -> Result<(PathBuf, File), Message> {
+        let url =
+            Url::parse(&self.preview.source_url).map_err(|_| Message::new("error.site_url"))?;
+        fs::create_dir_all(directory).map_err(|_| Message::new("download.write"))?;
+        let marker_for =
+            |url: &str| directory.join(format!("{:x}.pending", Sha256::digest(url.as_bytes())));
+        let canonical = format!("{}{}", providers::DEFAULT_FAN_DOMAIN, url.path());
+        let marker = marker_for(&canonical);
+        for host in providers::FAN_HOSTS {
+            let legacy = marker_for(&format!("https://{host}{}", url.path()));
+            if legacy != marker
+                && legacy
+                    .try_exists()
+                    .map_err(|_| Message::new("download.write"))?
+            {
+                return Err(Message::new("download.purchase_uncertain"));
+            }
+        }
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&marker)
+            .map_err(|error| {
+                Message::new(if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    "download.purchase_uncertain"
+                } else {
+                    "download.write"
+                })
+            })?;
+        writeln!(file, "{}\n{price}", self.preview.source_url)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| Message::new("download.write"))?;
+        Ok((marker, file))
+    }
+}
 pub fn parse_download(body: &str, url: Url) -> Result<DownloadPlan, Message> {
     let doc = Html::parse_document(body);
     let account = parse_account(body);
@@ -343,7 +379,7 @@ pub fn parse_download(body: &str, url: Url) -> Result<DownloadPlan, Message> {
         let Some(href) = a.value().attr("href") else {
             continue;
         };
-        let Ok(link) = url.join(href) else {
+        let Some(link) = providers::fan_site_url(&url, href).or_else(|| url.join(href).ok()) else {
             continue;
         };
         let label = a.text().collect::<String>();
@@ -364,7 +400,10 @@ pub fn parse_download(body: &str, url: Url) -> Result<DownloadPlan, Message> {
                 .is_none_or(|method| method.eq_ignore_ascii_case("get"))
             && allowed_file(&link, &url)
         {
-            file_url = Some(link.clone());
+            let priority = (link.origin() == url.origin(), label.contains("国内直连"));
+            if file_url.as_ref().is_none_or(|(best, _)| priority >= *best) {
+                file_url = Some((priority, link.clone()));
+            }
         }
         if a.value().attr("data-turbo-method") == Some("post")
             && link.origin() == url.origin()
@@ -375,7 +414,10 @@ pub fn parse_download(body: &str, url: Url) -> Result<DownloadPlan, Message> {
         }
     }
     for form in doc.select(&sel("form[method='post'][action]")) {
-        if let Some(action) = form.value().attr("action").and_then(|a| url.join(a).ok())
+        if let Some(action) = form
+            .value()
+            .attr("action")
+            .and_then(|action| providers::fan_site_url(&url, action))
             && action.origin() == url.origin()
             && action.path() == format!("{}/purchase", url.path())
         {
@@ -396,6 +438,7 @@ pub fn parse_download(body: &str, url: Url) -> Result<DownloadPlan, Message> {
             }
         }
     }
+    let file_url = file_url.map(|(_, link)| link);
     let free =
         price == Some(0) || (file_url.is_some() && price.is_none() && purchase_action.is_none());
     let can_acquire_free = price == Some(0)
@@ -461,12 +504,13 @@ pub fn parse_download(body: &str, url: Url) -> Result<DownloadPlan, Message> {
 }
 fn allowed_file(file: &Url, source: &Url) -> bool {
     file.scheme() == "https"
+        && file.port().is_none()
         && file.username().is_empty()
         && file.password().is_none()
         && file.path() != "/login"
         && file.path() != source.path()
         && !file.path().ends_with("/purchase")
-        && (file.host_str() == source.host_str()
+        && (file.origin() == source.origin()
             || [
                 "d1.acgxp.com",
                 "d2.acgxp.com",
@@ -520,6 +564,61 @@ mod tests {
     use std::io::{Read, Write};
 
     #[test]
+    fn old_resource_links_and_site_attachments_use_the_active_origin() {
+        let session = Session::new(
+            providers::DEFAULT_FAN_DOMAIN,
+            FanCredentials {
+                mode: "csrf".into(),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let url = session
+            .resource_url("https://2dfan.top/downloads/7")
+            .unwrap();
+        assert_eq!(url.as_str(), "https://fan2d.top/downloads/7");
+        for invalid in [
+            "https://2dfan.top.evil.test/downloads/7",
+            "https://2dfan.top:8443/downloads/7",
+            "https://user@2dfan.top/downloads/7",
+        ] {
+            assert!(session.resource_url(invalid).is_err());
+        }
+        let cdn = "<a href='https://d1.acgxp.com/patch.zip?st=fixture'>海外直连</a>";
+        let site = "<a href='https://2dfan.top/downloads/7/file?key=fixture'>国内直连</a>";
+        let plan = parse_download(
+            &format!("<h1>Patch</h1><main>{site}{cdn}</main>"),
+            url.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            plan.file_url.unwrap().as_str(),
+            "https://fan2d.top/downloads/7/file?key=fixture"
+        );
+        let plan = parse_download(&format!("<h1>Patch</h1><main>{cdn}</main>"), url).unwrap();
+        assert_eq!(
+            plan.file_url.unwrap().as_str(),
+            "https://d1.acgxp.com/patch.zip?st=fixture"
+        );
+    }
+
+    #[test]
+    fn legacy_pending_purchase_blocks_a_new_charge_after_switching_domains() {
+        let directory = tempfile::tempdir().unwrap();
+        let old_url = "https://2dfmax.top/downloads/7";
+        let legacy = directory
+            .path()
+            .join(format!("{:x}.pending", Sha256::digest(old_url.as_bytes())));
+        fs::write(legacy, format!("{old_url}\n2\n")).unwrap();
+        let url = Url::parse("https://fan2d.top/downloads/7").unwrap();
+        let plan = parse_download("<h1>Patch</h1><main></main>", url).unwrap();
+        assert_eq!(
+            plan.reserve_purchase(directory.path(), 2).unwrap_err().key,
+            "download.purchase_uncertain"
+        );
+    }
+
+    #[test]
     fn downloads_use_configured_proxy_for_site_and_cdn_files() {
         const WORKER: &str = "GALGEAR_FAN_DOWNLOAD_PROXY_TEST";
         if std::env::var_os(WORKER).is_some() {
@@ -563,6 +662,7 @@ mod tests {
                     }
                     Err(error) => panic!("Proxy accept failed: {error}"),
                 };
+                socket.set_nonblocking(false).unwrap();
                 socket.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
                 let mut request = Vec::new();
                 let mut buffer = [0; 1024];

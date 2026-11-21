@@ -88,7 +88,12 @@ pub fn covers(domain: &str, url: &str, credentials: &Credentials) -> Result<Vec<
         let metadata = metadata(domain, url, credentials)?;
         let mut covers = Vec::new();
         if let Some(image_url) = metadata.cover_url {
-            add_cover(&mut covers, &metadata.title, url, &json!({"url":image_url}));
+            add_cover(
+                &mut covers,
+                &metadata.title,
+                &metadata.url,
+                &json!({"url":image_url}),
+            );
         }
         return Ok(covers);
     }
@@ -430,7 +435,10 @@ pub fn source_for_url(url: &str) -> Result<(&'static str, String), Message> {
             "nextmoe",
             path.strip_prefix("/explore/work/").map(str::to_owned),
         ),
-        _ => return Ok(("2dfan", String::new())),
+        _ if providers::is_fan_site(&url) => {
+            ("2dfan", path.strip_prefix("/subjects/").map(str::to_owned))
+        }
+        _ => return Err(Message::new("error.site_url")),
     };
     let id = id
         .filter(|id| !id.is_empty() && id.bytes().all(|c| c.is_ascii_digit()))
@@ -898,8 +906,8 @@ mod tests {
         );
         assert_eq!(
             metadata(
-                "https://2dfmax.top",
-                "https://2dfmax.top/subjects/1",
+                providers::DEFAULT_FAN_DOMAIN,
+                "https://2dfan.top/subjects/1",
                 &credentials
             )
             .unwrap_err()
@@ -908,7 +916,7 @@ mod tests {
         );
         assert_eq!(
             covers(
-                "https://2dfmax.top",
+                providers::DEFAULT_FAN_DOMAIN,
                 "https://2dfmax.top/subjects/1",
                 &credentials
             )
@@ -945,7 +953,7 @@ mod tests {
             "https://bgm.tv/subject/no",
             "https://user@www.ymgal.games/ga1",
         ] {
-            assert!(source_for_url(url).is_err() || source_for_url(url).unwrap().0 == "2dfan");
+            assert!(source_for_url(url).is_err());
         }
         assert_eq!(
             source_for_url("https://www.ymgal.games/GA31147").unwrap(),
