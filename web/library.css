@@ -74,7 +74,7 @@
 .library-page[data-card-size=small] .card-title,.library-page[data-card-size=tiny] .card-title{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
 .library-page[data-card-size=small] .card-title{-webkit-line-clamp:4}
 .library-page[data-card-size=tiny] .card-title{-webkit-line-clamp:3}
-.library-page .card-tags{cursor:pointer;flex:1 1 auto;min-height:2.8em;pointer-events:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.library-page .card-tags{cursor:pointer;flex:1 1 auto;min-height:2.8em;pointer-events:auto;scrollbar-width:thin}
 .library-page[data-card-size=small] .card-tags,.library-page[data-card-size=tiny] .card-tags{flex-basis:0;gap:5px;font-size:calc(var(--ui-font)*.75)}
 .library-page[data-card-size=small] .card-tag,.library-page[data-card-size=tiny] .card-tag{padding:2px 5px;overflow-wrap:anywhere}
 .library-page[data-card-size=small] .card-actions,.library-page[data-card-size=tiny] .card-actions{gap:2px;padding-top:6px;margin-top:0}

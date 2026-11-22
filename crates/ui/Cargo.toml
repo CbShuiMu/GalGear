@@ -14,4 +14,5 @@ galgear-i18n.workspace = true
 galgear-tags.workspace = true
 wasm-bindgen = "=0.2.127"
 time = "0.3"
+pinyin = { version = "0.11", default-features = false, features = ["plain"] }
 

@@ -8,8 +8,8 @@ ANY WARRANTY, including MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See LICENSE for the complete terms.
 
 Corresponding source and build scripts for this release:
-https://github.com/CbShuiMu/GalGear/tree/v0.6.5
-https://github.com/CbShuiMu/GalGear/archive/refs/tags/v0.6.5.tar.gz
+https://github.com/CbShuiMu/GalGear/tree/v0.6.6
+https://github.com/CbShuiMu/GalGear/archive/refs/tags/v0.6.6.tar.gz
 
 Earlier GalGear code was distributed under MIT. Its original copyright and
 permission notice is retained in LICENSES/MIT-GalGear-prior-to-v0.3.3.txt.
@@ -27,3 +27,8 @@ respective components; the GalGear application remains GPL-3.0-only.
 Google Material Symbols: https://github.com/google/material-design-icons
 Google Material Symbols are distributed under the Apache License 2.0.
 See LICENSES/Google-Material-Symbols-Apache-2.0.txt.
+
+rust-pinyin by mozillazg: https://github.com/mozillazg/rust-pinyin
+The original MIT notice is retained in LICENSES/rust-pinyin-MIT.txt.
+Pinyin data: https://github.com/mozillazg/pinyin-data
+See LICENSES/pinyin-data-MIT.txt for its MIT notice.

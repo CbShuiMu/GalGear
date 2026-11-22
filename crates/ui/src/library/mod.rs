@@ -17,6 +17,7 @@ pub(crate) use view::page;
 
 use crate::{features::meta_value, models::Catalog, models::Game, models::Metadata, models::Settings};
 use galgear_i18n::Message;
+use pinyin::ToPinyin;
 use serde::Deserialize;
 use std::collections::BTreeSet;
 
@@ -153,6 +154,24 @@ pub(crate) fn matching<'a>(
     games
 }
 
+fn title_sort_key(title: &str) -> String {
+    let title = title.to_lowercase();
+    if title.is_ascii() {
+        return title;
+    }
+
+    let mut key = String::with_capacity(title.len());
+    for character in title.chars() {
+        if let Some(pinyin) = character.to_pinyin() {
+            key.push_str(pinyin.plain());
+        } else {
+            key.push(character);
+        }
+    }
+    key
+}
+
+/// 按当前游戏库排序设置排列条目，名称排序使用不区分大小写的拼音键。
 pub(crate) fn sort_games(games: &mut [&Game], settings: &Settings) {
     if settings.sort_by == "custom" {
         let positions: std::collections::BTreeMap<_, _> = settings.custom_order.iter().enumerate().map(|(index, id)| (id.as_str(), index)).collect();
@@ -184,7 +203,7 @@ pub(crate) fn sort_games(games: &mut [&Game], settings: &Settings) {
     } else if settings.sort_by == "recent" {
         games.sort_by_key(|g| g.modified);
     } else {
-        games.sort_by_cached_key(|g| g.title.to_lowercase());
+        games.sort_by_cached_key(|game| title_sort_key(&game.title));
     }
     if !matches!(settings.sort_by.as_str(), "release" | "last_played") && settings.sort_descending()
     {
@@ -942,6 +961,57 @@ mod tests {
                 .iter().map(|game| game.id.as_str()).collect();
             assert_eq!(ids, expected, "{field}, descending={descending}");
         }
+    }
+
+    #[test]
+    fn name_sort_interleaves_pinyin_with_numbers_and_english_in_both_directions() {
+        let mut app = App::default();
+        app.catalog.games = [
+            "初音",
+            "千恋万花",
+            "9-nine",
+            "Beta",
+            "变态監獄",
+            "初雪櫻",
+            "2-two",
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, title)| {
+            let mut game = game(index);
+            game.title = title.into();
+            game
+        })
+        .collect();
+        for game in &app.catalog.games {
+            app.settings
+                .game_edits
+                .entry(game.id.clone())
+                .or_default()
+                .setup_confirmed = true;
+        }
+        let titles = |settings: &Settings| {
+            matching(&app.catalog, settings, &app.library, "games")
+                .into_iter()
+                .map(|game| game.title.as_str())
+                .collect::<Vec<_>>()
+        };
+        let ascending = [
+            "2-two",
+            "9-nine",
+            "Beta",
+            "变态監獄",
+            "初雪櫻",
+            "初音",
+            "千恋万花",
+        ];
+        assert_eq!(titles(&app.settings), ascending);
+
+        app.settings.sort_descending = Some(true);
+        assert_eq!(
+            titles(&app.settings),
+            ascending.into_iter().rev().collect::<Vec<_>>()
+        );
     }
 
     #[test]
