@@ -77,7 +77,7 @@ Choose metadata from **2DFan, VNDB, Bangumi, 月幕Gal, 未萌 NextMoe, and KunG
 
 Search for covers separately by name, choose a different cover source, or use a local image without changing the linked game metadata. Click a tag, developer, or staff member in the details to find related games in your library. Cached metadata and your local library remain available offline.
 
-The interface offers pink, white-pink, and white themes, each with light or dark mode. You can also adjust the language and font size in Settings.
+The interface offers pink, white-pink, and white themes, each with Light, Dark, or System mode. System mode automatically follows changes to your operating system’s appearance. You can also adjust the language and font size in Settings.
 
 ### 🔤 In-game font Hook and floating panel
 
