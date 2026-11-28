@@ -8,6 +8,11 @@ use galgear_i18n::Language;
 use serde::Deserialize;
 use std::fmt::Write;
 
+/// 根据保存的模式和系统外观解析当前亮暗；系统外观不写入用户配置。
+pub(crate) fn is_dark(theme: &str, system_dark: bool) -> bool {
+    theme == "dark" || (theme == "system" && system_dark)
+}
+
 pub(crate) fn preferred_source<'a>(app: &'a App, context: &str) -> &'a str {
     let source = app
         .settings
@@ -485,7 +490,11 @@ fn display(html: &mut String, app: &App) {
     )
     .unwrap();
     options_start(html, "mode", t(app, "theme.mode"));
-    for (mode, label) in [("light", "theme.light"), ("dark", "theme.dark")] {
+    for (mode, label) in [
+        ("light", "theme.light"),
+        ("dark", "theme.dark"),
+        ("system", "theme.system"),
+    ] {
         option(
             html,
             "set-theme",

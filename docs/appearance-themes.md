@@ -14,4 +14,8 @@
 
 下拉框保留原有形状和选项样式。游戏库卡片悬停时的收藏、通关、删除三个按钮保留原有圆角、透明背景、黄色／红色图标和悬停效果。海报、文件夹封面及卡片内标题属于内容入口，保留原有结构。
 
-样式由 `web/appearance.css` 集中管理，放在既有布局样式之后加载。`data-theme` 只表示亮暗，`data-color-theme` 表示主题色。配置字段 `theme` 保存亮暗，新增 `color_theme` 保存主题色；Rust 命令分别修改各自字段，延迟返回的旧设置不会覆盖最新外观。DOM 桥接同步这两个属性并播放过渡，原生窗口外观仅随亮暗变化。构建脚本将新增样式复制到发行前端。
+亮暗模式提供“亮色”“暗色”“跟随系统”。选择跟随系统后，启动时读取系统外观，运行中随系统亮暗变化自动切换页面与原生窗口；主题颜色保持独立。侧栏亮暗按钮按当前实际外观切换为相反的手动模式，需要自动切换时可在设置中重新选择跟随系统。旧配置保留原来的亮暗选择，缺少模式时仍默认亮色。
+
+样式由 `web/appearance.css` 集中管理，放在既有布局样式之后加载。`data-theme` 只表示解析后的 `light/dark`，`data-color-theme` 表示主题色。配置字段 `theme` 保存 `light/dark/system`，`color_theme` 保存主题色；Rust 命令分别修改各自字段，延迟返回的旧设置不会覆盖最新外观。DOM 桥接通过 `prefers-color-scheme` 上报外观，Rust 根据保存的模式决定是否更新界面，系统变化不触发配置写入。原生窗口在跟随系统时清除主题覆盖。构建脚本将样式复制到发行前端。
+
+构建前端后运行 `node --test scripts/test-system-theme.mjs scripts/test-render-transitions.cjs`，覆盖系统外观变化、手动覆盖、失败重试、迟到响应和三种语言。Windows 原生回归使用 `cargo test -p galgear --locked native_system_theme_restores_window_and_webview_after_manual_override -- --ignored --test-threads=1`，在临时 profile 的隐藏窗口中验证手动模式与跟随系统的原生窗口、WebView 外观一致，不修改系统主题或真实游戏配置。

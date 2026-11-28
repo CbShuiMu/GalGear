@@ -21,6 +21,21 @@ pub fn start() {
     });
 }
 
+/// 接收 WebView 的系统外观变化；手动模式只记录外观，不切换或保存设置。
+#[wasm_bindgen]
+pub fn system_theme_changed(dark: bool) {
+    APP.with(|state| {
+        let mut app = state.borrow_mut();
+        if app.system_dark == dark {
+            return;
+        }
+        app.system_dark = dark;
+        if app.settings.theme == "system" {
+            paint(&app);
+        }
+    });
+}
+
 #[wasm_bindgen]
 pub fn cover_enhanced(payload: &str) {
     #[derive(Deserialize)]

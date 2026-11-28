@@ -40,11 +40,11 @@ pub(crate) fn dispatch(app: &mut App, action: &str, value: &str) -> bool {
                 ("set_color_theme", json!({"colorTheme":value}))
             } else {
                 let theme = if action == "set-theme" {
-                    if !matches!(value, "light" | "dark") {
+                    if !matches!(value, "light" | "dark" | "system") {
                         return false;
                     }
                     value
-                } else if app.settings.theme == "dark" {
+                } else if crate::preferences::is_dark(&app.settings.theme, app.system_dark) {
                     "light"
                 } else {
                     "dark"

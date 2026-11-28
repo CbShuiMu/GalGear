@@ -413,6 +413,8 @@ pub fn resolve(id: u32, success: bool, payload: &str) {
                             serde_json::from_str(payload).map_err(|e| e.to_string())?;
                         app.settings.theme = settings.theme;
                         app.settings.color_theme = settings.color_theme;
+                        // 保存期间发出的设置读取也可能携带旧模式。
+                        app.theme_request = app.requests.next_id();
                     }
                     Pending::LibrarySize => {
                         let settings: Settings =

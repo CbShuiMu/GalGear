@@ -4,6 +4,10 @@ use galgear_core::Settings;
 use galgear_i18n::{Language, Message};
 use tauri::State;
 
+#[cfg(all(test, windows))]
+#[path = "preferences/theme_tests.rs"]
+mod theme_tests;
+
 pub(crate) fn update(
     state: &AppState,
     change: impl FnOnce(&mut Settings) -> Result<(), Message>,
@@ -53,19 +57,24 @@ pub(crate) fn set_theme(
     state: State<'_, AppState>,
     app: tauri::AppHandle,
 ) -> Result<Settings, Message> {
-    if !matches!(theme.as_str(), "light" | "dark") {
+    if !matches!(theme.as_str(), "light" | "dark" | "system") {
         return Err(Message::new("error.operation"));
     }
     let settings = update(&state, |settings| {
         settings.theme = theme;
         Ok(())
     })?;
-    app.set_theme(Some(if settings.theme == "dark" {
-        tauri::Theme::Dark
-    } else {
-        tauri::Theme::Light
-    }));
+    app.set_theme(native_theme(&settings.theme));
     Ok(settings)
+}
+
+/// 跟随系统时清除原生窗口及 WebView 的亮暗覆盖，旧配置继续默认亮色。
+pub(crate) fn native_theme(theme: &str) -> Option<tauri::Theme> {
+    match theme {
+        "system" => None,
+        "dark" => Some(tauri::Theme::Dark),
+        _ => Some(tauri::Theme::Light),
+    }
 }
 
 #[tauri::command]

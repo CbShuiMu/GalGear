@@ -43,6 +43,7 @@ mod skill_update;
 
 pub use ai_summary::progress::ai_summary_progress;
 pub use events::{
+    system_theme_changed,
     cover_enhanced,
     backup_completed, choice_key, dispatch, download_progress, enrichment_progress,
     expire_download_notice, expire_toast, fan_status_updated, game_context, game_enriched,

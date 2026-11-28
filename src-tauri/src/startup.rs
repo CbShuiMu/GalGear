@@ -185,19 +185,18 @@ pub(crate) fn close_to_tray(app: &tauri::AppHandle) -> bool {
 
 /// 只在启动恢复完成、业务状态注册后装配服务。
 fn start_services(app: &tauri::AppHandle) -> Result<(), Message> {
-    let (language, dark) = {
+    let (language, theme) = {
         let state = app.state::<AppState>();
         let settings = state
             .settings
             .lock()
             .map_err(|_| Message::new("error.config_state"))?;
-        (settings.language, settings.theme == "dark")
+        (
+            settings.language,
+            crate::preferences::native_theme(&settings.theme),
+        )
     };
-    app.set_theme(Some(if dark {
-        tauri::Theme::Dark
-    } else {
-        tauri::Theme::Light
-    }));
+    app.set_theme(theme);
     #[cfg(windows)]
     {
         let (input, [screenshots, fonts]) = crate::game_input::start()

@@ -88,6 +88,7 @@ pub(crate) fn paint(app: &App) {
         return;
     }
     let mut html = String::with_capacity(24000);
+    let dark = preferences::is_dark(&app.settings.theme, app.system_dark);
     let background = if app.page == "home" {
         None
     } else {
@@ -97,7 +98,7 @@ pub(crate) fn paint(app: &App) {
             .and_then(preferences::background_url)
     };
     write!(html, r#"<div class="app-shell cards-240" data-custom-background="{}" data-cover-scale="1.2" data-font-size="{}" data-theme="{}" data-color-theme="{}" lang="{}"><div id="app-background" class="app-background" aria-hidden="true">"#,
-        background.is_some(), app.settings.font_size, if app.settings.theme=="dark" {"dark"}else{"light"}, if matches!(app.settings.color_theme.as_str(), "white-pink" | "white") { app.settings.color_theme.as_str() } else { "pink" }, app.settings.language.code()).unwrap();
+        background.is_some(), app.settings.font_size, if dark {"dark"}else{"light"}, if matches!(app.settings.color_theme.as_str(), "white-pink" | "white") { app.settings.color_theme.as_str() } else { "pink" }, app.settings.language.code()).unwrap();
     if let Some(url) = background {
         write!(html, r#"<img id="app-background-image" src="{}" alt="" decoding="async" draggable="false"/>"#, esc(&url)).unwrap();
     }
@@ -120,7 +121,6 @@ pub(crate) fn paint(app: &App) {
         t(app, "nav.more")
     )
     .unwrap();
-    let dark = app.settings.theme == "dark";
     write!(html,r#"<button type="button" id="theme-toggle" class="nav-item theme-toggle" data-action="toggle-theme" aria-label="{}" title="{}" aria-pressed="{}" {}>{}</button>"#,t(app,if dark{"theme.dark"}else{"theme.light"}),t(app,if dark{"theme.to_light"}else{"theme.to_dark"}),dark,if app.requests.values().any(|p|matches!(p,Pending::Theme)){"disabled"}else{""},icon(if dark {"dark_mode"} else {"light_mode"})).unwrap();
     nav(&mut html, app, "settings", t(app, "nav.settings"));
     nav(&mut html, app, "about", t(app, "nav.about"));

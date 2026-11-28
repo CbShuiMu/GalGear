@@ -371,6 +371,7 @@ mod tests {
         store.save(&settings).unwrap();
         assert_eq!(ConfigStore::new(path.clone()).load().unwrap(), settings);
         settings.card_size = 180;
+        settings.theme = "system".into();
         settings.color_theme = "white-pink".into();
         settings.sort_descending = Some(true);
         settings.sort_by = "release".into();

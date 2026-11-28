@@ -95,6 +95,7 @@ pub struct Settings {
     pub locale_emulator: String,
     pub magpie: String,
     pub magpie_hotkey: String,
+    /// 亮暗模式：light、dark 或 system（跟随系统）；旧配置默认 light。
     pub theme: String,
     pub color_theme: String,
     pub background_image: Option<background::BackgroundImage>,

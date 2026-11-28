@@ -2704,6 +2704,11 @@
     "ja-JP": "表示モード",
     "en-US": "Appearance mode"
   },
+  "theme.system": {
+    "zh-CN": "跟随系统",
+    "ja-JP": "システムに合わせる",
+    "en-US": "System"
+  },
   "theme.to_dark": {
     "zh-CN": "切换为暗色模式",
     "ja-JP": "ダークモードに切り替え",

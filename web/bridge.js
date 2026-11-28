@@ -20,6 +20,10 @@ function nativeAssetUrls(text) {
 }
 
 let wasmReady = false;
+const systemTheme = matchMedia('(prefers-color-scheme: dark)');
+systemTheme.addEventListener('change', event => {
+  if (wasmReady) ui.system_theme_changed(event.matches);
+});
 const syncSetupScroll = installSetupScroll((start, count, pinned) => {
   if (wasmReady) ui.setup_viewport(start, count, pinned);
 });
@@ -1079,6 +1083,7 @@ installLibraryReorder({
 
 try {
   await init(); wasmReady = true;
+  ui.system_theme_changed(systemTheme.matches);
   window.GalGearDiagnostics?.ready();
   if (window.__TAURI__?.event) {
     await window.__TAURI__.event.listen('library-devices-changed', () => ui.library_devices_changed());
